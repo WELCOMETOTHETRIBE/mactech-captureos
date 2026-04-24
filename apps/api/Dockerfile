@@ -25,7 +25,12 @@ COPY apps/workers/src apps/workers/src
 COPY apps/api/src apps/api/src
 COPY apps/api/scripts apps/api/scripts
 
-RUN uv sync --package mactech-api --no-dev
+# Install ALL workspace packages so the api container can also run worker
+# tasks ad-hoc via `railway ssh` (manual ingestion smoke tests, one-off
+# admin invocations). Slight image-size cost is fine at our scale; a
+# proper split-image setup is a phase-2 chore once we add a dedicated
+# Railway workers service.
+RUN uv sync --all-packages --no-dev
 
 FROM python:3.12-slim-bookworm AS runtime
 
