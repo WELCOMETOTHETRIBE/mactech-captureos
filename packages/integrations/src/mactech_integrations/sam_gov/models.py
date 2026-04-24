@@ -6,9 +6,10 @@ stays in the raw_payload jsonb on the persistence side.
 
 Fields are typed loosely (Optional[str] instead of strict enums) because SAM.gov
 quietly evolves the schema and we'd rather log unknown values than crash ingest.
-"""
 
-from __future__ import annotations
+Important: do NOT add `from __future__ import annotations` here — Pydantic v2
+needs runtime-resolvable type annotations on its models.
+"""
 
 from datetime import date, datetime
 from typing import Any
