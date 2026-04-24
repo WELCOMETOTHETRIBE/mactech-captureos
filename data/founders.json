@@ -18,6 +18,7 @@
       "title": "Managing Member, Compliance & Operations",
       "pillar": "quality",
       "pillar_description": "ISO compliance, metrology, audit readiness",
+      "email": null,
       "areas_of_expertise": [
         "Quality Management Systems (ISO 9001, 17025)",
         "Audit Readiness and Compliance",
@@ -36,6 +37,7 @@
       "title": "Director of Cyber Assurance",
       "pillar": "security",
       "pillar_description": "Cybersecurity & RMF expertise",
+      "email": "patrick@mactechsolutionsllc.com",
       "areas_of_expertise": [
         "Risk Management Framework (RMF) Implementation",
         "Authorization to Operate (ATO) Package Development",
@@ -57,6 +59,7 @@
       "title": "Director of Infrastructure & Systems Engineering",
       "pillar": "infrastructure",
       "pillar_description": "Data center, storage, networking, deployment",
+      "email": null,
       "areas_of_expertise": [
         "Data Center Architecture and Design",
         "Virtualization and Cloud Platforms",
@@ -76,6 +79,7 @@
       "title": "Director of Legal, Contracts & Risk Advisory",
       "pillar": "governance",
       "pillar_description": "Legal, contracts, risk analysis, corporate governance",
+      "email": null,
       "areas_of_expertise": [
         "Commercial Contracts (Software, Services, Vendors)",
         "Corporate Governance",

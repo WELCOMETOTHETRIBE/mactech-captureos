@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import TIMESTAMP, ForeignKey, Integer, String, func, text
+from sqlalchemy import TIMESTAMP, Boolean, ForeignKey, Integer, String, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -21,6 +21,10 @@ class Founder(Base):
     pillar: Mapped[str] = mapped_column(String, nullable=False)
     bio: Mapped[str | None] = mapped_column(String, nullable=True)
     areas_of_expertise: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    email: Mapped[str | None] = mapped_column(String, nullable=True)
+    digest_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
+    )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

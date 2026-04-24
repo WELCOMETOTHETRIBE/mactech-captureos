@@ -57,6 +57,13 @@ celery_app.conf.update(
             "options": {"expires": 18 * 60},
             "kwargs": {"batch_size": 25},
         },
+        # Founder morning digest. America/New_York timezone is set at the top
+        # of celery_app.conf.update so 6am means 6am ET.
+        "founder-morning-digest": {
+            "task": "mactech.digest.send_all",
+            "schedule": crontab(minute=0, hour=6, day_of_week="mon-fri"),
+            "options": {"expires": 60 * 60},
+        },
     },
 )
 
@@ -67,6 +74,7 @@ def health() -> str:
 
 
 # Side-effect imports to register tasks defined in submodules. Keep at end of file.
+import mactech_workers.tasks.digest  # noqa: E402, F401
 import mactech_workers.tasks.embed  # noqa: E402, F401
 import mactech_workers.tasks.enrich  # noqa: E402, F401
 import mactech_workers.tasks.sam_ingest  # noqa: E402, F401

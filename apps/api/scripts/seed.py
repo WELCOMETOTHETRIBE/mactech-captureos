@@ -111,6 +111,7 @@ async def seed_founders(
                 title=f["title"],
                 pillar=f["pillar"],
                 bio=f.get("pillar_description"),
+                email=f.get("email"),
                 areas_of_expertise={
                     "expertise": f.get("areas_of_expertise", []),
                     "proposal_role": f.get("proposal_role"),
@@ -126,6 +127,7 @@ async def seed_founders(
                     "title": f["title"],
                     "pillar": f["pillar"],
                     "bio": f.get("pillar_description"),
+                    "email": f.get("email"),
                 },
             )
         )
