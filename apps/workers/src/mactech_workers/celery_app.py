@@ -35,3 +35,7 @@ celery_app.conf.update(
 @celery_app.task(name="mactech.health")
 def health() -> str:
     return "ok"
+
+
+# Side-effect import to register tasks defined in submodules. Keep at end of file.
+import mactech_workers.tasks.sam_ingest  # noqa: E402, F401
