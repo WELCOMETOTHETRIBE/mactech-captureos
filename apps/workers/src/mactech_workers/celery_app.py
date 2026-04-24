@@ -39,6 +39,12 @@ celery_app.conf.update(
             "schedule": crontab(minute=0, hour="*/2"),
             "options": {"expires": 60 * 60},  # don't pile up if a run skips
         },
+        "enrich-unenriched-batch": {
+            "task": "mactech.enrich.batch",
+            "schedule": crontab(minute="*/30"),
+            "options": {"expires": 25 * 60},
+            "kwargs": {"batch_size": 25},
+        },
     },
 )
 
@@ -48,5 +54,6 @@ def health() -> str:
     return "ok"
 
 
-# Side-effect import to register tasks defined in submodules. Keep at end of file.
+# Side-effect imports to register tasks defined in submodules. Keep at end of file.
+import mactech_workers.tasks.enrich  # noqa: E402, F401
 import mactech_workers.tasks.sam_ingest  # noqa: E402, F401

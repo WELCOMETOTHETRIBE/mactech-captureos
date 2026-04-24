@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from sqlalchemy import text
 
+from mactech_api.routes.opportunities import router as opportunities_router
 from mactech_api.settings import settings
 from mactech_db import async_session_factory
 
@@ -10,6 +11,8 @@ app = FastAPI(
     version="0.1.0",
     description="The operating system for defense contractors.",
 )
+
+app.include_router(opportunities_router)
 
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
