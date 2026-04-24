@@ -180,3 +180,57 @@ Every push to `main` at [WELCOMETOTHETRIBE/mactech-captureos](https://github.com
 
 ### Phase 1 Week 2 status: COMPLETE
 End of week criterion: "Fresh Postgres DB populated with ~1,000+ real opportunities. Query them by NAICS, agency, date." Currently at 97 real opportunities across 2 NAICS — the next 2 beat ticks (or one manual `mactech.sam.ingest_all` enqueue) will sweep all 20 MacTech NAICS and push the count past 1,000.
+
+---
+
+## 2026-04-24 — Phase 1 Week 3: enrichment chain live
+
+### Shipped
+- **Migration 0003** (`0003_enrichment_tables`) — adds `opportunities_enriched` (1:1 with raw, CASCADE-on-delete), `awards_history` (persistent USASpending/FPDS award cache, keyed by `(source, award_id)`), and `exclusions_cache` (UEI-keyed, 24h TTL applied at query time). Indexes per [docs/SCHEMA.md](docs/SCHEMA.md).
+- **USASpending client** at [packages/integrations/src/mactech_integrations/usaspending/](packages/integrations/src/mactech_integrations/usaspending/) — async `httpx` + `tenacity` retry on 429/5xx, polite 1 req/sec throttle (no auth, no daily cap, but be a good citizen), `User-Agent: MacTechCaptureOS/0.1`. Surfaces `search_awards`, `search_recipient`, `get_recipient_profile`. Pydantic models with `extra="ignore"`.
+- **SAM Exclusions client** at [packages/integrations/src/mactech_integrations/sam_gov/exclusions.py](packages/integrations/src/mactech_integrations/sam_gov/exclusions.py) — single `check_uei()` returning `ExclusionResult(uei, is_excluded, record_count, raw)`. Tolerant to envelope shape (`excludedEntity` vs `exclusionDetails` vs `results`).
+- **Enrichment task** at [apps/workers/src/mactech_workers/tasks/enrich.py](apps/workers/src/mactech_workers/tasks/enrich.py):
+  - `enrich_opportunity(opp_id)` runs the Style-A → Style-B chain end-to-end: load opp → map agency name to USASpending toptier canonical → `spending_by_award` for last 24mo on contract types A/B/C/D → re-rank candidates in Python (still-active by latest end-date desc; fallback to most-recently-expired; final fallback to highest-dollar award when USASpending doesn't surface PoP dates) → SAM Exclusions check on the chosen UEI → upsert `opportunities_enriched`, `exclusions_cache`, and `awards_history` (top 25 candidates).
+  - `enrich_unenriched_batch(batch_size=25)` finds opps with no enrichment row (left-join filter) and processes them sequentially.
+  - Two Celery task wrappers: `mactech.enrich.opportunity`, `mactech.enrich.batch`.
+- **Beat schedule** updated: adds `enrich-unenriched-batch` every 30 minutes (batch size 25). Existing 2h SAM ingestion beat retained.
+- **API endpoint** `GET /opportunities/{id}/enriched` at [apps/api/src/mactech_api/routes/opportunities.py](apps/api/src/mactech_api/routes/opportunities.py) — returns `opportunity` header + `incumbent` block (UEI, name, contract_id, end_date, amount) + nested `exclusions` block (with `cache_status: fresh|stale` flag) + `enrichment_notes` explaining any caveats.
+
+### Demo verified end-to-end
+**Hit `https://capture.mactechsolutionsllc.com/opportunities/9cb053f7-78ac-48b8-93a8-c71b4da8982b/enriched`** for the VA Long Beach RTLS opp (the same one we surfaced during SAM API research) and got back:
+```
+opportunity: DB10—VA Long Beach Real Time Location System (SDVOSBC, NAICS 541519)
+incumbent:   DELL FEDERAL SYSTEMS L.P, UEI N1C5QLNPJLS4, $1.73B in cumulative
+             VA + 541519 contract obligations
+             contract_id: CONT_AWD_VA11817F1888_3600_GS35F0884P_4730
+exclusions:  is_excluded=false, cache_status=fresh, checked just now via SAM Exclusions API
+notes:       incumbent identified by award amount; usaspending did not surface
+             period-of-performance dates for this candidate
+```
+**This is exactly the kind of intel a captured BD team writes a proposal off of** — the ROADMAP demo criterion is met.
+
+### Bugs caught and fixed during the sprint
+- **USASpending `sort` is restrictive** — only `Award ID`, `Recipient Name`, `Award Amount`, `Action Date` and a few others are valid sort keys. `Period of Performance Current End Date` is a response field but not a sort key, returns HTTP 400. Fixed: default sort to `Award Amount`, re-rank by end-date in Python.
+- **USASpending returns `NAICS` and `PSC` as objects, not strings** — pydantic was rejecting them when typed `str | None`. Relaxed to `dict[str, Any] | None`.
+- **USASpending often returns null PoP dates** even on $1B+ aggregated parent-award rows. Added a third-tier fallback: when no candidate has dates, take the highest-dollar award as "incumbent proxy" with the missing-date caveat captured in `naics_match_notes`.
+
+### Half-done
+- **Voyage embeddings** — deferred. `VOYAGE_API_KEY` not yet provisioned. The Week 3 demo criterion (incumbent + exclusions visible via API) doesn't need them; semantic similarity scoring lands when the key arrives. ivfflat index on `opportunities_raw.embedding` deferred until rows accumulate.
+- **Chained noticedesc fetch** — `description_text` column is created but unfilled; the chain to grab full description text from `/prod/opportunities/v1/noticedesc?noticeid=...` is not yet wired. Next sprint candidate.
+
+### Blocked / Needs decision
+- **Voyage API key** — needed for Week 4 scoring's "embedding similarity to MacTech capability statements" component (worth +5 in the scoring algorithm per [docs/SCHEMA.md §scoring](docs/SCHEMA.md)). Provision at https://voyage.ai whenever convenient and drop the key in `.env` + Railway. Without it, Week 4 scoring works but the embedding-similarity component is permanently 0.
+- **Anthropic API key** — needed for Week 4's "Why this matters" paragraph generation in the morning digest. Provision at console.anthropic.com; set $75/mo spend alert per the Mode A → Mode C decision in [docs/AGENT_ARCHITECTURE.md](docs/AGENT_ARCHITECTURE.md).
+
+### What runs continuously now
+| Cadence | Job | Effect |
+|---|---|---|
+| Every 2h | `mactech.sam.ingest_all` | Sweep all 20 MacTech NAICS for new SAM opportunities |
+| Every 30min | `mactech.enrich.batch` | Pick up to 25 unenriched opps, run incumbent + exclusions chain |
+
+### Next up
+- **Phase 1 Week 4** (per [docs/ROADMAP.md](docs/ROADMAP.md)): scoring engine + morning digest. The Tuesday 6am digest is the actual Phase 1 success criterion from [docs/MACTECH_PLAYBOOK.md §11](docs/MACTECH_PLAYBOOK.md). Requires:
+  - `packages/intelligence/scoring.py` implementing the 7-component weighted-sum scorer per [docs/SCHEMA.md §scoring](docs/SCHEMA.md). Embedding-similarity component returns 0 until the Voyage key lands.
+  - `opportunity_scores` table + populated per tenant (Voyage embeddings would also feed the freshness boost).
+  - "Why this matters" generator behind the `LLMClient` abstraction from [docs/AGENT_ARCHITECTURE.md](docs/AGENT_ARCHITECTURE.md). Needs Anthropic key.
+  - Morning digest beat job (6am ET weekdays) — render top 5 per founder, send via Postmark or SMTP.
