@@ -299,3 +299,46 @@ The **email delivery half** is the only unfinished piece — see "Blocked" below
 ### Next up
 - **Email delivery wire-up** — once a provider is selected. Delivers the literal Tuesday-6am criterion.
 - **Phase 2 Week 5** ([docs/ROADMAP.md](docs/ROADMAP.md)): web app shell, auth, capture pipeline (kanban). The dashboard founders see when they log in.
+
+---
+
+## 2026-04-24 — Phase 1 closing: Resend digest delivery live
+
+### Shipped
+- **Migration 0005 (`0005_founder_email`)** — adds `founders.email` (nullable) + `founders.digest_enabled` (default true).
+- **`data/founders.json` updated** — `email` field added to all four founder records. Patrick's address (`patrick@mactechsolutionsllc.com`) seeded; Brian/James/John still null pending their addresses.
+- **`apps/api/scripts/seed.py`** now upserts `email` from the JSON.
+- **Resend client** at [packages/integrations/src/mactech_integrations/resend/](packages/integrations/src/mactech_integrations/resend/) — tenacity-wrapped `send_email()`. Compatible with Resend's send-only restricted API keys (the kind we have). Surfaces 4xx as `ResendError` so the worker can log + skip without crashing the batch.
+- **Digest worker** at [apps/workers/src/mactech_workers/tasks/digest.py](apps/workers/src/mactech_workers/tasks/digest.py):
+  - `send_digest_for_founder(slug)` — pulls top-5 scored opps assigned to that founder (score ≥60), renders both HTML (sober card layout, MacTech brand, no emoji) and plain text, sends via Resend, logs the result. Skips gracefully when the founder has `digest_enabled=false`, no email, or `RESEND_API_KEY` is unset.
+  - `send_digest_to_all_founders()` — fans out across digest-enabled founders.
+  - Two Celery task wrappers: `mactech.digest.send_one`, `mactech.digest.send_all`.
+- **Beat schedule** — `founder-morning-digest` at `crontab(minute=0, hour=6, day_of_week="mon-fri")`. Celery's `timezone="America/New_York"` is already set on the app, so this is **6am ET weekdays**. Per the Phase 1 success criterion in [docs/MACTECH_PLAYBOOK.md §11](docs/MACTECH_PLAYBOOK.md).
+- **Subject line** matches the playbook's spec: `[MacTech Capture] N new <First> picks for <date>`.
+
+### Phase 1 success criterion: VERIFIED LIVE
+Patrick received a real digest in his inbox at `patrick@mactechsolutionsllc.com` on 2026-04-24. Resend message id `bdd8dc50-3065-4815-aee8-9c3bce3c5d39`. Five scored opportunities, Claude-Haiku-written rationale, named incumbent intelligence. Subject: `[MacTech Capture] 5 new Patrick picks for Fri Apr 24`.
+
+### What runs continuously now (final Phase 1 cadence)
+| Cadence | Job | What it does |
+|---|---|---|
+| Every 2h | `mactech.sam.ingest_all` | Sweep MacTech's 20 NAICS for new SAM opportunities |
+| Every 30 min | `mactech.enrich.batch` | USASpending incumbent + SAM exclusions |
+| Every 15 min | `mactech.embed.batch` | Voyage embeddings on opps + capability statements |
+| Every 20 min | `mactech.score.batch` | Scoring + Claude rationale (≥60 threshold) |
+| **6am ET Mon-Fri** | **`mactech.digest.send_all`** | **Founder morning digest via Resend** |
+
+### Outstanding: domain verification + remaining founder emails
+Two pieces remain before all four founders receive Tuesday emails. Both are config, not code:
+
+1. **Verify `mactechsolutionsllc.com` (or a subdomain) at https://resend.com/domains.** Until verified, Resend rejects sends to anyone but `patrick@mactechsolutionsllc.com` with HTTP 403. Adds 3 DNS records (SPF, DKIM CNAMEs) at the domain registrar, takes ~10 min total. Once verified, `RESEND_FROM` env var (already set to `MacTech CaptureOS <digest@mactechsolutionsllc.com>` on both Railway services) starts working for any recipient.
+
+2. **Populate `email` for Brian / James / John** in `data/founders.json`, then `pnpm db:seed`. The worker already skips founders with null email and logs "no email on file" — verified live for James in the smoke test. Once their addresses are seeded, the next 6am ET tick delivers to them automatically.
+
+### Next session candidates
+- **Phase 2 Week 5** ([docs/ROADMAP.md](docs/ROADMAP.md)): web app shell + Clerk auth + RLS activation + capture-pipeline kanban. The first thing founders see when they log in.
+- **OR**: pull forward something from `docs/APIFY_STRATEGY.md` (e.g., agency forecast sweep) since the digest now has a hungry reader.
+- **OR**: smaller polish work — README quickstart updates, /readyz extending, observability (Sentry / PostHog wire-up).
+
+### Phase 1 status: COMPLETE
+Tuesday 6am digest criterion met. The product MacTech uses internally to win contracts is live. Revenue Line Zero now has its instrument.
