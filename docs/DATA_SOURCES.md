@@ -145,7 +145,7 @@ Full reference for every external API and scrape target, with auth, rate limits,
 
 Apify is our scraping infrastructure. Use existing actors where possible; build custom actors only when nothing public fits.
 
-**Apify auth:** API token in `APIFY_TOKEN` env var. Client library: `apify-client` Python package.
+**Apify auth:** API token in `APIFY_API_TOKEN` env var. Client library: `apify-client` Python package.
 
 ### 2.1 Agency forecast pages
 
@@ -281,7 +281,7 @@ Every external source flows into a normalized internal schema. See `docs/SCHEMA.
 ```bash
 # Required for MVP
 SAM_API_KEY=...                    # sam.gov account → request key
-APIFY_TOKEN=...                    # console.apify.com
+APIFY_API_TOKEN=...                # console.apify.com
 SERPAPI_KEY=...                    # serpapi.com
 ANTHROPIC_API_KEY=...              # console.anthropic.com
 VOYAGE_API_KEY=...                 # voyage.ai

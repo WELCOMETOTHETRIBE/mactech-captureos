@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     mactech_tenant_slug: str = Field(default="mactech")
 
     sam_api_key: str = Field(default="")
-    apify_token: str = Field(default="")
+    apify_api_token: str = Field(default="")
     serpapi_key: str = Field(default="")
     anthropic_api_key: str = Field(default="")
     voyage_api_key: str = Field(default="")
