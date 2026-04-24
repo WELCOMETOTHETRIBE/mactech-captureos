@@ -88,21 +88,16 @@ async def _write_embeddings(
 ) -> None:
     if not items:
         return
-    # Build a single UPDATE ... FROM (VALUES ...) for atomicity.
-    values_sql = ", ".join(
-        f"(:id_{i}::uuid, :emb_{i}::vector)" for i in range(len(items))
+    # Per-row UPDATEs. Tried a single UPDATE ... FROM (VALUES ...) but
+    # SQLAlchemy's `:bindparam` prefix collides with Postgres's `::cast`
+    # operator inside the VALUES list ("syntax error at or near ':'").
+    # Per-row is fine at our batch size (≤128 × ~5 ms = sub-second).
+    sql = text(
+        f"update {table} set embedding = CAST(:emb AS vector) "
+        f"where id = CAST(:id AS uuid)"
     )
-    params: dict[str, Any] = {}
-    for i, (row_id, emb) in enumerate(items):
-        params[f"id_{i}"] = row_id
-        params[f"emb_{i}"] = _embedding_literal(emb)
-    sql = f"""
-        update {table} t
-        set embedding = v.emb
-        from (values {values_sql}) as v(id, emb)
-        where t.id = v.id
-    """
-    await session.execute(text(sql), params)
+    for row_id, emb in items:
+        await session.execute(sql, {"id": row_id, "emb": _embedding_literal(emb)})
 
 
 async def embed_unembedded_batch(*, batch_size: int = DEFAULT_BATCH_SIZE) -> EmbedStats:
