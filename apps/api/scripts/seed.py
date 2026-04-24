@@ -25,7 +25,14 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mactech_db import async_session_factory
-from mactech_db.models import Founder, FounderNaicsMatrix, NaicsCode, SavedSearch, Tenant
+from mactech_db.models import (
+    CapabilityStatement,
+    Founder,
+    FounderNaicsMatrix,
+    NaicsCode,
+    SavedSearch,
+    Tenant,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CONFIG_PATH = REPO_ROOT / "config" / "mactech_tenant_defaults.yml"
@@ -147,6 +154,53 @@ async def seed_founders(
     return by_slug
 
 
+async def seed_capability_statements(
+    session: AsyncSession,
+    tenant: Tenant,
+    founders_by_slug: dict[str, Founder],
+    config: dict[str, Any],
+) -> None:
+    """Upsert MacTech's capability statements from config yaml.
+
+    Phase 1: this overwrites admin edits on every run because no UI exists
+    to make admin edits in the first place. When a capability-edit UI ships
+    in Phase 2, this seed should switch to insert-only or be retired.
+    """
+    statements = config.get("capability_statements_seed") or []
+    for s in statements:
+        related_founder_records = []
+        for slug in s.get("related_founders", []) or []:
+            f = founders_by_slug.get(slug)
+            if f is None:
+                continue
+            related_founder_records.append({"founder_id": str(f.id), "slug": slug})
+
+        existing = (
+            await session.execute(
+                select(CapabilityStatement).where(
+                    CapabilityStatement.tenant_id == tenant.id,
+                    CapabilityStatement.title == s["title"],
+                )
+            )
+        ).scalar_one_or_none()
+
+        related_naics = [str(n) for n in (s.get("related_naics") or [])]
+        if existing is None:
+            session.add(
+                CapabilityStatement(
+                    tenant_id=tenant.id,
+                    title=s["title"],
+                    summary=s["summary"].strip(),
+                    related_naics=related_naics,
+                    related_founders=related_founder_records,
+                )
+            )
+        else:
+            existing.summary = s["summary"].strip()
+            existing.related_naics = related_naics
+            existing.related_founders = related_founder_records
+
+
 async def seed_saved_searches(
     session: AsyncSession,
     tenant: Tenant,
@@ -213,6 +267,11 @@ async def main() -> int:
 
             print(f"seeding {len(founders_doc['founders'])} founders + NAICS matrix...")
             founders_by_slug = await seed_founders(session, founders_doc, naics_doc)
+
+            print(
+                f"seeding {len(config.get('capability_statements_seed', []))} capability statements..."
+            )
+            await seed_capability_statements(session, tenant, founders_by_slug, config)
 
             print(f"seeding {len(config.get('saved_searches', []))} saved searches...")
             await seed_saved_searches(session, tenant, founders_by_slug, config)
