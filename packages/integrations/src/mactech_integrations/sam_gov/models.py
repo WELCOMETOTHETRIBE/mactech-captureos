@@ -12,9 +12,21 @@ needs runtime-resolvable type annotations on its models.
 """
 
 from datetime import date, datetime
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+
+
+def _empty_to_none(v: Any) -> Any:
+    """SAM occasionally returns empty strings for date/datetime fields where
+    Pydantic expects either a valid value or null. Coerce '' to None."""
+    if isinstance(v, str) and not v.strip():
+        return None
+    return v
+
+
+_OptDate = Annotated[date | None, BeforeValidator(_empty_to_none)]
+_OptDateTime = Annotated[datetime | None, BeforeValidator(_empty_to_none)]
 
 
 class _Loose(BaseModel):
@@ -42,7 +54,7 @@ class OpportunityAward(_Loose):
     # NOTE: SAM uses "date" as the JSON key, but a field named `date` would
     # shadow the imported `datetime.date` type at class-body evaluation time
     # and the annotation `date | None` would produce a TypeError. Aliased.
-    award_date: date | None = Field(default=None, alias="date")
+    award_date: _OptDate = Field(default=None, alias="date")
     number: str | None = None
     amount: str | None = None  # SAM returns this as a string
     awardee: OpportunityAwardee | None = None
@@ -85,16 +97,16 @@ class OpportunityRecord(_Loose):
     solicitation_number: str | None = Field(default=None, alias="solicitationNumber")
     full_parent_path_name: str | None = Field(default=None, alias="fullParentPathName")
     full_parent_path_code: str | None = Field(default=None, alias="fullParentPathCode")
-    posted_date: date | None = Field(default=None, alias="postedDate")
+    posted_date: _OptDate = Field(default=None, alias="postedDate")
     type: str | None = None
     base_type: str | None = Field(default=None, alias="baseType")
     archive_type: str | None = Field(default=None, alias="archiveType")
-    archive_date: date | None = Field(default=None, alias="archiveDate")
+    archive_date: _OptDate = Field(default=None, alias="archiveDate")
     type_of_set_aside_description: str | None = Field(
         default=None, alias="typeOfSetAsideDescription"
     )
     type_of_set_aside: str | None = Field(default=None, alias="typeOfSetAside")
-    response_deadline: datetime | None = Field(default=None, alias="responseDeadLine")
+    response_deadline: _OptDateTime = Field(default=None, alias="responseDeadLine")
     naics_code: str | None = Field(default=None, alias="naicsCode")
     naics_codes: list[str] | None = Field(default=None, alias="naicsCodes")
     classification_code: str | None = Field(default=None, alias="classificationCode")
