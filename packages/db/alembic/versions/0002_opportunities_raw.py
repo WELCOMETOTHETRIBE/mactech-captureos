@@ -1,14 +1,16 @@
 """opportunities_raw + ingestion_state + pgvector + pg_trgm
 
-Revision ID: 0002_opportunities_raw_and_ingestion_state
+Revision ID: 0002_opportunities_raw
 Revises: 0001_initial_skeleton
 Create Date: 2026-04-24
 
-Phase 1 Week 2: SAM.gov Opportunities ingestion lands here. Embedding
-column is created but unindexed — pgvector ivfflat index is added in
-Week 3 once embeddings populate. Description text column is also created
-but unfilled — chained noticedesc fetches happen Week 2 if budget allows,
-Week 3 otherwise.
+Phase 1 Week 2: SAM.gov Opportunities ingestion lands here. Also creates
+the generic ingestion_state bookkeeping table. Embedding column is
+created but unindexed — pgvector ivfflat index is added in Week 3 once
+embeddings populate.
+
+NB: revision IDs must fit in alembic_version.version_num (VARCHAR 32).
+Keep them under ~28 chars including the NNNN_ prefix.
 """
 
 from collections.abc import Sequence
@@ -17,7 +19,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0002_opportunities_raw_and_ingestion_state"
+revision: str = "0002_opportunities_raw"
 down_revision: str | Sequence[str] | None = "0001_initial_skeleton"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
