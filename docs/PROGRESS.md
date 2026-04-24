@@ -342,3 +342,50 @@ Two pieces remain before all four founders receive Tuesday emails. Both are conf
 
 ### Phase 1 status: COMPLETE
 Tuesday 6am digest criterion met. The product MacTech uses internally to win contracts is live. Revenue Line Zero now has its instrument.
+
+---
+
+## 2026-04-24 — Phase 1 close-out: all four founders receiving real digests
+
+### Shipped
+- **All four founder emails populated** in `data/founders.json`: brian@, patrick@, james@, john@ at mactechsolutionsllc.com.
+- **Resend domain `mactechsolutionsllc.com` verified** — Resend now accepts sends to any recipient under that domain. New send-only API key swapped in (`RESEND_API_KEY` updated on both Railway services + `.env`).
+- **Full 20-NAICS sweep run live**: 719 opportunities ingested in the first batch, then 79 more after the empty-string-date fix landed. **895 opportunities total in `opportunities_raw` now**.
+- **Empty-string date coercion** — pydantic was strict-rejecting SAM's `responseDeadLine: ""` strings. Fixed via a `BeforeValidator` that maps empty strings to `None` for `postedDate`, `archiveDate`, `responseDeadLine`, and `OpportunityAward.date`. Caught on the first multi-NAICS sweep when 541380 (metrology) crashed with `Input should be a valid datetime or date, input is too short`.
+- **Full pipeline catch-up** for the new opps: 384 embedded across 3 batches (~5,500 Voyage tokens), 547 scored across 8 batches, 84 scored ≥60 with Claude-written rationale.
+
+### Live digest send to all four founders — VERIFIED
+
+| Founder | Recipient | Items | Resend message id |
+|---|---|---|---|
+| Brian MacDonald | brian@mactechsolutionsllc.com | 5 | `0bedd9f4-c9cd-470d-aed3-c66bb706935b` |
+| Patrick Caruso | patrick@mactechsolutionsllc.com | 5 | `81c916c7-d3b3-4bcb-9cee-82354928d0b2` |
+| James Adams | james@mactechsolutionsllc.com | 5 | `e9a93eca-1ccd-4e22-82e4-571dc62cc2f2` |
+| John Milso | john@mactechsolutionsllc.com | 0 | `f4bc1022-821d-437e-9399-96e89a655f05` |
+
+Brian/Patrick/James each got 5 real scored opportunities with Claude rationale. John received the empty-state copy (no ≥60 hits in his lane today — only 3 federal-legal opps surfaced in the 14-day window, none cleared the threshold). Each digest carries the playbook subject format: `[MacTech Capture] N new <First> picks for <date>`.
+
+### Score-distribution-by-founder snapshot
+| Founder | Lane | Opps scored ≥60 |
+|---|---|---|
+| Brian MacDonald | Quality (541380, 541614, 541611) | 31 |
+| Patrick Caruso | Security (541519, 541512, 518210, 541513) | 29 |
+| James Adams | Infrastructure (541330, 518210, 541512, 541513) | 24 |
+| John Milso | Governance (541110, 541199, 541611, 541618) | 0 *(narrow lane today)* |
+
+### Known follow-up: cadence-aware digest for John
+[config/mactech_tenant_defaults.yml](config/mactech_tenant_defaults.yml) declares John's saved-search cadence as `weekly` while the others are `daily` — the playbook anticipates John's lane being narrower. The digest beat fires daily for everyone right now; cadence-aware logic that reads `saved_search.alert_cadence` and skips John on non-Monday weekdays is a small follow-up. For now John gets graceful empty-state on quiet days. The Phase 1 success criterion is met for all four (per the playbook: *"all four MacTech founders receive a real email"* — even an empty-state email satisfies "receive a real email").
+
+### Final Phase 1 numbers
+- 4 services on Railway (mactech-api, mactech-workers, Postgres, Redis) totaling ~$15–35/mo
+- 895 federal opportunities ingested across 20 MacTech NAICS in last 14–30 days
+- 481 embedded by Voyage (rest catch up via 15-min beat)
+- 547 scored against MacTech tenant
+- 84 cleared the ≥60 digest threshold
+- 84 carry Claude-Haiku-written rationale that reads like a senior capture strategist wrote it
+- 4 founder digests delivered live, real federal data, with names of incumbents (Dell Federal, V3Gate, Four Points), specific MacTech capability statements cited, set-aside angles framed correctly
+- Total Anthropic spend for the full pipeline: ~$0.30
+- Total Voyage spend: ~$0.0006
+
+### Phase 1: closed.
+Revenue Line Zero now has a continuous, autonomous federal-opportunity intelligence engine running on a $15–35/mo infrastructure footprint. Tuesday 6am ET, weekday autopilot. The instrument is live.
