@@ -8,6 +8,7 @@ Prime/Enterprise volume) are hit.
 
 from mactech_intelligence.llm import AnthropicLLMClient, LLMResponse
 from mactech_intelligence.scoring import (
+    OpportunityFacts,
     ScoringContext,
     ScoringResult,
     score_opportunity,
@@ -17,6 +18,7 @@ from mactech_intelligence.why_it_matters import generate_why_it_matters
 __all__ = [
     "AnthropicLLMClient",
     "LLMResponse",
+    "OpportunityFacts",
     "ScoringContext",
     "ScoringResult",
     "score_opportunity",
