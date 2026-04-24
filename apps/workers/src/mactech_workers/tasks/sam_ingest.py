@@ -220,40 +220,42 @@ async def ingest_one_naics(
     updates = 0
     upserts = 0
 
+    posted_from: date | None = None
+    posted_to: date | None = None
+
     async with session_factory() as session:
-        posted_from, posted_to = await _resolve_window(
-            session, naics_code, backfill_days=backfill_days
-        )
-
         try:
-            async with SamGovOpportunitiesClient(api_key=api_key) as client:
-                async with session.begin():
-                    async for page in client.iter_opportunities(
-                        posted_from=posted_from,
-                        posted_to=posted_to,
-                        ncode=naics_code,
-                        page_size=page_size,
-                    ):
-                        pages += 1
-                        total_records = page.total_records
-                        for record in page.opportunities_data:
-                            outcome = await _upsert_record(session, record)
-                            if outcome == "inserted":
-                                inserts += 1
-                                upserts += 1
-                            elif outcome == "updated":
-                                updates += 1
-                                upserts += 1
+            async with SamGovOpportunitiesClient(api_key=api_key) as client, session.begin():
+                posted_from, posted_to = await _resolve_window(
+                    session, naics_code, backfill_days=backfill_days
+                )
+                async for page in client.iter_opportunities(
+                    posted_from=posted_from,
+                    posted_to=posted_to,
+                    ncode=naics_code,
+                    page_size=page_size,
+                ):
+                    pages += 1
+                    total_records = page.total_records
+                    for record in page.opportunities_data:
+                        outcome = await _upsert_record(session, record)
+                        if outcome == "inserted":
+                            inserts += 1
+                            upserts += 1
+                        elif outcome == "updated":
+                            updates += 1
+                            upserts += 1
 
-                    await _record_state(
-                        session, naics_code, posted_to=posted_to, upserts=upserts, status="ok"
-                    )
+                await _record_state(
+                    session, naics_code, posted_to=posted_to, upserts=upserts, status="ok"
+                )
         except Exception as exc:  # pragma: no cover -- exercised in prod
+            await session.rollback()
             async with session.begin():
                 await _record_state(
                     session,
                     naics_code,
-                    posted_to=posted_to,
+                    posted_to=posted_to or datetime.now(UTC).date(),
                     upserts=0,
                     status="error",
                     error=f"{type(exc).__name__}: {exc}"[:1000],
