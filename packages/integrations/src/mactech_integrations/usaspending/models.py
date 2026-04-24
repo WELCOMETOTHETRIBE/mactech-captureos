@@ -47,8 +47,11 @@ class AwardSearchResult(_Loose):
     period_of_performance_current_end_date: date | None = Field(
         default=None, alias="Period of Performance Current End Date"
     )
-    naics_field: str | None = Field(default=None, alias="NAICS")
-    psc_field: str | None = Field(default=None, alias="PSC")
+    # USASpending returns these as objects {"code": str, "description": str},
+    # not bare strings. We don't use them in enrichment (we already have the
+    # opp's naics_code), so keep them as a flexible dict.
+    naics_field: dict[str, Any] | None = Field(default=None, alias="NAICS")
+    psc_field: dict[str, Any] | None = Field(default=None, alias="PSC")
     raw: dict[str, Any] | None = None  # populated by client.search_awards via model_dump
 
 
