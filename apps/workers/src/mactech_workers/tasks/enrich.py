@@ -136,6 +136,14 @@ async def enrich_opportunity(opportunity_id: UUID | str) -> EnrichStats:
                     reverse=True,
                 )
                 pool = still_active or expired
+                # USASpending often returns null PoP dates on aggregated rows
+                # (we've seen this on $1B+ Dell/VA contracts). When that
+                # happens, fall back to the highest-dollar candidate as
+                # "incumbent proxy" — still real intel ("the dominant
+                # contractor in this NAICS+agency"), with the missing-date
+                # caveat captured in naics_match_notes.
+                if not pool and page.results:
+                    pool = page.results
                 if pool:
                     incumbent = pool[0]
 
@@ -366,6 +374,14 @@ async def _upsert_enrichment(
         notes_parts.append("agency not mappable to usaspending toptier")
     if naics and agency_name and not incumbent:
         notes_parts.append("no contract-type award found in last 24 months")
+    if (
+        incumbent
+        and incumbent.period_of_performance_current_end_date is None
+    ):
+        notes_parts.append(
+            "incumbent identified by award amount; usaspending did not "
+            "surface period-of-performance dates for this candidate"
+        )
     notes = "; ".join(notes_parts) or None
 
     values: dict[str, Any] = {
