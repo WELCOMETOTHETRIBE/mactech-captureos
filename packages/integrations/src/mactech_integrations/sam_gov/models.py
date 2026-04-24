@@ -39,7 +39,10 @@ class OpportunityAwardee(_Loose):
 
 
 class OpportunityAward(_Loose):
-    date: date | None = None
+    # NOTE: SAM uses "date" as the JSON key, but a field named `date` would
+    # shadow the imported `datetime.date` type at class-body evaluation time
+    # and the annotation `date | None` would produce a TypeError. Aliased.
+    award_date: date | None = Field(default=None, alias="date")
     number: str | None = None
     amount: str | None = None  # SAM returns this as a string
     awardee: OpportunityAwardee | None = None
