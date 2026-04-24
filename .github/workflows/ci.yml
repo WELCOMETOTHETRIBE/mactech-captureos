@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  python:
+    name: Python — lint + typecheck + test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: mactech
+          POSTGRES_PASSWORD: mactech
+          POSTGRES_DB: mactech
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mactech"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://mactech:mactech@localhost:5432/mactech
+      DATABASE_URL_SYNC: postgresql+psycopg://mactech:mactech@localhost:5432/mactech
+      REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            **/pyproject.toml
+            uv.lock
+      - name: Python 3.12
+        run: uv python install 3.12
+      - name: uv sync
+        run: uv sync --all-packages
+      - name: Ruff lint
+        run: uv run ruff check .
+      - name: Ruff format check
+        run: uv run ruff format --check .
+      - name: mypy
+        run: uv run mypy packages apps
+        continue-on-error: true
+      - name: Alembic migrations apply cleanly
+        run: |
+          cd packages/db
+          uv run alembic upgrade head
+      - name: Seed runs idempotently (twice)
+        run: |
+          cd apps/api
+          uv run python -m scripts.seed
+          uv run python -m scripts.seed
+      - name: pytest
+        run: uv run pytest -q
+
+  web:
+    name: Web — lint + typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter ./apps/web lint
+      - run: pnpm --filter ./apps/web typecheck
+      - run: pnpm --filter ./apps/web build

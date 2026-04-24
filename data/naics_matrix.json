@@ -1,0 +1,149 @@
+{
+  "tenant": "MacTech Solutions LLC",
+  "tier_legend": {
+    "primary": "PRIMARY registration target — boost in scoring",
+    "secondary": "SECONDARY registration target — weighted lower"
+  },
+  "naics_codes": [
+    {
+      "code": "541519",
+      "title": "Other Computer Related Services",
+      "tier": "primary",
+      "why_fits": "De-facto DoD cyber primary — IA, RMF, CMMC, ConMon",
+      "founders": ["patrick-caruso", "james-adams"]
+    },
+    {
+      "code": "541512",
+      "title": "Computer Systems Design Services",
+      "tier": "primary",
+      "why_fits": "Core IT/cyber contracting — systems integration, architecture",
+      "founders": ["patrick-caruso", "james-adams"]
+    },
+    {
+      "code": "518210",
+      "title": "Computing Infrastructure Providers, Data Processing, Hosting",
+      "tier": "primary",
+      "why_fits": "Cloud migration, hosting, FedRAMP Moderate-aligned design",
+      "founders": ["patrick-caruso", "james-adams"]
+    },
+    {
+      "code": "541513",
+      "title": "Computer Facilities Management Services",
+      "tier": "primary",
+      "why_fits": "ConMon, managed security, data center operations",
+      "founders": ["patrick-caruso", "james-adams"]
+    },
+    {
+      "code": "541611",
+      "title": "Administrative Management and General Management Consulting Services",
+      "tier": "primary",
+      "why_fits": "Governance, operations consulting umbrella",
+      "founders": ["brian-macdonald", "john-milso"]
+    },
+    {
+      "code": "541330",
+      "title": "Engineering Services",
+      "tier": "primary",
+      "why_fits": "Systems engineering, infrastructure architecture",
+      "founders": ["james-adams"]
+    },
+    {
+      "code": "541380",
+      "title": "Testing Laboratories",
+      "tier": "primary",
+      "why_fits": "ISO 17025 metrology, calibration, test — rare differentiator",
+      "founders": ["brian-macdonald"]
+    },
+    {
+      "code": "541110",
+      "title": "Offices of Lawyers",
+      "tier": "primary",
+      "why_fits": "John's bar licensure (MA + RI) — direct legal practice",
+      "founders": ["john-milso"]
+    },
+    {
+      "code": "541618",
+      "title": "Other Management Consulting Services",
+      "tier": "secondary",
+      "why_fits": "Risk advisory, compliance consulting",
+      "founders": ["brian-macdonald", "john-milso"]
+    },
+    {
+      "code": "541511",
+      "title": "Custom Computer Programming Services",
+      "tier": "secondary",
+      "why_fits": "Vault, governance tooling, Infrastructure as Code",
+      "founders": ["james-adams"]
+    },
+    {
+      "code": "541614",
+      "title": "Process, Physical Distribution & Logistics Consulting",
+      "tier": "secondary",
+      "why_fits": "Process documentation, QMS design",
+      "founders": ["brian-macdonald"]
+    },
+    {
+      "code": "611420",
+      "title": "Computer Training",
+      "tier": "secondary",
+      "why_fits": "CMMC, RMF, STIG training delivery",
+      "founders": ["patrick-caruso"]
+    },
+    {
+      "code": "611430",
+      "title": "Professional and Management Development Training",
+      "tier": "secondary",
+      "why_fits": "Audit-readiness, compliance, and governance training",
+      "founders": ["brian-macdonald", "john-milso"]
+    },
+    {
+      "code": "541199",
+      "title": "All Other Legal Services",
+      "tier": "secondary",
+      "why_fits": "Contract review, compliance-adjacent legal work",
+      "founders": ["john-milso"]
+    },
+    {
+      "code": "561621",
+      "title": "Security Systems Services (except Locksmiths)",
+      "tier": "secondary",
+      "why_fits": "Physical and logical security systems",
+      "founders": ["patrick-caruso"]
+    },
+    {
+      "code": "561210",
+      "title": "Facilities Support Services",
+      "tier": "secondary",
+      "why_fits": "Data center operations, integrated facilities support",
+      "founders": ["james-adams"]
+    },
+    {
+      "code": "541715",
+      "title": "R&D in Physical, Engineering & Life Sciences (except Nanotech/Biotech)",
+      "tier": "secondary",
+      "why_fits": "Defense R&D, security/infra tool and platform development",
+      "founders": ["patrick-caruso", "james-adams"]
+    },
+    {
+      "code": "541690",
+      "title": "Other Scientific and Technical Consulting Services",
+      "tier": "secondary",
+      "why_fits": "Technical SME advisory — applies across all pillars",
+      "founders": ["brian-macdonald", "patrick-caruso", "james-adams", "john-milso"]
+    },
+    {
+      "code": "541990",
+      "title": "All Other Professional, Scientific & Technical Services",
+      "tier": "secondary",
+      "why_fits": "Catch-all for hybrid federal professional services",
+      "founders": ["brian-macdonald", "patrick-caruso", "james-adams", "john-milso"]
+    },
+    {
+      "code": "611710",
+      "title": "Educational Support Services",
+      "tier": "secondary",
+      "why_fits": "Curriculum design, training program support",
+      "founders": ["brian-macdonald", "patrick-caruso"]
+    }
+  ]
+}

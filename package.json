@@ -1,0 +1,31 @@
+{
+  "name": "mactech-captureos",
+  "private": true,
+  "version": "0.1.0",
+  "description": "MacTech CaptureOS — the operating system for defense contractors.",
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "concurrently -n api,web,workers -c blue,green,yellow \"pnpm dev:api\" \"pnpm dev:web\" \"pnpm dev:workers\"",
+    "dev:api": "cd apps/api && uv run fastapi dev src/mactech_api/main.py",
+    "dev:web": "pnpm --filter ./apps/web dev",
+    "dev:workers": "cd apps/workers && uv run celery -A mactech_workers.celery_app worker --beat --loglevel=info",
+    "db:migrate": "cd packages/db && uv run alembic upgrade head",
+    "db:downgrade": "cd packages/db && uv run alembic downgrade -1",
+    "db:revision": "cd packages/db && uv run alembic revision --autogenerate",
+    "db:seed": "cd apps/api && uv run python -m scripts.seed",
+    "test:py": "uv run pytest",
+    "test:js": "pnpm --recursive test",
+    "lint:py": "uv run ruff check .",
+    "lint:js": "pnpm --recursive lint",
+    "typecheck:py": "uv run mypy .",
+    "typecheck:js": "pnpm --recursive typecheck",
+    "format:py": "uv run ruff format .",
+    "format:js": "pnpm --recursive format"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  }
+}

@@ -1,0 +1,27 @@
+[project]
+name = "mactech-workers"
+version = "0.1.0"
+description = "Celery workers for MacTech CaptureOS ingestion, enrichment, scoring, and digests."
+requires-python = ">=3.12"
+dependencies = [
+    "celery[redis]>=5.4",
+    "redis>=5.2",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "structlog>=24.4",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "mactech-db",
+]
+
+[tool.uv.sources]
+mactech-db = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mactech_workers"]
+
+[tool.hatch.metadata]
+allow-direct-references = true

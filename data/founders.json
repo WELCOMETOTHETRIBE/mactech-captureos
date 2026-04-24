@@ -1,0 +1,94 @@
+{
+  "company": {
+    "legal_name": "MacTech Solutions LLC",
+    "website": "https://www.mactechsolutionsllc.com",
+    "status": ["SDVOSB (pending)", "Veteran-Owned"],
+    "frameworks": [
+      "CMMC 2.0 Level 2 (compliance aligned)",
+      "NIST CSF 2.0 (aligned)",
+      "NIST RMF (governance aligned)",
+      "FedRAMP Moderate (design aligned)",
+      "SOC 2 Type I (internal readiness)"
+    ]
+  },
+  "founders": [
+    {
+      "slug": "brian-macdonald",
+      "full_name": "Brian MacDonald",
+      "title": "Managing Member, Compliance & Operations",
+      "pillar": "quality",
+      "pillar_description": "ISO compliance, metrology, audit readiness",
+      "areas_of_expertise": [
+        "Quality Management Systems (ISO 9001, 17025)",
+        "Audit Readiness and Compliance",
+        "Process Documentation and Standardization",
+        "Operations Management",
+        "Regulated Environment Compliance"
+      ],
+      "proposal_role": "Key Personnel",
+      "security_clearance_status": "Available upon request",
+      "primary_naics": ["541380", "541614", "541611"],
+      "secondary_naics": ["541618", "611430", "611710", "541690", "541990"]
+    },
+    {
+      "slug": "patrick-caruso",
+      "full_name": "Patrick Caruso",
+      "title": "Director of Cyber Assurance",
+      "pillar": "security",
+      "pillar_description": "Cybersecurity & RMF expertise",
+      "areas_of_expertise": [
+        "Risk Management Framework (RMF) Implementation",
+        "Authorization to Operate (ATO) Package Development",
+        "Continuous Monitoring (ConMon) Programs",
+        "STIG Compliance and Remediation",
+        "Security Control Assessment (SCA)",
+        "DoD Cybersecurity Policy and Requirements",
+        "CMMC 2.0 Level 2 compliance implementation",
+        "Framework alignment (NIST CSF 2.0, NIST RMF, FedRAMP Moderate, SOC 2 Type I)"
+      ],
+      "proposal_role": "Key Personnel",
+      "security_clearance_status": "Available upon request",
+      "primary_naics": ["541519", "541512", "541513", "518210"],
+      "secondary_naics": ["561621", "611420", "541715", "541690", "541990", "611710"]
+    },
+    {
+      "slug": "james-adams",
+      "full_name": "James Adams",
+      "title": "Director of Infrastructure & Systems Engineering",
+      "pillar": "infrastructure",
+      "pillar_description": "Data center, storage, networking, deployment",
+      "areas_of_expertise": [
+        "Data Center Architecture and Design",
+        "Virtualization and Cloud Platforms",
+        "Storage and Backup Solutions",
+        "Network Architecture and Security",
+        "Infrastructure as Code (IaC)",
+        "Performance Optimization and Capacity Planning"
+      ],
+      "proposal_role": "Key Personnel",
+      "security_clearance_status": "Available upon request",
+      "primary_naics": ["518210", "541330", "541512", "541513"],
+      "secondary_naics": ["541511", "561210", "541519", "541715", "541690", "541990"]
+    },
+    {
+      "slug": "john-milso",
+      "full_name": "John Milso",
+      "title": "Director of Legal, Contracts & Risk Advisory",
+      "pillar": "governance",
+      "pillar_description": "Legal, contracts, risk analysis, corporate governance",
+      "areas_of_expertise": [
+        "Commercial Contracts (Software, Services, Vendors)",
+        "Corporate Governance",
+        "M&A Due Diligence",
+        "Risk Identification and Mitigation",
+        "Vendor and Subcontractor Agreement Alignment",
+        "Contractual Readiness for Cyber and Compliance Obligations"
+      ],
+      "proposal_role": "Key Personnel",
+      "bar_licensure": ["Massachusetts", "Rhode Island"],
+      "prior_experience": "Former Senior Legal Counsel at a global, publicly traded software company",
+      "primary_naics": ["541110", "541611", "541618"],
+      "secondary_naics": ["541199", "611430", "541690", "541990"]
+    }
+  ]
+}

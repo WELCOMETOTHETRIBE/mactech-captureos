@@ -1,0 +1,274 @@
+# MacTech tenant defaults
+# Loaded by the Phase 1 Week 1 seed migration.
+# When MacTech's UEI and CAGE code are issued, fill them in below and re-run seed.
+
+tenant:
+  slug: mactech
+  name: MacTech Solutions LLC
+  legal_name: MacTech Solutions LLC
+  website: https://www.mactechsolutionsllc.com
+  plan: internal
+  uei: null              # TODO: fill after SAM.gov registration
+  cage_code: null        # TODO: fill after CAGE assignment
+  sdvosb_status: pending
+  naics:
+    primary:
+      - 541519
+      - 541512
+      - 518210
+      - 541513
+      - 541611
+      - 541330
+      - 541380
+      - 541110
+    secondary:
+      - 541618
+      - 541511
+      - 541614
+      - 611420
+      - 611430
+      - 541199
+      - 561621
+      - 561210
+      - 541715
+      - 541690
+      - 541990
+      - 611710
+  set_aside_filter:
+    include:
+      - SDVOSBC    # SDVOSB Set-Aside
+      - SDVOSBS    # SDVOSB Sole Source
+      - VSA        # VOSB Set-Aside
+      - VSS        # VOSB Sole Source
+      - SBA        # Total Small Business Set-Aside
+      - SBP        # Partial Small Business Set-Aside
+      - SB         # Small Business
+    scan_unrestricted: true
+    exclude:
+      - 8A         # 8(a)
+      - 8AN        # 8(a) sole source
+      - HZC        # HUBZone
+      - HZS        # HUBZone sole source
+      - WOSB       # WOSB
+      - EDWOSB     # EDWOSB
+  target_agencies:
+    tier_1:
+      - DISA
+      - NIWC Atlantic
+      - NIWC Pacific
+    tier_2:
+      - DoD OSBP
+      - Department of Veterans Affairs
+      - Department of Homeland Security
+    tier_3:
+      - Army PEO C3T
+      - Air Force AFLCMC
+      - GSA
+  value_ceiling_sweet_spot:
+    min: 100000
+    max: 10000000
+  frameworks_claimed:
+    - CMMC 2.0 Level 2 (compliance aligned)
+    - NIST CSF 2.0
+    - NIST RMF
+    - FedRAMP Moderate (design aligned)
+    - SOC 2 Type I (internal readiness)
+
+saved_searches:
+  - name: Patrick — Security daily
+    owner_slug: patrick-caruso
+    filters:
+      naics: [541519, 541512, 518210, 541513, 541715]
+      keywords:
+        - RMF
+        - ATO
+        - ConMon
+        - STIG
+        - CMMC
+        - NIST 800-171
+        - NIST 800-53
+        - FedRAMP
+        - cybersecurity
+        - information assurance
+        - vulnerability assessment
+        - penetration testing
+      set_asides: [SDVOSBC, SDVOSBS, VSA, VSS, SBA, SBP, SB]
+    alert_threshold: 70
+    alert_cadence: daily
+    alert_channels: [email]
+
+  - name: James — Infrastructure daily
+    owner_slug: james-adams
+    filters:
+      naics: [518210, 541330, 541512, 541513, 541511, 561210]
+      keywords:
+        - data center
+        - virtualization
+        - cloud migration
+        - infrastructure as code
+        - IaC
+        - network architecture
+        - storage
+        - disaster recovery
+        - Kubernetes
+        - SEWP
+        - ITES
+        - AWS
+        - Azure
+        - GovCloud
+      set_asides: [SDVOSBC, SDVOSBS, VSA, VSS, SBA, SBP, SB]
+    alert_threshold: 70
+    alert_cadence: daily
+    alert_channels: [email]
+
+  - name: Brian — Quality daily
+    owner_slug: brian-macdonald
+    filters:
+      naics: [541380, 541614, 541611, 541618]
+      keywords:
+        - ISO 9001
+        - ISO 17025
+        - metrology
+        - calibration
+        - audit readiness
+        - QMS
+        - quality management
+        - accreditation
+        - laboratory
+        - test and measurement
+    alert_threshold: 65
+    alert_cadence: daily
+    alert_channels: [email]
+
+  - name: John — Governance weekly
+    owner_slug: john-milso
+    filters:
+      naics: [541110, 541199, 541611, 541618]
+      keywords:
+        - legal services
+        - contract review
+        - compliance
+        - risk advisory
+        - corporate governance
+        - teaming agreement
+    alert_threshold: 60
+    alert_cadence: weekly
+    alert_channels: [email]
+
+capability_statements_seed:
+  - title: CMMC 2.0 Level 2 Implementation & Assessment Readiness
+    summary: |
+      End-to-end CMMC 2.0 Level 2 implementation: scoping, control mapping to NIST 800-171,
+      evidence collection, gap analysis, POA&M development, and pre-assessment readiness.
+      Delivered with full CMMC 2.0 L2 compliance alignment internally at MacTech.
+    related_naics: [541519, 541512, 541611]
+    related_founders: [patrick-caruso, brian-macdonald]
+
+  - title: DoD RMF / ATO Package Development
+    summary: |
+      Complete RMF authorization support: categorization, control selection,
+      system security plan development, assessment, authorization decision support,
+      and continuous monitoring. Aligned to NIST 800-37 and 800-53.
+    related_naics: [541519, 541512]
+    related_founders: [patrick-caruso]
+
+  - title: Continuous Monitoring (ConMon) Program Design
+    summary: |
+      Design and operation of ConMon programs meeting FedRAMP Moderate and
+      DoD continuous monitoring requirements: vulnerability management,
+      configuration management, and ongoing assessment cadence.
+    related_naics: [541519, 541513]
+    related_founders: [patrick-caruso]
+
+  - title: STIG Compliance and Remediation
+    summary: |
+      STIG assessment, remediation, and sustainment across operating systems,
+      network devices, and applications. DISA STIG Viewer expertise.
+    related_naics: [541519, 541512]
+    related_founders: [patrick-caruso]
+
+  - title: Data Center Architecture & Cloud Migration
+    summary: |
+      Full-stack data center architecture, virtualization platforms, and cloud
+      migration including AWS GovCloud and Azure Government. FedRAMP-aligned design.
+    related_naics: [518210, 541330, 541512, 541513]
+    related_founders: [james-adams]
+
+  - title: Infrastructure as Code & DevSecOps
+    summary: |
+      IaC practice using Terraform, Ansible, and CI/CD pipelines that embed
+      security controls into deployment. Repeatable, auditable infrastructure.
+    related_naics: [541511, 541512, 541330]
+    related_founders: [james-adams]
+
+  - title: Network Architecture & Security
+    summary: |
+      Secure network design for federal environments: zero-trust principles,
+      segmentation, boundary protection, and compliance-aligned monitoring.
+    related_naics: [541330, 541512, 518210]
+    related_founders: [james-adams, patrick-caruso]
+
+  - title: ISO 17025 Metrology & Calibration Program Management
+    summary: |
+      Design and implementation of ISO 17025-accredited calibration programs:
+      measurement uncertainty analysis, method validation, proficiency testing,
+      and accreditation body engagement.
+    related_naics: [541380]
+    related_founders: [brian-macdonald]
+
+  - title: ISO 9001 Quality Management System Implementation
+    summary: |
+      End-to-end QMS implementation aligned to ISO 9001: process documentation,
+      internal audit programs, management review cycles, and corrective action systems.
+    related_naics: [541611, 541614]
+    related_founders: [brian-macdonald]
+
+  - title: Audit Readiness & Regulated Environment Compliance
+    summary: |
+      Audit preparation for federal regulated environments including pre-audit
+      gap analysis, evidence organization, stakeholder training, and sustainment.
+    related_naics: [541611, 541618]
+    related_founders: [brian-macdonald]
+
+  - title: Federal Contract Review & Teaming Agreement Counsel
+    summary: |
+      Commercial contract review, subcontract negotiation, and teaming agreement
+      structuring for federal pursuits. Licensed counsel (MA and RI) in-house.
+    related_naics: [541110, 541199]
+    related_founders: [john-milso]
+
+  - title: Risk Advisory & Compliance Governance
+    summary: |
+      Enterprise risk identification and mitigation, corporate governance
+      framework design, and contractual readiness for cybersecurity and
+      compliance obligations.
+    related_naics: [541611, 541618]
+    related_founders: [john-milso]
+
+scoring_weights:
+  # Tune as Phase 1 Week 4 goes live. Default weights sum to 100.
+  naics_primary_match: 25
+  naics_secondary_match: 15
+  naics_embedding_match: 5
+  keyword_density: 20
+  set_aside_sdvosb: 15
+  set_aside_small_biz: 8
+  value_in_sweet_spot: 10
+  incumbent_weakness: 15
+  founder_availability: 10
+  freshness: 5
+  # cap at 100
+
+compliance_gates:
+  pursue_stage_requires:
+    - incumbent_screened_within_hours: 24
+    - entity_record_populated: true
+  submit_stage_requires:
+    - mactech_exclusions_clean: true
+    - teaming_partners_exclusions_clean: true
+    - key_personnel_exclusions_clean: true
+    - legal_review_complete: true
+    - legal_reviewer_slug: john-milso
+  sdvosb_pending_warning: |
+    SDVOSB certification is pending. Confirm eligibility with the
+    contracting officer before submission.
