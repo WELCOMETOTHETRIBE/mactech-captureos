@@ -45,6 +45,18 @@ celery_app.conf.update(
             "options": {"expires": 25 * 60},
             "kwargs": {"batch_size": 25},
         },
+        "embed-unembedded-batch": {
+            "task": "mactech.embed.batch",
+            "schedule": crontab(minute="*/15"),
+            "options": {"expires": 12 * 60},
+            "kwargs": {"batch_size": 64},
+        },
+        "score-unscored-batch": {
+            "task": "mactech.score.batch",
+            "schedule": crontab(minute="*/20"),
+            "options": {"expires": 18 * 60},
+            "kwargs": {"batch_size": 25},
+        },
     },
 )
 
@@ -55,5 +67,7 @@ def health() -> str:
 
 
 # Side-effect imports to register tasks defined in submodules. Keep at end of file.
+import mactech_workers.tasks.embed  # noqa: E402, F401
 import mactech_workers.tasks.enrich  # noqa: E402, F401
 import mactech_workers.tasks.sam_ingest  # noqa: E402, F401
+import mactech_workers.tasks.score  # noqa: E402, F401

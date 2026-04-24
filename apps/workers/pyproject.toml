@@ -12,11 +12,13 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.36",
     "mactech-db",
     "mactech-integrations",
+    "mactech-intelligence",
 ]
 
 [tool.uv.sources]
 mactech-db = { workspace = true }
 mactech-integrations = { workspace = true }
+mactech-intelligence = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
