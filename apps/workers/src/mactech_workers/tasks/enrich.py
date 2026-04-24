@@ -101,23 +101,41 @@ async def enrich_opportunity(opportunity_id: UUID | str) -> EnrichStats:
                         time_period_start=posted - INCUMBENT_LOOKBACK,
                         time_period_end=posted,
                         award_type_codes=AWARD_TYPE_CODES,
-                        sort="Period of Performance Current End Date",
+                        # USASpending only allows sorting by a small set of
+                        # keys (Award ID, Recipient Name, Award Amount, Action
+                        # Date, ...). PoP dates are response-only. Pull the
+                        # top 25 by Award Amount and re-rank by end-date in
+                        # Python — the largest contracts in the same NAICS
+                        # + agency are nearly always the right candidate pool.
+                        sort="Award Amount",
                         order="desc",
-                        limit=10,
+                        limit=25,
                     )
                 candidates_scanned = len(page.results)
-                # Pick the candidate whose current_end_date is the latest <=
-                # post date if any, else the most recent. Filter out null
-                # end_dates which are uninformative.
-                preferred = [
-                    r
-                    for r in page.results
-                    if r.period_of_performance_current_end_date
-                    and r.period_of_performance_current_end_date >= posted
-                ]
-                pool = preferred or [
-                    r for r in page.results if r.period_of_performance_current_end_date
-                ]
+                # Prefer candidates still active (end-date >= posted), most
+                # recently ending first. If none are active, fall back to
+                # the most-recently-expired contract.
+                still_active = sorted(
+                    [
+                        r
+                        for r in page.results
+                        if r.period_of_performance_current_end_date
+                        and r.period_of_performance_current_end_date >= posted
+                    ],
+                    key=lambda r: r.period_of_performance_current_end_date,  # type: ignore[arg-type,return-value]
+                    reverse=True,
+                )
+                expired = sorted(
+                    [
+                        r
+                        for r in page.results
+                        if r.period_of_performance_current_end_date
+                        and r.period_of_performance_current_end_date < posted
+                    ],
+                    key=lambda r: r.period_of_performance_current_end_date,  # type: ignore[arg-type,return-value]
+                    reverse=True,
+                )
+                pool = still_active or expired
                 if pool:
                     incumbent = pool[0]
 

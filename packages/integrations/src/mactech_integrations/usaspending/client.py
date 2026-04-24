@@ -141,7 +141,7 @@ class UsaSpendingClient:
         award_amount_min: int | None = None,
         recipient_uei: str | None = None,
         fields: list[str] | None = None,
-        sort: str = "Period of Performance Current End Date",
+        sort: str = "Award Amount",  # valid USASpending sort key (PoP date is response-only)
         order: str = "desc",
         limit: int = 25,
         page: int = 1,
