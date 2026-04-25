@@ -1,3 +1,4 @@
+from mactech_db.models.draft import DRAFT_STATUSES, DRAFT_TYPES, ProposalDraft
 from mactech_db.models.enrichment import AwardHistory, ExclusionsCache, OpportunityEnriched
 from mactech_db.models.founder import Founder, FounderNaicsMatrix
 from mactech_db.models.library import (
@@ -16,6 +17,8 @@ from mactech_db.models.user import User
 __all__ = [
     "AwardHistory",
     "CapabilityStatement",
+    "DRAFT_STATUSES",
+    "DRAFT_TYPES",
     "ExclusionsCache",
     "Founder",
     "FounderNaicsMatrix",
@@ -27,6 +30,7 @@ __all__ = [
     "PAST_PERFORMANCE_ROLES",
     "PURSUIT_STAGES",
     "PastPerformance",
+    "ProposalDraft",
     "Pursuit",
     "SavedSearch",
     "TeamingPartner",

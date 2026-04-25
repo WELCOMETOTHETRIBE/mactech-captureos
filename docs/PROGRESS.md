@@ -637,3 +637,71 @@ Both tenant-scoped with CASCADE on tenant delete. Both have ORM `onupdate=func.n
 - **Phase 3 Week 9** — Sources Sought drafter. Take an opp + the capability statements + past performance + teaming partners, hand it all to Claude, return a draft response. This is the flagship feature.
 - **Capability statement editing UI** — currently still seed-config-driven. Could mirror the past-performance form pattern.
 - **USASpending past-performance auto-import** — once MacTech's UEI is active, pull the firm's own contract history into past_performance automatically.
+
+---
+
+## 2026-04-25 — Phase 3 Week 9: Sources Sought drafter (flagship)
+
+The headline feature lands. Open any opportunity, click "Draft response", and 30 seconds later you have a 3–5-page Sources Sought response in markdown — citing your real capability statements + past performance + active teaming partners, with the firm's own UEI/CAGE/set-aside details baked in. Edit inline, regenerate with custom instructions, mark draft → reviewed → submitted.
+
+### Schema — migration 0009
+- **`proposal_drafts`** ([0009_proposal_drafts.py](packages/db/alembic/versions/0009_proposal_drafts.py), model [draft.py](packages/db/src/mactech_db/models/draft.py)):
+  - `tenant_id`, `opportunity_id`, both CASCADE on delete.
+  - `parent_draft_id` self-FK with `ondelete=SET NULL` — captures regeneration ancestry without orphaning the version chain when a parent is purged.
+  - `created_by_founder_id` SET NULL on delete.
+  - `draft_type` ∈ {sources_sought, rfp_response, compliance_matrix, white_paper} — extension points for next sprints. Check constraint enforces.
+  - `status` ∈ {draft, reviewed, submitted, archived} — check constraint.
+  - `version` integer (auto-incremented by API on regeneration, `parent.version + 1`).
+  - `content` Text (the markdown response), `title` String(255), `custom_instructions` Text (nullable; what the user typed when generating).
+  - `prompt_context_hash` SHA-256 over the inputs that drove the draft — lets us identify "this would produce the same draft" cases later.
+  - `model`, `input_tokens`, `output_tokens`, `citations` JSONB (capability/past-performance/teaming-partner counts cited).
+  - Indexes: `(tenant_id, opportunity_id)`, `(tenant_id, created_at)`.
+
+### Intelligence — [sources_sought_drafter.py](packages/intelligence/src/mactech_intelligence/sources_sought_drafter.py)
+- New module with structured `SourcesSoughtInput` dataclasses for opportunity / tenant / founders / capabilities / past performance / teaming partners.
+- `_build_user_message()` flattens the input into a structured markdown prompt with `## OPPORTUNITY`, `## RESPONDING FIRM`, `## KEY PERSONNEL`, `## CAPABILITY STATEMENTS`, `## PAST PERFORMANCE`, `## TEAMING PARTNERS` sections. Description text is capped at 6000 chars.
+- `generate_sources_sought_draft()` calls `AnthropicLLMClient.complete()` with `complexity="smart"` → routes to `claude-sonnet-4-6` per [docs/DATA_SOURCES.md §4.1](docs/DATA_SOURCES.md). Default `max_tokens=4000` (≈3000 words).
+- System prompt at [prompts/sources_sought.md](packages/intelligence/src/mactech_intelligence/prompts/sources_sought.md) — sober federal-proposal-writer voice. Anti-hallucination: "Do not invent past performance, certifications, or facts not present in the context. If a section would be empty for lack of context, omit it rather than padding."
+- `context_hash()` SHA-256 helper exposed for the API to detect "no-op regeneration."
+
+### API — [routes/drafts.py](apps/api/src/mactech_api/routes/drafts.py)
+- **`POST /opportunities/{id}/drafts/sources-sought`** — synchronous generation. Loads opportunity + founders + capabilities + past performance + active teaming partners + tenant identity (UEI / CAGE / contact) in a single set of queries, builds `SourcesSoughtInput`, calls Claude, persists. Returns the full `DraftOut` with content + metadata. 503 if `ANTHROPIC_API_KEY` is unset; 502 if the API call fails.
+- **`POST /drafts/{id}/regenerate`** — same but with `parent_draft_id` chained and `version = parent.version + 1`. Optional new `custom_instructions` override the parent's.
+- **`GET /drafts[?opportunity_id=<id>]`** — list (newest first). Optional opp filter.
+- **`GET /opportunities/{id}/drafts`** — same shape, opp-scoped.
+- **`GET /drafts/{id}`** — single draft including model/tokens/citations metadata + author.
+- **`PATCH /drafts/{id}`** — edit `title`/`content`/`status`. Status check: must be one of the four valid values.
+- **`DELETE /drafts/{id}`** — 204.
+- **API now depends on `mactech-intelligence`** — added to `apps/api/pyproject.toml` (was already pulled in by `uv sync --all-packages` in the Dockerfile, now made explicit).
+
+### Web — server actions [lib/drafts.ts](apps/web/lib/drafts.ts)
+- `generateSourcesSoughtDraft(opportunityId, formData)` / `regenerateDraft(draftId, formData)` / `updateDraftContent(draftId, formData)` / `setDraftStatus(formData)` / `deleteDraft(formData)`.
+- Generation calls override `apiFetch` with a 90-second timeout (`apiFetch` now accepts a `timeoutMs` param via `AbortController`); default for everything else is 15s.
+- On success, the action `revalidatePath`s `/drafts`, the opp detail, and the new draft route, then `redirect()`s to the new draft so the user lands on the editor.
+
+### Web — three new surfaces
+- **Drafter panel on the opportunity detail page** — new `<DrafterPanel>` strip directly under the PursuitPanel. When the notice type contains "sources sought," shows an amber "recommended for this notice" chip. When no drafts exist, renders the form (custom instructions + "Draft response →"). When drafts exist, lists them with version + status + title + "Generate new version" affordance. The opp-detail page now fetches drafts in parallel with /me + pursuit lookup.
+- **`/drafts`** ([page.tsx](apps/web/app/(app)/drafts/page.tsx)) — tenant-wide list of all drafts across all opportunities. Each card shows status badge, draft type, version, parent opportunity title, model + token count, created-at. Empty state directs the user to filter opps to "Sources Sought."
+- **`/drafts/[id]`** ([page.tsx](apps/web/app/(app)/drafts/[id]/page.tsx)) — 2/3 + 1/3 split:
+  - **Editor (left, 2 cols)**: title input + 36-row textarea for the markdown body. "Save changes" via `updateDraftContent.bind(null, draft.id)`.
+  - **Sidebar (right, 1 col)**: generation metadata (model, tokens, citations counts, parent draft link if v2+, author founder), plus a "Regenerate" panel with custom-instructions textarea and a primary "Generate v{N+1}" button.
+  - Status flow: top-right action row only exposes valid next-status transitions per `STATUS_FLOW` map (e.g., draft → reviewed | archived; reviewed → submitted | draft).
+- **Sidebar nav** picks up a new "Drafts — Sources Sought + RFP" entry between Library and Settings.
+
+### Verification
+- `tsc --noEmit` clean (cleaned up stale `.next/types/* 2.ts` Finder duplicates that were creating false-positive errors).
+- `next build` produces all 14 routes (2 new: `/drafts`, `/drafts/[id]`).
+- `python3 -m py_compile` clean on the new model, migration, intelligence module, and route module.
+- Models import via uv with all 18 columns + 2 check constraints + 2 indexes present.
+- Migration auto-runs on api boot via [entrypoint.sh](apps/api/entrypoint.sh).
+
+### What this unblocks
+- The flagship feature is live. MacTech can respond to Sources Sought notices in minutes instead of days.
+- Every Phase 3 follow-on (RFP response drafter, compliance matrix generator, white-paper drafter) reuses the same `proposal_drafts` table with a different `draft_type` and a different prompt template.
+- Token usage now tracked per draft → real-time visibility into Anthropic spend.
+
+### Known limitations + next sprints
+- **Synchronous generation** — the API call blocks for 20–60s. Phase 3 Week 10 should move to streaming (Server-Sent Events) so the user sees the draft compose live.
+- **No PDF/Word export** — markdown only today. Phase 3 Week 11 ships a "Export as DOCX" via a server-side conversion step.
+- **No diff view between versions** — when you regenerate, you get a new draft but no side-by-side. Useful for understanding "what changed when I asked for X."
+- **No rate limiting on generation** — a user could spam regenerate. Add a per-tenant 5/hour soft cap when costs become real.

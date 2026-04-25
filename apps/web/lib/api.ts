@@ -8,7 +8,10 @@ const CLERK_JWT_TEMPLATE = process.env.NEXT_PUBLIC_CLERK_JWT_TEMPLATE ?? "mactec
  * `mactech` template, attaches it as a Bearer header, and calls the FastAPI
  * backend. Use only from server components / route handlers.
  */
-export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function apiFetch<T>(
+  path: string,
+  init: RequestInit & { timeoutMs?: number } = {}
+): Promise<T> {
   const { getToken } = await auth();
   const token = await getToken({ template: CLERK_JWT_TEMPLATE });
   if (!token) {
@@ -19,11 +22,23 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   if (!headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers,
-    cache: "no-store"
-  });
+
+  // Most calls finish in <1s; LLM generations (Sources Sought drafter) take
+  // 20-60s. Caller can override via init.timeoutMs.
+  const timeoutMs = init.timeoutMs ?? 15_000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers,
+      cache: "no-store",
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`API ${res.status} on ${path}: ${body.slice(0, 200)}`);
@@ -392,4 +407,69 @@ export type TeamingPartnerList = {
   total: number;
   active_count: number;
   items: TeamingPartnerOut[];
+};
+
+/* ── /drafts ────────────────────────────────────────────────────── */
+
+export type DraftStatus = "draft" | "reviewed" | "submitted" | "archived";
+export type DraftType =
+  | "sources_sought"
+  | "rfp_response"
+  | "compliance_matrix"
+  | "white_paper";
+
+export const DRAFT_STATUS_ORDER: DraftStatus[] = [
+  "draft",
+  "reviewed",
+  "submitted",
+  "archived"
+];
+
+export type DraftOpp = {
+  id: string;
+  notice_id: string;
+  title: string;
+  notice_type: string | null;
+};
+
+export type DraftFounderRef = {
+  slug: string;
+  full_name: string;
+};
+
+export type DraftOut = {
+  id: string;
+  opportunity: DraftOpp;
+  parent_draft_id: string | null;
+  created_by: DraftFounderRef | null;
+  draft_type: DraftType;
+  title: string;
+  content: string;
+  status: DraftStatus;
+  version: number;
+  custom_instructions: string | null;
+  model: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  citations: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DraftListItem = {
+  id: string;
+  opportunity: DraftOpp;
+  draft_type: DraftType;
+  title: string;
+  status: DraftStatus;
+  version: number;
+  model: string | null;
+  output_tokens: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DraftListResponse = {
+  total: number;
+  items: DraftListItem[];
 };

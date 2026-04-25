@@ -2,12 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   apiFetch,
+  type DraftListResponse,
   type MeResponse,
   type OpportunityDetail,
   type PursuitCard as PursuitCardT,
   type PursuitStage
 } from "@/lib/api";
 import { createPursuit, deletePursuit, updatePursuit } from "@/lib/pursuits";
+import { generateSourcesSoughtDraft } from "@/lib/drafts";
 import {
   Badge,
   Card,
@@ -81,15 +83,19 @@ export default async function OpportunityDetailPage({
     throw err;
   }
 
-  // Pursuit + me run in parallel. The pursuit lookup legitimately 404s when
-  // the opp isn't in the pipeline yet — that's the "Add to pipeline" CTA
-  // case. Swallowing here also masks 500s, which is acceptable because the
-  // PursuitPanel falls back to the "not yet" UI on null and an api error on
-  // /opportunities/{id} above would have already thrown.
-  const [me, pursuit] = await Promise.all([
+  // Pursuit + me + drafts run in parallel. The pursuit lookup legitimately
+  // 404s when the opp isn't in the pipeline yet — that's the "Add to
+  // pipeline" CTA case. Swallowing here also masks 500s, which is
+  // acceptable because the PursuitPanel falls back to the "not yet" UI on
+  // null and an api error on /opportunities/{id} above would have already
+  // thrown.
+  const [me, pursuit, drafts] = await Promise.all([
     apiFetch<MeResponse>("/me"),
     apiFetch<PursuitCardT>(`/pursuits/by-opportunity/${id}`).catch(
       () => null as PursuitCardT | null
+    ),
+    apiFetch<DraftListResponse>(`/opportunities/${id}/drafts`).catch(
+      () => ({ total: 0, items: [] }) as DraftListResponse
     )
   ]);
 
@@ -161,6 +167,9 @@ export default async function OpportunityDetailPage({
         pursuit={pursuit}
         meFounderSlug={me.founder?.slug ?? null}
       />
+
+      {/* Sources Sought drafter strip */}
+      <DrafterPanel opportunityId={opp.id} drafts={drafts} noticeType={opp.notice_type} />
 
       {/* Two-column main: description left, incumbent + capability right */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -602,5 +611,111 @@ function DetailStageBtn({
         {label}
       </button>
     </form>
+  );
+}
+
+function DrafterPanel({
+  opportunityId,
+  drafts,
+  noticeType
+}: {
+  opportunityId: string;
+  drafts: DraftListResponse;
+  noticeType: string | null;
+}) {
+  const isSourcesSought =
+    noticeType?.toLowerCase().includes("sources sought") ?? false;
+  const action = generateSourcesSoughtDraft.bind(null, opportunityId);
+
+  return (
+    <section className="rounded-md border border-neutral-200 bg-white p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+            Proposal drafter
+            {isSourcesSought && (
+              <span className="ml-2 inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                recommended for this notice
+              </span>
+            )}
+          </p>
+          <p className="mt-1 max-w-2xl text-sm text-neutral-700">
+            {drafts.total === 0
+              ? isSourcesSought
+                ? "This is a Sources Sought notice — perfect for the AI drafter. Generate a starting response using your capability statements, past performance, and active teaming partners."
+                : "Generate a Sources Sought–style capability response from this opportunity. Useful for white papers, RFI responses, or as a head start on a real proposal."
+              : `${drafts.total} draft${drafts.total === 1 ? "" : "s"} on this opportunity. Open one to edit, or generate a new version.`}
+          </p>
+        </div>
+        {drafts.items.length > 0 && (
+          <Link
+            href={`/drafts/${drafts.items[0].id}`}
+            className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:border-neutral-500"
+          >
+            Open latest draft →
+          </Link>
+        )}
+      </div>
+
+      {drafts.items.length === 0 ? (
+        <form action={action} className="mt-4 space-y-3">
+          <label className="block">
+            <span className="block text-[11px] uppercase tracking-wider text-neutral-500">
+              Custom instructions (optional)
+            </span>
+            <textarea
+              name="custom_instructions"
+              rows={2}
+              placeholder="e.g. Lead with cybersecurity past performance. Tone: formal."
+              className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-xs shadow-sm focus:border-neutral-500 focus:outline-none"
+            />
+          </label>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="submit"
+              className="rounded-md border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+            >
+              Draft response →
+            </button>
+            <span className="text-[11px] text-neutral-400">
+              Takes 20–60s. Uses Claude Sonnet 4.6.
+            </span>
+          </div>
+        </form>
+      ) : (
+        <ul className="mt-4 space-y-2 border-t border-neutral-100 pt-3">
+          {drafts.items.slice(0, 5).map((d) => (
+            <li
+              key={d.id}
+              className="flex items-center justify-between gap-3 rounded-md border border-neutral-100 px-3 py-2 text-xs"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <Badge tone="violet">v{d.version}</Badge>
+                <Badge tone={d.status === "submitted" ? "green" : "neutral"}>
+                  {d.status}
+                </Badge>
+                <Link
+                  href={`/drafts/${d.id}`}
+                  className="truncate text-neutral-800 hover:underline"
+                >
+                  {d.title}
+                </Link>
+              </div>
+              <span className="shrink-0 tabular-nums text-[10px] text-neutral-400">
+                {fmtDate(d.created_at)}
+              </span>
+            </li>
+          ))}
+          <form action={action} className="pt-2">
+            <button
+              type="submit"
+              className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:border-neutral-500"
+            >
+              + Generate new version
+            </button>
+          </form>
+        </ul>
+      )}
+    </section>
   );
 }
