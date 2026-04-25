@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { apiFetch, type DashboardResponse } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -62,9 +63,10 @@ export default async function DashboardPage() {
         ) : (
           <ul className="mt-3 space-y-3">
             {data.your_top.map((opp, i) => (
-              <li
+              <Link
                 key={opp.id}
-                className="rounded-md border border-neutral-200 bg-white p-5"
+                href={opp.detail_url}
+                className="block rounded-md border border-neutral-200 bg-white p-5 transition-colors hover:border-neutral-400"
               >
                 <div className="flex items-baseline justify-between gap-3">
                   <p className="text-[11px] uppercase tracking-wider text-neutral-500">
@@ -90,17 +92,8 @@ export default async function DashboardPage() {
                     {opp.incumbent_amount != null && ` — ${fmtMoney(opp.incumbent_amount)} prior obligations`}
                   </p>
                 )}
-                {opp.sam_link && (
-                  <a
-                    href={opp.sam_link}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-3 inline-block text-xs text-blue-700 hover:underline"
-                  >
-                    View on SAM.gov →
-                  </a>
-                )}
-              </li>
+                <p className="mt-3 text-xs text-blue-700">View detail →</p>
+              </Link>
             ))}
           </ul>
         )}
