@@ -6,10 +6,23 @@ stubbed until the Phase 5 triggers ($300/mo MacTech-only spend or
 Prime/Enterprise volume) are hit.
 """
 
+from mactech_intelligence.ask_about_opportunity import (
+    STARTERS as ASK_STARTERS,
+    AskFirmContext,
+    AskInput,
+    AskOpportunityContext,
+    ask_about_opportunity,
+)
 from mactech_intelligence.explain_term import (
     TermExplanation as TermExplanationOut,
     explain_term,
     parse_slug as parse_explain_slug,
+)
+from mactech_intelligence.extract_brief import (
+    BriefExtractionError,
+    ExtractBriefInput,
+    StructuredBrief,
+    extract_structured_brief,
 )
 from mactech_intelligence.llm import AnthropicLLMClient, LLMResponse
 from mactech_intelligence.scoring import (
@@ -32,8 +45,14 @@ from mactech_intelligence.sources_sought_drafter import (
 from mactech_intelligence.why_it_matters import generate_why_it_matters
 
 __all__ = [
+    "ASK_STARTERS",
     "AnthropicLLMClient",
+    "AskFirmContext",
+    "AskInput",
+    "AskOpportunityContext",
+    "BriefExtractionError",
     "CapabilityContext",
+    "ExtractBriefInput",
     "FounderContext",
     "LLMResponse",
     "OpportunityContext",
@@ -42,11 +61,14 @@ __all__ = [
     "ScoringContext",
     "ScoringResult",
     "SourcesSoughtInput",
+    "StructuredBrief",
     "TeamingPartnerContext",
     "TenantIdentity",
     "TermExplanationOut",
+    "ask_about_opportunity",
     "context_hash",
     "explain_term",
+    "extract_structured_brief",
     "generate_sources_sought_draft",
     "generate_why_it_matters",
     "parse_explain_slug",

@@ -2,15 +2,26 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   apiFetch,
+  type BriefOut,
   type DraftListResponse,
   type MeResponse,
   type OpportunityDetail,
   type PursuitCard as PursuitCardT,
   type PursuitStage,
+  type QuestionListResponse,
+  type QuestionOut,
   type TermExplanationResponse
 } from "@/lib/api";
 import { createPursuit, deletePursuit, updatePursuit } from "@/lib/pursuits";
 import { generateSourcesSoughtDraft } from "@/lib/drafts";
+import {
+  askOpportunityQuestion,
+  deleteOpportunityQuestion
+} from "@/lib/ask";
+import {
+  deleteOpportunityBrief,
+  generateOpportunityBrief
+} from "@/lib/brief";
 import {
   Badge,
   Card,
@@ -89,14 +100,22 @@ export default async function OpportunityDetailPage({
     throw err;
   }
 
-  // Pursuit + me + drafts + (optional) explanation run in parallel.
-  const [me, pursuit, drafts, explanation] = await Promise.all([
+  // Pursuit + me + drafts + Q&A + brief + (optional) explanation run in
+  // parallel. Brief and questions legitimately 404/empty when not yet
+  // generated — caller swallows.
+  const [me, pursuit, drafts, questions, brief, explanation] = await Promise.all([
     apiFetch<MeResponse>("/me"),
     apiFetch<PursuitCardT>(`/pursuits/by-opportunity/${id}`).catch(
       () => null as PursuitCardT | null
     ),
     apiFetch<DraftListResponse>(`/opportunities/${id}/drafts`).catch(
       () => ({ total: 0, items: [] }) as DraftListResponse
+    ),
+    apiFetch<QuestionListResponse>(`/opportunities/${id}/questions`).catch(
+      () => ({ total: 0, items: [], starters: {} }) as QuestionListResponse
+    ),
+    apiFetch<BriefOut>(`/opportunities/${id}/brief`).catch(
+      () => null as BriefOut | null
     ),
     explainSlug
       ? apiFetch<TermExplanationResponse>(
@@ -206,45 +225,21 @@ export default async function OpportunityDetailPage({
       {/* Sources Sought drafter strip */}
       <DrafterPanel opportunityId={opp.id} drafts={drafts} noticeType={opp.notice_type} />
 
-      {/* Two-column main: description left, incumbent + capability right */}
+      {/* Ask-Claude panel — quickest path from "what is this" to an answer */}
+      <AskPanel
+        opportunityId={opp.id}
+        questions={questions}
+        meFounderSlug={me.founder?.slug ?? null}
+      />
+
+      {/* Two-column main: description (with brief tab) left, incumbent + capability right */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card title="Description">
-          {data.description.fetch_status === "fetched" && data.description.text ? (
-            <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-neutral-800">
-              {data.description.text.trim()}
-            </pre>
-          ) : data.description.fetch_status === "pending" ? (
-            <p className="text-sm text-neutral-600">
-              Description text is queued for fetch from SAM.gov. The worker pulls it on the
-              next 30-minute tick.
-            </p>
-          ) : (
-            <p className="text-sm text-neutral-600">
-              No description text available for this notice.
-            </p>
-          )}
-          {data.sam_resource_links.length > 0 && (
-            <div className="mt-4 border-t border-neutral-200 pt-3">
-              <p className="text-[11px] uppercase tracking-wider text-neutral-500">
-                Attachments ({data.sam_resource_links.length})
-              </p>
-              <ul className="mt-2 space-y-1 text-sm">
-                {data.sam_resource_links.map((url, i) => (
-                  <li key={url}>
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="break-all text-blue-700 hover:underline"
-                    >
-                      Attachment {i + 1} →
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </Card>
+        <BriefAndDescriptionPanel
+          opportunityId={opp.id}
+          description={data.description}
+          brief={brief}
+          samResourceLinks={data.sam_resource_links}
+        />
 
         <div className="space-y-4">
           <Card title="Incumbent intelligence">
@@ -830,5 +825,412 @@ function ExplainRail({
         opens this rail with that term&rsquo;s explanation.
       </p>
     </aside>
+  );
+}
+
+/* ── Ask Claude about this opp ──────────────────────────────────── */
+
+const STARTER_LABELS: Record<string, string> = {
+  should_we_pursue: "Should we pursue this?",
+  incumbent: "Who's the likely incumbent?",
+  win_probability: "What's our win probability?",
+  must_haves: "What are the must-haves?",
+  teaming: "Should we prime, sub, or team?"
+};
+
+const STARTER_ORDER = [
+  "should_we_pursue",
+  "incumbent",
+  "win_probability",
+  "must_haves",
+  "teaming"
+];
+
+function AskPanel({
+  opportunityId,
+  questions,
+  meFounderSlug
+}: {
+  opportunityId: string;
+  questions: QuestionListResponse;
+  meFounderSlug: string | null;
+}) {
+  const action = askOpportunityQuestion.bind(null, opportunityId);
+  const recent = questions.items.slice(0, 5);
+
+  return (
+    <section className="rounded-lg border border-neutral-200 bg-white p-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-brand-700">
+            Ask Claude about this opportunity
+          </p>
+          <p className="mt-1 text-sm text-neutral-600">
+            Direct answers from your firm's data — capability statements, past
+            performance, active partners, and the SAM description. Cap 200
+            words per answer.
+          </p>
+        </div>
+        {questions.total > 5 && (
+          <span className="text-xs text-neutral-500">
+            {questions.total} total · showing 5 most recent
+          </span>
+        )}
+      </div>
+
+      {/* Starter buttons + freeform form */}
+      <form action={action} className="mt-4 space-y-3">
+        <div className="flex flex-wrap gap-2">
+          {STARTER_ORDER.map((kind) => (
+            <button
+              key={kind}
+              type="submit"
+              name="starter_kind"
+              value={kind}
+              className="rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 transition-colors hover:border-brand-500 hover:text-brand-800"
+              title={
+                questions.starters?.[kind] ??
+                STARTER_LABELS[kind] ??
+                kind
+              }
+            >
+              {STARTER_LABELS[kind] ?? kind}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-stretch gap-2">
+          <input
+            type="hidden"
+            name="me_founder_slug"
+            value={meFounderSlug ?? ""}
+          />
+          <input
+            name="question"
+            placeholder="Or type your own question…"
+            maxLength={1000}
+            className="min-w-0 flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+          />
+          <button
+            type="submit"
+            className="rounded-md border border-brand-700 bg-brand-700 px-4 py-2 text-sm font-medium text-white hover:bg-brand-800"
+          >
+            Ask →
+          </button>
+        </div>
+        <p className="text-[11px] text-neutral-500">
+          Takes 5–15 seconds. Answer is saved to this opportunity for the team
+          to see.
+        </p>
+      </form>
+
+      {/* History */}
+      {recent.length > 0 && (
+        <ul className="mt-6 space-y-4 border-t border-neutral-100 pt-5">
+          {recent.map((q) => (
+            <li key={q.id}>
+              <QuestionCard q={q} opportunityId={opportunityId} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function QuestionCard({
+  q,
+  opportunityId
+}: {
+  q: QuestionOut;
+  opportunityId: string;
+}) {
+  return (
+    <article className="rounded-md border border-neutral-100 bg-neutral-50 p-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="text-sm font-medium text-neutral-800">
+          <span className="text-brand-700">Q.</span> {q.question}
+        </p>
+        <form action={deleteOpportunityQuestion} className="shrink-0">
+          <input type="hidden" name="id" value={q.id} />
+          <input type="hidden" name="opportunity_id" value={opportunityId} />
+          <button
+            type="submit"
+            className="rounded-md p-0.5 text-[10px] text-neutral-400 hover:text-red-700"
+            title="Remove this Q&A"
+            aria-label="Delete question"
+          >
+            ✕
+          </button>
+        </form>
+      </div>
+      <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-neutral-800">
+        <span className="text-brand-700">A.</span> {q.answer}
+      </p>
+      <p className="mt-2 text-[11px] text-neutral-400">
+        {q.asked_by ? `${q.asked_by.full_name} · ` : ""}
+        {fmtDate(q.created_at)}
+        {q.model && ` · ${q.model}`}
+        {q.output_tokens != null && ` · ${q.output_tokens} tokens`}
+      </p>
+    </article>
+  );
+}
+
+/* ── Plain-English brief tab ─────────────────────────────────────── */
+
+function BriefAndDescriptionPanel({
+  opportunityId,
+  description,
+  brief,
+  samResourceLinks
+}: {
+  opportunityId: string;
+  description: OpportunityDetail["description"];
+  brief: BriefOut | null;
+  samResourceLinks: string[];
+}) {
+  const generateAction = generateOpportunityBrief.bind(null, opportunityId);
+
+  return (
+    <Card>
+      <header className="flex flex-wrap items-baseline justify-between gap-3 border-b border-neutral-100 pb-3">
+        <div className="flex gap-1" role="tablist" aria-label="Description view">
+          {/* Use anchor links with hash so the page scrolls to the section
+              without a server roundtrip. The "active" tab is implicit —
+              the user toggles via :target on the destination panel. */}
+          <a
+            href={`#brief-${opportunityId}`}
+            className="rounded-md border border-brand-300 bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-800 hover:bg-brand-100"
+            role="tab"
+          >
+            Plain-English brief
+          </a>
+          <a
+            href={`#raw-${opportunityId}`}
+            className="rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 hover:border-neutral-500"
+            role="tab"
+          >
+            Original SAM text
+          </a>
+        </div>
+        {brief && (
+          <form action={generateAction}>
+            <button
+              type="submit"
+              className="rounded-md px-2 py-1 text-[11px] text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
+              title="Regenerate the brief from the current SAM description"
+            >
+              ↻ Regenerate brief
+            </button>
+          </form>
+        )}
+      </header>
+
+      {/* Brief panel — primary, lives at #brief-{id} */}
+      <section
+        id={`brief-${opportunityId}`}
+        role="tabpanel"
+        aria-label="Plain-English brief"
+        className="pt-4"
+      >
+        {brief ? (
+          <BriefBody brief={brief} />
+        ) : (
+          <BriefEmpty
+            description={description}
+            generateAction={generateAction}
+          />
+        )}
+      </section>
+
+      {/* Raw panel — secondary, lives at #raw-{id}. Hidden visually below
+          the brief, so #raw anchor scroll just reveals further down. */}
+      <section
+        id={`raw-${opportunityId}`}
+        role="tabpanel"
+        aria-label="Original SAM description"
+        className="mt-6 border-t border-neutral-100 pt-4"
+      >
+        <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+          Original SAM text
+        </p>
+        {description.fetch_status === "fetched" && description.text ? (
+          <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-md border border-neutral-200 bg-neutral-50 p-3 font-sans text-xs leading-relaxed text-neutral-700">
+            {description.text.trim()}
+          </pre>
+        ) : description.fetch_status === "pending" ? (
+          <p className="mt-3 text-sm text-neutral-600">
+            Description text is queued for fetch from SAM.gov. The worker pulls
+            it on the next 30-minute tick.
+          </p>
+        ) : (
+          <p className="mt-3 text-sm text-neutral-600">
+            No description text available for this notice.
+          </p>
+        )}
+
+        {samResourceLinks.length > 0 && (
+          <div className="mt-4 border-t border-neutral-100 pt-3">
+            <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+              Attachments ({samResourceLinks.length})
+            </p>
+            <ul className="mt-2 space-y-1 text-sm">
+              {samResourceLinks.map((url, i) => (
+                <li key={url}>
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="break-all text-brand-700 hover:underline"
+                  >
+                    Attachment {i + 1} →
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
+    </Card>
+  );
+}
+
+function BriefBody({ brief }: { brief: BriefOut }) {
+  return (
+    <div className="space-y-5">
+      <div>
+        <p className="text-[11px] font-medium uppercase tracking-wide text-brand-700">
+          Scope
+        </p>
+        <p className="mt-1 text-base font-semibold leading-snug text-neutral-900">
+          {brief.scope_one_sentence}
+        </p>
+      </div>
+
+      {brief.must_have_requirements.length > 0 && (
+        <BriefList
+          label="Must-have requirements"
+          items={brief.must_have_requirements}
+          tone="brand"
+        />
+      )}
+      {brief.nice_to_have.length > 0 && (
+        <BriefList
+          label="Nice-to-haves"
+          items={brief.nice_to_have}
+          tone="neutral"
+        />
+      )}
+      {brief.red_flags_for_small_biz.length > 0 && (
+        <BriefList
+          label="Red flags for a small business"
+          items={brief.red_flags_for_small_biz}
+          tone="amber"
+        />
+      )}
+      {brief.suggested_team_roles.length > 0 && (
+        <BriefList
+          label="Suggested teaming"
+          items={brief.suggested_team_roles}
+          tone="violet"
+        />
+      )}
+
+      <p className="text-[11px] text-neutral-400">
+        Auto-generated by {brief.model ?? "Claude"} from{" "}
+        {brief.description_chars?.toLocaleString() ?? "?"} chars of SAM text ·{" "}
+        Updated {fmtDate(brief.updated_at)}
+      </p>
+    </div>
+  );
+}
+
+function BriefList({
+  label,
+  items,
+  tone
+}: {
+  label: string;
+  items: string[];
+  tone: "brand" | "neutral" | "amber" | "violet";
+}) {
+  const headTones: Record<string, string> = {
+    brand: "text-brand-700",
+    neutral: "text-neutral-600",
+    amber: "text-amber-700",
+    violet: "text-violet-700"
+  };
+  const dotTones: Record<string, string> = {
+    brand: "bg-brand-500",
+    neutral: "bg-neutral-400",
+    amber: "bg-amber-500",
+    violet: "bg-violet-500"
+  };
+  return (
+    <div>
+      <p
+        className={`text-[11px] font-medium uppercase tracking-wide ${headTones[tone]}`}
+      >
+        {label}
+      </p>
+      <ul className="mt-2 space-y-1.5">
+        {items.map((item, i) => (
+          <li key={i} className="flex items-start gap-2 text-sm leading-relaxed">
+            <span
+              aria-hidden
+              className={`mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full ${dotTones[tone]}`}
+            />
+            <span className="text-neutral-800">{item}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function BriefEmpty({
+  description,
+  generateAction
+}: {
+  description: OpportunityDetail["description"];
+  generateAction: () => Promise<void>;
+}) {
+  const hasText =
+    description.fetch_status === "fetched" && !!description.text;
+  return (
+    <div className="rounded-md border border-dashed border-neutral-300 bg-neutral-50 p-5 text-center">
+      <p className="text-sm font-medium text-neutral-800">
+        No plain-English brief yet
+      </p>
+      <p className="mt-2 text-sm leading-relaxed text-neutral-600">
+        {hasText ? (
+          <>
+            Generate a structured 30-second read of this opportunity — scope,
+            must-haves, red flags, and teaming suggestions — in 10–20 seconds.
+          </>
+        ) : description.fetch_status === "pending" ? (
+          <>
+            The SAM description text hasn&rsquo;t been fetched yet. The worker
+            pulls it on the next 30-minute tick; the brief will be available
+            shortly after that.
+          </>
+        ) : (
+          <>
+            SAM didn&rsquo;t return any description text for this notice, so
+            there&rsquo;s nothing to summarize. Try the attachments instead.
+          </>
+        )}
+      </p>
+      {hasText && (
+        <form action={generateAction} className="mt-4">
+          <button
+            type="submit"
+            className="rounded-md border border-brand-700 bg-brand-700 px-4 py-2 text-sm font-medium text-white hover:bg-brand-800"
+          >
+            Generate brief →
+          </button>
+        </form>
+      )}
+    </div>
   );
 }

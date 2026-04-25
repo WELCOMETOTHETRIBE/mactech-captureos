@@ -490,3 +490,47 @@ export type TermExplanationResponse = {
   prompt_version: string;
   model: string | null;
 };
+
+/* ── /opportunities/{id}/ask + /questions ──────────────────────── */
+
+export type AskerRef = {
+  slug: string;
+  full_name: string;
+};
+
+export type QuestionOut = {
+  id: string;
+  question: string;
+  answer: string;
+  starter_kind: string | null;
+  asked_by: AskerRef | null;
+  model: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  created_at: string;
+};
+
+export type QuestionListResponse = {
+  total: number;
+  items: QuestionOut[];
+  starters: Record<string, string>;
+};
+
+/* ── /opportunities/{id}/brief ─────────────────────────────────── */
+
+export type BriefOut = {
+  id: string;
+  opportunity_id: string;
+  scope_one_sentence: string;
+  must_have_requirements: string[];
+  nice_to_have: string[];
+  red_flags_for_small_biz: string[];
+  suggested_team_roles: string[];
+  model: string | null;
+  prompt_version: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  description_chars: number | null;
+  created_at: string;
+  updated_at: string;
+};

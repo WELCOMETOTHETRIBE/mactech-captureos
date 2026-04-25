@@ -8,6 +8,8 @@ from mactech_db.models.library import (
 )
 from mactech_db.models.naics import NaicsCode
 from mactech_db.models.opportunity import IngestionState, OpportunityRaw
+from mactech_db.models.opportunity_brief import OpportunityBrief
+from mactech_db.models.opportunity_question import OpportunityQuestion
 from mactech_db.models.pursuit import PURSUIT_STAGES, Pursuit
 from mactech_db.models.saved_search import SavedSearch
 from mactech_db.models.scoring import CapabilityStatement, OpportunityScore
@@ -25,7 +27,9 @@ __all__ = [
     "FounderNaicsMatrix",
     "IngestionState",
     "NaicsCode",
+    "OpportunityBrief",
     "OpportunityEnriched",
+    "OpportunityQuestion",
     "OpportunityRaw",
     "OpportunityScore",
     "PAST_PERFORMANCE_ROLES",

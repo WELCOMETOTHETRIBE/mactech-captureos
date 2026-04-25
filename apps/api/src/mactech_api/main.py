@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from sqlalchemy import text
 
+from mactech_api.routes.ask import router as ask_router
+from mactech_api.routes.brief import router as brief_router
 from mactech_api.routes.drafts import router as drafts_router
 from mactech_api.routes.explain import router as explain_router
 from mactech_api.routes.library import router as library_router
@@ -41,6 +43,8 @@ app.include_router(past_performance_router)
 app.include_router(teaming_partners_router)
 app.include_router(drafts_router)
 app.include_router(explain_router)
+app.include_router(ask_router)
+app.include_router(brief_router)
 
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)

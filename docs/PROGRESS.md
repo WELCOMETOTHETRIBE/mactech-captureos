@@ -789,3 +789,51 @@ User asked for a "massive UX/UI overhaul using AI and API enrichment." Plan + Ex
 - **Sprint 3** — per-opportunity "Ask Claude about this opp" with 3 starter buttons; native streaming via Next.js server components.
 - **Sprint 4** — worker-extracted structured opportunity briefs replacing the raw SAM `<pre>`; PDF upload on /library with auto-parse.
 - **Sprint 5** — onboarding flow with SAM Entity API auto-fill; USASpending agency-level rollup card; Cmd-K hybrid pgvector + pg_trgm global search.
+
+---
+
+## 2026-04-25 — UX overhaul, Sprints 3 & 4
+
+### Sprint 3 — "Ask Claude about this opp"
+
+The single highest-conversion AI feature for the layman audience: type a question (or tap a starter button), get a 200-word answer grounded in your firm's data + the opportunity's text. Persists to a tenant-scoped history so the team builds on each other's questions.
+
+- **Schema** (migration 0011): `opportunity_questions` table — `tenant_id`, `opportunity_id`, `asked_by_founder_id` (SET NULL on delete), `question`, `answer`, `starter_kind`, `model`, `input_tokens`, `output_tokens`, `prompt_version`. Composite index on `(tenant_id, opportunity_id, created_at)` for ordered reads.
+- **Intelligence** ([ask_about_opportunity.py](packages/intelligence/src/mactech_intelligence/ask_about_opportunity.py) + [prompts/ask_about_opp.md](packages/intelligence/src/mactech_intelligence/prompts/ask_about_opp.md)) — Claude Sonnet ("smart"). Prompt explicitly addresses non-technical founder audience; 200-word cap; no marketing language; never invents facts. `STARTERS` dict maps starter keys to canonical question text; the API resolves the user's `starter_kind` to the canonical text so the prompt is consistent across users.
+- **API** ([routes/ask.py](apps/api/src/mactech_api/routes/ask.py)) — `POST /opportunities/{id}/ask` (5–15s sync), `GET /opportunities/{id}/questions` (history with `starters` dict for the UI), `DELETE /opportunity-questions/{id}`. Answer context: opportunity metadata + description + score + breakdown + incumbent + capability statements + past performance + active teaming partners + founders.
+- **Web** — `<AskPanel>` strip on the opportunity detail page directly under the DrafterPanel:
+  - Five starter buttons in a horizontal pill row: "Should we pursue this?", "Who's the likely incumbent?", "What's our win probability?", "What are the must-haves?", "Should we prime, sub, or team?"
+  - Freeform text input + "Ask →" primary button on its own row.
+  - History list of last 5 Q&A rounds, each with delete button. `revalidatePath` on the detail route after mutations so the new question appears without a hard refresh.
+  - apiFetch timeout overridden to 60s for the POST.
+
+### Sprint 4 — "What they really want" structured brief
+
+Replaces the raw SAM `<pre>` description with a 30-second structured read. Lazy generation (button on first view), one row per (tenant, opp).
+
+- **Schema** (same migration 0011): `opportunity_briefs` table — `scope_one_sentence` (Text), `must_have_requirements` (JSONB array), `nice_to_have` (JSONB), `red_flags_for_small_biz` (JSONB), `suggested_team_roles` (JSONB), plus model + tokens + `description_chars` for cost tracking. Unique constraint on `(tenant_id, opportunity_id)` so regeneration upserts in place.
+- **Intelligence** ([extract_brief.py](packages/intelligence/src/mactech_intelligence/extract_brief.py) + [prompts/extract_brief.md](packages/intelligence/src/mactech_intelligence/prompts/extract_brief.md)) — Claude Sonnet ("smart"). Prompt requires JSON-only output with strict schema; max 6 must-haves, 4 nice-to-haves, 4 red flags, 4 team roles; ≤25 words per bullet. Hard guardrail: "Do not invent. If the description is silent on a topic, leave the array empty rather than padding." Description capped at 12k chars to bound token cost. `_strip_code_fence` handles the rare case the model wraps output in ```json…```. `BriefExtractionError` raised on invalid JSON.
+- **API** ([routes/brief.py](apps/api/src/mactech_api/routes/brief.py)) — `GET /opportunities/{id}/brief` (404 when none generated), `POST /opportunities/{id}/brief` (creates or upserts), `DELETE /opportunities/{id}/brief`. 409 if the opportunity has no description text yet (the fetch_descriptions worker hasn't pulled it). 502 if Anthropic returns invalid JSON.
+- **Web** — replaces the old `Description` Card on the detail page with `<BriefAndDescriptionPanel>`:
+  - Two `role="tab"` anchor links at the top: "Plain-English brief" (default, `#brief-{id}`) | "Original SAM text" (`#raw-{id}`). Anchor-based tab switching keeps the view fully server-rendered with zero client JS.
+  - When a brief exists: renders `Scope` (one-sentence headline), then four colored bullet sections (Must-have requirements / Nice-to-haves / Red flags for a small business / Suggested teaming) — each with a small dot in the section's tone color. Auto-generation provenance footer with model + char count.
+  - When no brief exists: dashed-border CTA panel. If description text exists → "Generate brief →" primary button. If description is pending → "queued for fetch" message. If no description ever → "SAM didn't return any text" message.
+  - "↻ Regenerate brief" link in the panel header when a brief exists.
+  - Original SAM text moves to a secondary section below, scrollable in a max-h-96 box, smaller font. Attachments now also live there.
+
+### Verification
+- `tsc --noEmit` clean across `apps/web`.
+- `next build` produces all 14 routes.
+- `python3 -m py_compile` clean on the 2 new models, migration, 2 intelligence modules, 2 route modules.
+- Migration 0011 auto-runs on api boot via [entrypoint.sh](apps/api/entrypoint.sh).
+
+### What this unlocks for a Brian or John
+- **Ask panel**: tap "Should we pursue this?" → 200-word answer in 10s grounded in your real data. No more reading 4 pages of dense PWS to figure out fit.
+- **Brief tab**: open any opp → click "Generate brief" → 15s later you have scope + must-haves + red flags + teaming suggestions in a single screen. The raw SAM text is still one tab away when you need to verify a specific phrase.
+- **Per-opp Q&A history**: founders see what each other already asked. "Did anyone check whether this requires a TS clearance?" → one click and you can read the answer from last Tuesday.
+
+### Sprint 5 still pending
+- Onboarding flow with SAM Entity API auto-fill on UEI.
+- USASpending agency-level rollups card on detail page.
+- Hybrid pgvector + pg_trgm Cmd-K global search.
+- PDF upload on /library with auto-parse (deferred from Sprint 4 to keep this commit reviewable).
