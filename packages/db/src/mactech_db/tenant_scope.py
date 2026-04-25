@@ -34,8 +34,15 @@ async def scoped_session(tenant_id: UUID | str) -> AsyncIterator[AsyncSession]:
     factory = async_session_factory()
     async with factory() as session:
         async with session.begin():
+            # Postgres's SET / SET LOCAL doesn't accept bind params (asyncpg
+            # converts `:t` to `$1`, which Postgres rejects with
+            # "syntax error at or near $1"). Use set_config('key', val, true)
+            # — the `true` third arg is the SET LOCAL equivalent (transaction-
+            # local). set_config DOES accept bind params.
             await session.execute(
-                text("SET LOCAL app.tenant_id = :t").bindparams(t=str(tenant_id))
+                text("select set_config('app.tenant_id', :t, true)").bindparams(
+                    t=str(tenant_id)
+                )
             )
             yield session
 
