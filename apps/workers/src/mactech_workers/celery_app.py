@@ -57,6 +57,12 @@ celery_app.conf.update(
             "options": {"expires": 18 * 60},
             "kwargs": {"batch_size": 25},
         },
+        "sam-fetch-descriptions": {
+            "task": "mactech.sam.fetch_descriptions",
+            "schedule": crontab(minute="*/30"),
+            "options": {"expires": 25 * 60},
+            "kwargs": {"batch_size": 50},
+        },
         # Founder morning digest. America/New_York timezone is set at the top
         # of celery_app.conf.update so 6am means 6am ET.
         "founder-morning-digest": {
@@ -77,5 +83,6 @@ def health() -> str:
 import mactech_workers.tasks.digest  # noqa: E402, F401
 import mactech_workers.tasks.embed  # noqa: E402, F401
 import mactech_workers.tasks.enrich  # noqa: E402, F401
+import mactech_workers.tasks.sam_descriptions  # noqa: E402, F401
 import mactech_workers.tasks.sam_ingest  # noqa: E402, F401
 import mactech_workers.tasks.score  # noqa: E402, F401
