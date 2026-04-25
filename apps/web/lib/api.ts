@@ -103,6 +103,10 @@ export type DashboardKpis = {
   opportunities_last_24h: number;
   scored_above_60: number;
   enriched_with_incumbent: number;
+  your_high_fit_open: number;
+  your_deadlines_lt_7d: number;
+  your_active_pursuits: number;
+  drafts_awaiting_review: number;
 };
 
 export type DashboardResponse = {
@@ -472,4 +476,17 @@ export type DraftListItem = {
 export type DraftListResponse = {
   total: number;
   items: DraftListItem[];
+};
+
+/* ── /explain/{slug} ────────────────────────────────────────────── */
+
+export type TermExplanationResponse = {
+  slug: string;
+  kind: string;
+  label: string;
+  summary: string;
+  body: string;
+  cached: boolean;
+  prompt_version: string;
+  model: string | null;
 };

@@ -705,3 +705,87 @@ The headline feature lands. Open any opportunity, click "Draft response", and 30
 - **No PDF/Word export** — markdown only today. Phase 3 Week 11 ships a "Export as DOCX" via a server-side conversion step.
 - **No diff view between versions** — when you regenerate, you get a new draft but no side-by-side. Useful for understanding "what changed when I asked for X."
 - **No rate limiting on generation** — a user could spam regenerate. Add a per-tenant 5/hour soft cap when costs become real.
+
+---
+
+## 2026-04-25 — UX overhaul, Sprints 1 & 2
+
+User asked for a "massive UX/UI overhaul using AI and API enrichment." Plan + Explore agents both diagnosed the same thing: information architecture is fine, but the app reads like a developer console — badge inflation, 11px eyebrows everywhere, opaque jargon, primary actions that don't feel primary. Five-sprint plan; this commit lands the first two.
+
+### Sprint 1 — "The friendly skin" (no API changes — pure presentation)
+
+**Tailwind config** ([tailwind.config.ts](apps/web/tailwind.config.ts))
+- Added `brand` palette anchored on deep teal `#207b78` (50–950). Federal/GSA-adjacent, distinct from generic tech blue, legible at small weights on white.
+- Default focus ring now brand teal.
+
+**Type scale** ([globals.css](apps/web/app/globals.css))
+- Body bumped to 15px / 1.55 line-height. Floor for `text-xs` lifted but proportional. Visible focus rings on `:focus-visible`.
+
+**UI primitives** ([components/ui.tsx](apps/web/components/ui.tsx))
+- `Card` padding `p-5` → `p-6`, radius `rounded-md` → `rounded-lg`, eyebrow type weight bumped.
+- `PageHeader` title `text-2xl` → `text-3xl`; eyebrow gets brand-teal tone (was neutral); subtitle `text-sm` → `text-base` for the layman.
+- `Kpi` accepts a `tone` prop (`"neutral" | "brand" | "amber" | "red"`). Value type bumped 2xl → 3xl.
+- `Badge` adds `brand` tone; base size lifted from `text-[11px]` to `text-xs` (12px).
+- New `ScoreBadge` `size="lg"` variant — bigger, with "/100" subscript, contextual tooltip ("Strong fit — pursue", "Worth a look", "Watch list", "Long shot").
+- New `Button` primitive (`primary` / `secondary` / `ghost` / `danger`). `LinkButton.primary` now uses brand teal instead of `bg-neutral-900` so primary CTAs *feel* primary.
+
+**Sidebar** ([components/sidebar-nav.tsx](apps/web/components/sidebar-nav.tsx))
+- Active item: brand-50 background, brand-700 left border, brand-700 sub-label color. Was neutral-900 fill — now distinguishable at a glance.
+
+**Dashboard** ([app/(app)/dashboard/page.tsx](apps/web/app/(app)/dashboard/page.tsx))
+- KPI tiles fully replaced. Old: ingestion exhaust ("Posted last 24h", "Scored ≥ 60", "With incumbent intel"). New: action-oriented metrics, each clickable to a filtered view:
+  - **High-fit, untracked** — opps assigned to me ≥60 not in pipeline → links to filtered opps. Brand tone when >0.
+  - **Deadlines this week** — opps assigned to me with deadline ≤7 days. Amber tone when >0.
+  - **Active pursuits** — pursuits I own (excl. won/lost) → links to my kanban.
+  - **Drafts to review** — tenant drafts in 'draft' or 'reviewed' status → links to /drafts. Brand tone when >0.
+- API: [routes/me.py](apps/api/src/mactech_api/routes/me.py) `DashboardKpis` extended with `your_high_fit_open`, `your_deadlines_lt_7d`, `your_active_pursuits`, `drafts_awaiting_review`.
+- Old tenant-wide KPIs preserved as a small dashed "Tenant feed" footer strip — context without distraction.
+- "Top N" cards: deadline pulled out to its own right-aligned column with "Deadline" label. Score badge upgraded to `size="lg"`. Clean separation of *what is this* (left) vs *when is it due* (right).
+- "How CaptureOS works" block now persistently dismissible via cookie (`mactech.dismiss.howitworks`). New [lib/preferences.ts](apps/web/lib/preferences.ts) holds `dismissHowItWorks` + `showHowItWorks` server actions; dashboard reads cookie via `next/headers`. Footer "Show 'How CaptureOS works'" button to bring it back.
+
+**Opportunities list** ([app/(app)/opportunities/page.tsx](apps/web/app/(app)/opportunities/page.tsx))
+- Filter sidebar collapsed from 6 cards to 3 (Set-aside / Notice type / Assigned founder) + a `<details>` "More filters" disclosure containing NAICS facet + Sort.
+- Score thresholds promoted from sidebar card to a horizontal segmented control at the top of the page. Renamed for plain-English: "Top fit / Worth a look / Watch list / All". Active button uses brand teal fill.
+- Search box + sort indicator moved into the same top bar.
+- Result cards trimmed: Score (size lg) + ONE contextual chip (Sources Sought wins; otherwise Set-aside wins) + assigned founder. Other badges (NoticeType, Set-aside, NAICS) hidden by default, revealed inline on `:hover` via `group-hover:inline-flex`.
+- Deadline pulled to a right-aligned column on each card. Posted date demoted under it. The thing a layman wants first is *when do I need to respond by*.
+
+### Sprint 2 — "Explain this" rail (first AI-enrichment surface)
+
+**Schema** — migration 0010 ([0010_term_explanations.py](packages/db/alembic/versions/0010_term_explanations.py), model [term_explanation.py](packages/db/src/mactech_db/models/term_explanation.py))
+- New `term_explanations` table: `slug` (e.g. `naics:541512`, `set_aside:SDVOSB`), `kind`, `label`, `summary`, `body`, `prompt_version`, `model`, `input_tokens`, `output_tokens`, `first_requested_by_tenant_id`. Unique on `(slug, prompt_version)`. Indexed on `slug`.
+- Cache key is global, not per-tenant — the explanation of NAICS 541512 doesn't vary by tenant. `prompt_version` bump invalidates the cache without a sweep.
+
+**Intelligence** ([explain_term.py](packages/intelligence/src/mactech_intelligence/explain_term.py) + [prompts/explain_term.md](packages/intelligence/src/mactech_intelligence/prompts/explain_term.md))
+- New `explain_term(client, slug)` function. Routes to `complexity="fast"` → Claude Haiku (low-cost, ~220 words).
+- Prompt explicitly written for layman audience: "Veteran-owned small business owner. Founded a federal-contracting firm but is not a lawyer or proposal writer." Output format: one summary sentence (under 25 words, no jargon) + 2–4 short prose paragraphs covering meaning + relevance + next action. Hard-banned marketing words ("leverage," "synergy," "robust"). No-fact-invention guardrail.
+- `_KIND_INTROS` dict gives the model context per kind so `set_aside:NONE` doesn't get misinterpreted.
+- Output parser splits summary line from body cleanly.
+
+**API** ([routes/explain.py](apps/api/src/mactech_api/routes/explain.py))
+- `GET /explain/{slug:path}` — read-through cache. Cache hit returns `cached: true` instantly. Cache miss calls Haiku, persists, returns `cached: false`. Allowed kinds: `naics`, `set_aside`, `notice_type`, `score_component`, `agency`. 503 if `ANTHROPIC_API_KEY` missing; 502 on Anthropic failure. Race-safe via second-read fallback on IntegrityError.
+
+**Web — clickable badges** ([components/ui.tsx](apps/web/components/ui.tsx))
+- New `ExplainLink` helper. Wraps any badge in a `<Link href="?explain=<slug>">` with a small `?` glyph appended. Relative href preserves the current path + other search params.
+
+**Web — opp detail right rail** ([app/(app)/opportunities/[id]/page.tsx](apps/web/app/(app)/opportunities/[id]/page.tsx))
+- Page accepts `searchParams.explain` and fetches `GET /explain/{slug}` in parallel with the existing pursuit + drafts + me requests. 45-second timeout (cache hits return in <100ms; first-time generations take a few seconds).
+- When `?explain=...` is present, the page lays out as a 2-column grid (`minmax(0,1fr) 22rem` on lg+) with the main content on the left and a sticky `<ExplainRail>` aside on the right.
+- The rail shows: brand-teal eyebrow "Explain this", the term's human label, the summary sentence in bold, the body as separate paragraphs, and a footer indicating cache status + "click any underlined term to swap." Close link sets `href` back to the bare detail URL.
+- **Clickable terms now**: notice type badge, set-aside badge, NAICS badge, every score-component label on the breakdown grid. All wrapped in `ExplainLink` with `<kind>:<value>` slugs.
+
+### Verification
+- `tsc --noEmit` clean across `apps/web`.
+- `next build` produces all 14 routes (no new web routes — rail uses URL param on existing detail page).
+- `python3 -m py_compile` clean on the new model, migration, intelligence module, and route module.
+- Migration 0010 auto-runs on api boot via [entrypoint.sh](apps/api/entrypoint.sh).
+
+### What this changes for a Brian or John on first visit
+- **Dashboard** opens with their *day*, not the system's exhaust: "You have 3 high-fit untracked, 2 deadlines this week, 4 active pursuits, 1 draft to review." Each tile is clickable to the filtered view.
+- **Opportunities list** has 3 filters not 6, score buckets that say "Top fit" not "≥80", and a deadline column that's the second-most-prominent thing on every card.
+- **Detail page** — every NAICS code, set-aside code, notice type, and score component now has a small `?` glyph that opens a plain-English explainer. "What is SDVOSB?" → 3 paragraphs in 3 seconds, cached forever after first ask.
+
+### Sprints 3–5 still pending
+- **Sprint 3** — per-opportunity "Ask Claude about this opp" with 3 starter buttons; native streaming via Next.js server components.
+- **Sprint 4** — worker-extracted structured opportunity briefs replacing the raw SAM `<pre>`; PDF upload on /library with auto-parse.
+- **Sprint 5** — onboarding flow with SAM Entity API auto-fill; USASpending agency-level rollup card; Cmd-K hybrid pgvector + pg_trgm global search.

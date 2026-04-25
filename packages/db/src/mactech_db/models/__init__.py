@@ -12,6 +12,7 @@ from mactech_db.models.pursuit import PURSUIT_STAGES, Pursuit
 from mactech_db.models.saved_search import SavedSearch
 from mactech_db.models.scoring import CapabilityStatement, OpportunityScore
 from mactech_db.models.tenant import Tenant
+from mactech_db.models.term_explanation import TermExplanation
 from mactech_db.models.user import User
 
 __all__ = [
@@ -35,5 +36,6 @@ __all__ = [
     "SavedSearch",
     "TeamingPartner",
     "Tenant",
+    "TermExplanation",
     "User",
 ]

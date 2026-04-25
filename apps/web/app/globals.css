@@ -1,3 +1,24 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  /* Bump the rendered base body up to 15px so text-sm reads at a comfortable
+     density for non-technical founders. text-xs and text-[11px] still scale
+     proportionally smaller; this just lifts the floor. */
+  html {
+    font-size: 16px;
+  }
+  body {
+    font-size: 15px;
+    line-height: 1.55;
+    color: #1f1f1f;
+  }
+  /* Visible focus rings — accessibility + we want users to feel the brand
+     accent on tab navigation. */
+  :focus-visible {
+    outline: 2px solid #207b78;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}

@@ -6,13 +6,15 @@ import {
   type MeResponse,
   type OpportunityDetail,
   type PursuitCard as PursuitCardT,
-  type PursuitStage
+  type PursuitStage,
+  type TermExplanationResponse
 } from "@/lib/api";
 import { createPursuit, deletePursuit, updatePursuit } from "@/lib/pursuits";
 import { generateSourcesSoughtDraft } from "@/lib/drafts";
 import {
   Badge,
   Card,
+  ExplainLink,
   LinkButton,
   NaicsBadge,
   NoticeTypeBadge,
@@ -69,11 +71,15 @@ const SCORE_COMPONENT_HELP: Record<string, string> = {
 };
 
 export default async function OpportunityDetailPage({
-  params
+  params,
+  searchParams
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ explain?: string }>;
 }) {
-  const { id } = await params;
+  const [{ id }, sp] = await Promise.all([params, searchParams]);
+  const explainSlug = sp.explain?.trim() || null;
+
   let data: OpportunityDetail;
   try {
     data = await apiFetch<OpportunityDetail>(`/opportunities/${id}`);
@@ -83,26 +89,34 @@ export default async function OpportunityDetailPage({
     throw err;
   }
 
-  // Pursuit + me + drafts run in parallel. The pursuit lookup legitimately
-  // 404s when the opp isn't in the pipeline yet — that's the "Add to
-  // pipeline" CTA case. Swallowing here also masks 500s, which is
-  // acceptable because the PursuitPanel falls back to the "not yet" UI on
-  // null and an api error on /opportunities/{id} above would have already
-  // thrown.
-  const [me, pursuit, drafts] = await Promise.all([
+  // Pursuit + me + drafts + (optional) explanation run in parallel.
+  const [me, pursuit, drafts, explanation] = await Promise.all([
     apiFetch<MeResponse>("/me"),
     apiFetch<PursuitCardT>(`/pursuits/by-opportunity/${id}`).catch(
       () => null as PursuitCardT | null
     ),
     apiFetch<DraftListResponse>(`/opportunities/${id}/drafts`).catch(
       () => ({ total: 0, items: [] }) as DraftListResponse
-    )
+    ),
+    explainSlug
+      ? apiFetch<TermExplanationResponse>(
+          `/explain/${encodeURIComponent(explainSlug)}`,
+          { timeoutMs: 45_000 }
+        ).catch(() => null as TermExplanationResponse | null)
+      : Promise.resolve(null as TermExplanationResponse | null)
   ]);
 
   const opp = data.opportunity;
 
   return (
-    <div className="space-y-6">
+    <div
+      className={
+        explainSlug
+          ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]"
+          : ""
+      }
+    >
+      <div className="min-w-0 space-y-6">
       <div>
         <Link
           href="/opportunities"
@@ -123,9 +137,30 @@ export default async function OpportunityDetailPage({
               {opp.title}
             </h1>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <NoticeTypeBadge type={opp.notice_type} />
-              <SetAsideBadge code={opp.set_aside} />
-              <NaicsBadge code={opp.naics_code} />
+              {opp.notice_type ? (
+                <ExplainLink
+                  slug={`notice_type:${opp.notice_type
+                    .toLowerCase()
+                    .replace(/\s+/g, "_")
+                    .slice(0, 60)}`}
+                >
+                  <NoticeTypeBadge type={opp.notice_type} />
+                </ExplainLink>
+              ) : (
+                <NoticeTypeBadge type={opp.notice_type} />
+              )}
+              {opp.set_aside ? (
+                <ExplainLink slug={`set_aside:${opp.set_aside}`}>
+                  <SetAsideBadge code={opp.set_aside} />
+                </ExplainLink>
+              ) : (
+                <SetAsideBadge code={opp.set_aside} />
+              )}
+              {opp.naics_code && (
+                <ExplainLink slug={`naics:${opp.naics_code}`}>
+                  <NaicsBadge code={opp.naics_code} />
+                </ExplainLink>
+              )}
               {opp.solicitation_number && (
                 <Badge tone="neutral">Sol# {opp.solicitation_number}</Badge>
               )}
@@ -346,12 +381,17 @@ export default async function OpportunityDetailPage({
                   <li
                     key={k}
                     title={help}
-                    className="rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 transition-colors hover:border-neutral-300 hover:bg-white"
+                    className="rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 transition-colors hover:border-brand-300 hover:bg-white"
                   >
                     <div className="flex items-baseline justify-between gap-2">
-                      <span className="text-xs text-neutral-600">
-                        {SCORE_COMPONENT_LABELS[k] ?? k}
-                      </span>
+                      <ExplainLink
+                        slug={`score_component:${k}`}
+                        className="-mx-1 px-1"
+                      >
+                        <span className="text-xs text-neutral-700">
+                          {SCORE_COMPONENT_LABELS[k] ?? k}
+                        </span>
+                      </ExplainLink>
                       <span className="tabular-nums text-sm font-medium text-neutral-900">
                         {v}
                         {max && (
@@ -386,6 +426,11 @@ export default async function OpportunityDetailPage({
             Claude-written rationale.
           </p>
         </Card>
+      )}
+      </div>
+
+      {explainSlug && (
+        <ExplainRail slug={explainSlug} explanation={explanation} oppId={id} />
       )}
     </div>
   );
@@ -717,5 +762,73 @@ function DrafterPanel({
         </ul>
       )}
     </section>
+  );
+}
+
+function ExplainRail({
+  slug,
+  explanation,
+  oppId
+}: {
+  slug: string;
+  explanation: TermExplanationResponse | null;
+  oppId: string;
+}) {
+  return (
+    <aside className="lg:sticky lg:top-6 lg:self-start" aria-label="Explain">
+      <div className="rounded-lg border border-brand-200 bg-brand-50 p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-brand-700">
+              Explain this
+            </p>
+            <h3 className="mt-1 text-base font-semibold text-neutral-900">
+              {explanation?.label ?? slug}
+            </h3>
+          </div>
+          <Link
+            href={`/opportunities/${oppId}`}
+            className="shrink-0 rounded-md p-1 text-neutral-500 hover:bg-white hover:text-neutral-800"
+            aria-label="Close explanation"
+            title="Close"
+          >
+            ✕
+          </Link>
+        </div>
+
+        {explanation ? (
+          <>
+            <p className="mt-4 text-sm font-semibold leading-relaxed text-neutral-900">
+              {explanation.summary}
+            </p>
+            <div className="mt-3 space-y-3 text-sm leading-relaxed text-neutral-700">
+              {explanation.body
+                .split(/\n{2,}/)
+                .filter((p) => p.trim().length > 0)
+                .map((para, i) => (
+                  <p key={i}>{para}</p>
+                ))}
+            </div>
+            <p className="mt-4 border-t border-brand-200 pt-3 text-[11px] text-neutral-500">
+              {explanation.cached
+                ? "Cached. "
+                : "Generated by Claude Haiku. Cached for next time. "}
+              Plain-English explainer · click any underlined term to swap.
+            </p>
+          </>
+        ) : (
+          <p className="mt-4 text-sm text-neutral-700">
+            Couldn&rsquo;t generate an explanation for{" "}
+            <span className="font-mono text-xs">{slug}</span>. The Anthropic
+            API may be unavailable; try again in a moment.
+          </p>
+        )}
+      </div>
+
+      <p className="mt-3 text-[11px] text-neutral-500">
+        Tip: any badge with a small <span className="text-brand-700">?</span>{" "}
+        opens this rail with that term&rsquo;s explanation.
+      </p>
+    </aside>
   );
 }

@@ -22,6 +22,8 @@ from mactech_db.models import (
     OpportunityEnriched,
     OpportunityRaw,
     OpportunityScore,
+    ProposalDraft,
+    Pursuit,
 )
 
 router = APIRouter(tags=["me"])
@@ -77,10 +79,16 @@ class FounderCard(_Out):
 
 
 class DashboardKpis(_Out):
+    # Tenant-wide vital signs.
     opportunities_total: int
     opportunities_last_24h: int
     scored_above_60: int
     enriched_with_incumbent: int
+    # Action-oriented KPIs (founder-scoped where applicable).
+    your_high_fit_open: int  # opps assigned to me, score >=60, NOT in pipeline yet
+    your_deadlines_lt_7d: int  # opps assigned to me with deadline in <=7 days
+    your_active_pursuits: int  # pursuits I own, not in won/lost
+    drafts_awaiting_review: int  # tenant-wide drafts in 'draft' status
 
 
 class DashboardResponse(_Out):
@@ -237,6 +245,80 @@ async def dashboard(
         )
     ).scalar_one()
 
+    # Action-oriented KPIs.
+    seven_days_from_now = datetime.now(UTC) + timedelta(days=7)
+    your_high_fit_open = 0
+    your_deadlines_lt_7d = 0
+    your_active_pursuits = 0
+    if ctx.founder is not None:
+        your_high_fit_open = int(
+            (
+                await session.execute(
+                    select(func.count())
+                    .select_from(OpportunityScore)
+                    .where(
+                        OpportunityScore.tenant_id == tenant_id,
+                        OpportunityScore.assigned_founder_id == ctx.founder.id,
+                        OpportunityScore.score >= 60,
+                        ~OpportunityScore.opportunity_id.in_(
+                            select(Pursuit.opportunity_id).where(
+                                Pursuit.tenant_id == tenant_id
+                            )
+                        ),
+                    )
+                )
+            ).scalar_one()
+            or 0
+        )
+        your_deadlines_lt_7d = int(
+            (
+                await session.execute(
+                    select(func.count())
+                    .select_from(OpportunityScore)
+                    .join(
+                        OpportunityRaw,
+                        OpportunityRaw.id == OpportunityScore.opportunity_id,
+                    )
+                    .where(
+                        OpportunityScore.tenant_id == tenant_id,
+                        OpportunityScore.assigned_founder_id == ctx.founder.id,
+                        OpportunityRaw.response_deadline.is_not(None),
+                        OpportunityRaw.response_deadline <= seven_days_from_now,
+                        OpportunityRaw.response_deadline >= datetime.now(UTC),
+                    )
+                )
+            ).scalar_one()
+            or 0
+        )
+        your_active_pursuits = int(
+            (
+                await session.execute(
+                    select(func.count())
+                    .select_from(Pursuit)
+                    .where(
+                        Pursuit.tenant_id == tenant_id,
+                        Pursuit.owner_founder_id == ctx.founder.id,
+                        Pursuit.stage.notin_(("won", "lost")),
+                    )
+                )
+            ).scalar_one()
+            or 0
+        )
+
+    drafts_awaiting_review = int(
+        (
+            await session.execute(
+                select(func.count())
+                .select_from(ProposalDraft)
+                .where(
+                    ProposalDraft.tenant_id == tenant_id,
+                    ProposalDraft.status.in_(("draft", "reviewed")),
+                )
+            )
+        ).scalar_one()
+        or 0
+    )
+
     return DashboardResponse(
         rendered_at=datetime.now(UTC).isoformat(),
         you=(
@@ -257,5 +339,9 @@ async def dashboard(
             opportunities_last_24h=int(opps_24h or 0),
             scored_above_60=int(scored_60 or 0),
             enriched_with_incumbent=int(enriched_incumbent or 0),
+            your_high_fit_open=your_high_fit_open,
+            your_deadlines_lt_7d=your_deadlines_lt_7d,
+            your_active_pursuits=your_active_pursuits,
+            drafts_awaiting_review=drafts_awaiting_review,
         ),
     )

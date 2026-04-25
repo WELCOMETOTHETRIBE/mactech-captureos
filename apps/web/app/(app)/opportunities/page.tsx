@@ -92,11 +92,47 @@ export default async function OpportunitiesListPage({
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
-        {/* Filters sidebar */}
-        <aside className="space-y-4 lg:col-span-1">
-          <FilterCard title="Search">
-            <form action="/opportunities" method="GET" className="space-y-2">
+      {/* Quick filter bar — score buckets as a horizontal segmented control,
+          score buckets are the #1 filter so they get prime real estate. */}
+      <div className="rounded-lg border border-neutral-200 bg-white p-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <p
+            className="text-xs font-medium uppercase tracking-wide text-neutral-500"
+            title="≥80 = pursue now. 60–79 = worth a look. 40–59 = watch list. <40 = long shot."
+          >
+            Score
+          </p>
+          <div className="flex gap-1">
+            {[
+              { l: "Top fit", min: "80", max: "100" },
+              { l: "Worth a look", min: "60", max: "100" },
+              { l: "Watch list", min: "40", max: "59" },
+              { l: "All", min: "0", max: "100" }
+            ].map((bucket) => {
+              const qs = new URLSearchParams(params);
+              qs.set("score_min", bucket.min);
+              qs.set("score_max", bucket.max);
+              qs.delete("page");
+              const active =
+                score_min === bucket.min && score_max === bucket.max;
+              return (
+                <Link
+                  key={bucket.l}
+                  href={`/opportunities?${qs.toString()}`}
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    active
+                      ? "bg-brand-700 text-white"
+                      : "border border-neutral-300 text-neutral-700 hover:border-neutral-500"
+                  }`}
+                >
+                  {bucket.l}
+                </Link>
+              );
+            })}
+          </div>
+
+          <div className="ml-auto flex items-center gap-2">
+            <form action="/opportunities" method="GET" className="flex gap-1">
               <input type="hidden" name="sort" value={sort} />
               {Object.entries(sp).map(([k, v]) =>
                 k === "q" || k === "page" ? null : (
@@ -106,78 +142,29 @@ export default async function OpportunitiesListPage({
               <input
                 name="q"
                 defaultValue={sp.q ?? ""}
-                placeholder="Title contains…"
-                className="w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm focus:border-neutral-500 focus:outline-none"
+                placeholder="Search title…"
+                className="w-48 rounded-md border border-neutral-300 px-2 py-1.5 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               />
               <button
                 type="submit"
-                className="w-full rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800"
+                className="rounded-md border border-neutral-300 px-2 py-1.5 text-xs hover:border-neutral-500"
               >
                 Search
               </button>
             </form>
-          </FilterCard>
+            <span
+              className="rounded-md border border-neutral-200 bg-neutral-50 px-2 py-1.5 text-xs text-neutral-600"
+              title="Sort order. Change it from the More filters drawer."
+            >
+              Sort: {SORT_LABELS[sort] ?? sort}
+            </span>
+          </div>
+        </div>
+      </div>
 
-          <FilterCard title="Sort">
-            <ul className="space-y-1 text-sm">
-              {Object.entries(SORT_LABELS).map(([k, label]) => {
-                const qs = new URLSearchParams(params);
-                qs.set("sort", k);
-                qs.delete("page");
-                const active = sort === k;
-                return (
-                  <li key={k}>
-                    <Link
-                      href={`/opportunities?${qs.toString()}`}
-                      className={
-                        active
-                          ? "block rounded-sm bg-neutral-900 px-2 py-1 text-white"
-                          : "block rounded-sm px-2 py-1 hover:bg-neutral-100"
-                      }
-                    >
-                      {label}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </FilterCard>
-
-          <FilterCard title="Score threshold">
-            <div className="text-xs text-neutral-600">
-              Currently: <span className="font-medium">{score_min}</span> –{" "}
-              <span className="font-medium">{score_max}</span>
-            </div>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              {[
-                { l: "Top (≥80)", min: "80", max: "100" },
-                { l: "Digest (≥60)", min: "60", max: "100" },
-                { l: "Med (40–59)", min: "40", max: "59" },
-                { l: "All", min: "0", max: "100" }
-              ].map((bucket) => {
-                const qs = new URLSearchParams(params);
-                qs.set("score_min", bucket.min);
-                qs.set("score_max", bucket.max);
-                qs.delete("page");
-                const active =
-                  score_min === bucket.min && score_max === bucket.max;
-                return (
-                  <Link
-                    key={bucket.l}
-                    href={`/opportunities?${qs.toString()}`}
-                    className={`rounded-md border px-2 py-1 text-center text-[11px] ${
-                      active
-                        ? "border-neutral-900 bg-neutral-900 text-white"
-                        : "border-neutral-300 hover:border-neutral-500"
-                    }`}
-                  >
-                    {bucket.l}
-                  </Link>
-                );
-              })}
-            </div>
-          </FilterCard>
-
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
+        {/* Filters sidebar */}
+        <aside className="space-y-4 lg:col-span-1">
           <FacetFilter
             title="Set-aside"
             paramKey="set_aside"
@@ -197,16 +184,6 @@ export default async function OpportunitiesListPage({
           />
 
           <FacetFilter
-            title="NAICS"
-            paramKey="naics_code"
-            facets={data.facets.naics}
-            current={sp.naics_code ?? null}
-            allParams={params}
-            renderLabel={(k) => `NAICS ${k}`}
-            limit={15}
-          />
-
-          <FacetFilter
             title="Assigned founder (≥60)"
             paramKey="assigned_founder"
             facets={data.facets.assigned_founder}
@@ -214,6 +191,48 @@ export default async function OpportunitiesListPage({
             allParams={params}
             renderLabel={(k) => k}
           />
+
+          <details className="rounded-lg border border-neutral-200 bg-white">
+            <summary className="cursor-pointer rounded-lg px-4 py-3 text-xs font-medium uppercase tracking-wide text-neutral-700 hover:bg-neutral-50">
+              More filters
+            </summary>
+            <div className="space-y-4 px-4 pb-4">
+              <FacetFilter
+                title="NAICS"
+                paramKey="naics_code"
+                facets={data.facets.naics}
+                current={sp.naics_code ?? null}
+                allParams={params}
+                renderLabel={(k) => `NAICS ${k}`}
+                limit={15}
+              />
+
+              <FilterCard title="Sort">
+                <ul className="space-y-1 text-sm">
+                  {Object.entries(SORT_LABELS).map(([k, label]) => {
+                    const qs = new URLSearchParams(params);
+                    qs.set("sort", k);
+                    qs.delete("page");
+                    const active = sort === k;
+                    return (
+                      <li key={k}>
+                        <Link
+                          href={`/opportunities?${qs.toString()}`}
+                          className={
+                            active
+                              ? "block rounded-sm bg-brand-700 px-2 py-1 text-xs text-white"
+                              : "block rounded-sm px-2 py-1 text-xs hover:bg-neutral-100"
+                          }
+                        >
+                          {label}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </FilterCard>
+            </div>
+          </details>
         </aside>
 
         {/* Results list */}
@@ -233,54 +252,87 @@ export default async function OpportunitiesListPage({
             />
           ) : (
             <ul className="space-y-3">
-              {data.items.map((opp) => (
-                <li key={opp.id}>
-                  <Link
-                    href={`/opportunities/${opp.id}`}
-                    className="block rounded-md border border-neutral-200 bg-white p-4 transition-colors hover:border-neutral-400"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <ScoreBadge score={opp.score} />
-                      <NoticeTypeBadge type={opp.notice_type} />
-                      <SetAsideBadge code={opp.set_aside} />
-                      <NaicsBadge code={opp.naics_code} />
-                      {opp.assigned_founder_slug && (
-                        <Badge tone="violet">@{opp.assigned_founder_slug}</Badge>
-                      )}
-                      <span className="ml-auto text-[11px] text-neutral-500">
-                        {fmtDate(opp.posted_at)}
-                      </span>
-                    </div>
-                    <h3 className="mt-2 text-sm font-semibold leading-snug text-neutral-900">
-                      {opp.title}
-                    </h3>
-                    {opp.agency_short && (
-                      <p className="mt-1 text-[11px] text-neutral-500">
-                        {opp.agency_short}
-                      </p>
-                    )}
-                    {opp.why_it_matters && (
-                      <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-neutral-600">
-                        {opp.why_it_matters}
-                      </p>
-                    )}
-                    <div className="mt-2 flex flex-wrap items-center gap-x-4 text-[11px] text-neutral-500">
-                      {opp.incumbent_summary && (
-                        <span>Incumbent: {opp.incumbent_summary}</span>
-                      )}
-                      {opp.response_deadline && (
-                        <span>
-                          Deadline:{" "}
-                          {fmtRelativeDays(
-                            opp.response_deadline,
-                            opp.days_until_deadline
+              {data.items.map((opp) => {
+                // Pick ONE contextual chip beyond the score, in priority order.
+                // Sources Sought is the most actionable; set-aside next; NAICS last.
+                const noticeIsSourcesSought = (opp.notice_type ?? "")
+                  .toLowerCase()
+                  .includes("sources sought");
+                return (
+                  <li key={opp.id}>
+                    <Link
+                      href={`/opportunities/${opp.id}`}
+                      className="group block rounded-lg border border-neutral-200 bg-white p-5 transition-colors hover:border-brand-300 hover:shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <ScoreBadge score={opp.score} size="lg" />
+                            {noticeIsSourcesSought && (
+                              <NoticeTypeBadge type={opp.notice_type} />
+                            )}
+                            {!noticeIsSourcesSought && opp.set_aside && (
+                              <SetAsideBadge code={opp.set_aside} />
+                            )}
+                            {opp.assigned_founder_slug && (
+                              <Badge
+                                tone="brand"
+                                title={`Assigned to @${opp.assigned_founder_slug}`}
+                              >
+                                @{opp.assigned_founder_slug}
+                              </Badge>
+                            )}
+                            {/* Hidden-by-default chips, revealed on hover */}
+                            <span className="hidden gap-2 group-hover:inline-flex">
+                              {!noticeIsSourcesSought && (
+                                <NoticeTypeBadge type={opp.notice_type} />
+                              )}
+                              {noticeIsSourcesSought && opp.set_aside && (
+                                <SetAsideBadge code={opp.set_aside} />
+                              )}
+                              <NaicsBadge code={opp.naics_code} />
+                            </span>
+                          </div>
+                          <h3 className="mt-3 text-base font-semibold leading-snug text-neutral-900">
+                            {opp.title}
+                          </h3>
+                          {opp.agency_short && (
+                            <p className="mt-1 text-sm text-neutral-500">
+                              {opp.agency_short}
+                            </p>
                           )}
-                        </span>
-                      )}
-                    </div>
-                  </Link>
-                </li>
-              ))}
+                          {opp.why_it_matters && (
+                            <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-neutral-600">
+                              {opp.why_it_matters}
+                            </p>
+                          )}
+                          {opp.incumbent_summary && (
+                            <p className="mt-2 text-xs text-neutral-500">
+                              Incumbent: {opp.incumbent_summary}
+                            </p>
+                          )}
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="text-[11px] uppercase tracking-wide text-neutral-500">
+                            Deadline
+                          </p>
+                          <p className="mt-0.5 text-sm font-semibold tabular-nums text-neutral-800">
+                            {opp.response_deadline
+                              ? fmtRelativeDays(
+                                  opp.response_deadline,
+                                  opp.days_until_deadline
+                                )
+                              : "—"}
+                          </p>
+                          <p className="mt-1 text-[11px] text-neutral-400">
+                            posted {fmtDate(opp.posted_at)}
+                          </p>
+                        </div>
+                      </div>
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           )}
 

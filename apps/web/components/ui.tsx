@@ -19,17 +19,17 @@ export function Card({
 }) {
   return (
     <section
-      className={`rounded-md border border-neutral-200 bg-white p-5 ${className}`}
+      className={`rounded-lg border border-neutral-200 bg-white p-6 ${className}`}
     >
       {title && (
         <header className="flex items-center justify-between">
-          <h2 className="text-[11px] uppercase tracking-wider text-neutral-500">
+          <h2 className="text-xs font-medium uppercase tracking-wide text-neutral-500">
             {title}
           </h2>
           {trailing}
         </header>
       )}
-      {title ? <div className="mt-3">{children}</div> : children}
+      {title ? <div className="mt-4">{children}</div> : children}
     </section>
   );
 }
@@ -46,18 +46,18 @@ export function PageHeader({
   trailing?: ReactNode;
 }) {
   return (
-    <header className="flex flex-wrap items-end justify-between gap-3">
-      <div>
+    <header className="flex flex-wrap items-end justify-between gap-4">
+      <div className="min-w-0 flex-1">
         {eyebrow && (
-          <p className="text-xs uppercase tracking-wider text-neutral-500">
+          <p className="text-xs font-medium uppercase tracking-wide text-brand-700">
             {eyebrow}
           </p>
         )}
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900">
+        <h1 className="mt-1 text-3xl font-semibold tracking-tight text-neutral-900">
           {title}
         </h1>
         {subtitle && (
-          <p className="mt-1 text-sm text-neutral-600">{subtitle}</p>
+          <div className="mt-2 text-base text-neutral-600">{subtitle}</div>
         )}
       </div>
       {trailing && <div className="shrink-0">{trailing}</div>}
@@ -68,21 +68,31 @@ export function PageHeader({
 export function Kpi({
   label,
   value,
-  hint
+  hint,
+  tone = "neutral"
 }: {
   label: string;
   value: string | number;
   hint?: string;
+  tone?: "neutral" | "brand" | "amber" | "red";
 }) {
+  const valueTones: Record<string, string> = {
+    neutral: "text-neutral-900",
+    brand: "text-brand-700",
+    amber: "text-amber-700",
+    red: "text-red-700"
+  };
   return (
-    <div className="rounded-md border border-neutral-200 bg-white p-4">
-      <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+    <div className="rounded-lg border border-neutral-200 bg-white p-5">
+      <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
         {label}
       </p>
-      <p className="mt-1 text-2xl font-semibold tabular-nums text-neutral-900">
+      <p
+        className={`mt-2 text-3xl font-semibold tabular-nums ${valueTones[tone]}`}
+      >
         {value}
       </p>
-      {hint && <p className="mt-1 text-[11px] text-neutral-500">{hint}</p>}
+      {hint && <p className="mt-1 text-xs text-neutral-500">{hint}</p>}
     </div>
   );
 }
@@ -92,7 +102,7 @@ export function Badge({
   children,
   title
 }: {
-  tone?: "neutral" | "blue" | "green" | "amber" | "red" | "violet";
+  tone?: "neutral" | "blue" | "green" | "amber" | "red" | "violet" | "brand";
   children: ReactNode;
   title?: string;
 }) {
@@ -102,12 +112,13 @@ export function Badge({
     green: "bg-emerald-50 text-emerald-700 border-emerald-100",
     amber: "bg-amber-50 text-amber-700 border-amber-100",
     red: "bg-red-50 text-red-700 border-red-100",
-    violet: "bg-violet-50 text-violet-700 border-violet-100"
+    violet: "bg-violet-50 text-violet-700 border-violet-100",
+    brand: "bg-brand-50 text-brand-800 border-brand-200"
   };
   return (
     <span
       title={title}
-      className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium ${tones[tone]}${
+      className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${tones[tone]}${
         title ? " cursor-help" : ""
       }`}
     >
@@ -116,16 +127,84 @@ export function Badge({
   );
 }
 
-export function ScoreBadge({ score }: { score: number | null }) {
+export function ScoreBadge({
+  score,
+  size = "default"
+}: {
+  score: number | null;
+  size?: "default" | "lg";
+}) {
   if (score == null) {
     return <Badge tone="neutral">—</Badge>;
   }
   const tone =
-    score >= 80 ? "green" : score >= 60 ? "blue" : score >= 40 ? "amber" : "neutral";
+    score >= 80 ? "brand" : score >= 60 ? "blue" : score >= 40 ? "amber" : "neutral";
+  const label =
+    score >= 80
+      ? "Strong fit — pursue"
+      : score >= 60
+      ? "Worth a look"
+      : score >= 40
+      ? "Watch list"
+      : "Long shot";
+  if (size === "lg") {
+    const tones: Record<string, string> = {
+      brand: "bg-brand-50 text-brand-900 border-brand-200",
+      blue: "bg-blue-50 text-blue-800 border-blue-200",
+      amber: "bg-amber-50 text-amber-800 border-amber-200",
+      neutral: "bg-neutral-100 text-neutral-700 border-neutral-200"
+    };
+    return (
+      <span
+        title={`${label}. Scores: ≥80 strong fit, 60–79 worth a look, 40–59 watch list, <40 long shot.`}
+        className={`inline-flex items-baseline gap-1 rounded-md border px-2.5 py-1 ${tones[tone]} cursor-help`}
+      >
+        <span className="text-base font-semibold tabular-nums">{score}</span>
+        <span className="text-[10px] uppercase tracking-wide">/ 100</span>
+      </span>
+    );
+  }
   return (
-    <Badge tone={tone}>
+    <Badge tone={tone} title={`${label}. Score ${score} of 100.`}>
       <span className="tabular-nums">{score}</span>
     </Badge>
+  );
+}
+
+/**
+ * Single-button primitive. Use this for actions; LinkButton is for navigation.
+ * `primary` is the brand-teal CTA, used at most once per surface.
+ */
+export function Button({
+  children,
+  variant = "secondary",
+  type = "button",
+  className = "",
+  ...rest
+}: {
+  children: ReactNode;
+  variant?: "primary" | "secondary" | "ghost" | "danger";
+  type?: "button" | "submit" | "reset";
+  className?: string;
+} & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "type" | "className">) {
+  const variants: Record<string, string> = {
+    primary:
+      "border border-brand-700 bg-brand-700 text-white hover:bg-brand-800 hover:border-brand-800",
+    secondary:
+      "border border-neutral-300 bg-white text-neutral-800 hover:border-neutral-500",
+    ghost:
+      "border border-transparent text-neutral-700 hover:bg-neutral-100",
+    danger:
+      "border border-red-300 bg-white text-red-700 hover:bg-red-50 hover:border-red-400"
+  };
+  return (
+    <button
+      type={type}
+      className={`inline-flex items-center justify-center rounded-md px-3.5 py-2 text-sm font-medium transition-colors ${variants[variant]} ${className}`}
+      {...rest}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -180,6 +259,38 @@ export function NaicsBadge({ code }: { code: string | null | undefined }) {
     >
       NAICS {code}
     </Badge>
+  );
+}
+
+/**
+ * Wraps any badge or chip in a hyperlink that opens the "Explain this"
+ * right rail with the given term slug. Use only on pages that render
+ * the rail (currently /opportunities/[id]).
+ *
+ * Slug format: <kind>:<value> — e.g. "naics:541512", "set_aside:SDVOSB".
+ * Relative href (`?explain=...`) preserves the current path and other
+ * search params; the browser resolves it against the current URL.
+ */
+export function ExplainLink({
+  slug,
+  children,
+  className = ""
+}: {
+  slug: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <Link
+      href={`?explain=${encodeURIComponent(slug)}`}
+      scroll={false}
+      className={`inline-flex items-center rounded-md transition-colors hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${className}`}
+      aria-label="Explain this term in plain English"
+      title="Click for a plain-English explanation"
+    >
+      {children}
+      <span aria-hidden className="ml-1 text-[10px] text-brand-700">?</span>
+    </Link>
   );
 }
 
@@ -352,13 +463,17 @@ export function LinkButton({
 }: {
   href: string;
   children: ReactNode;
-  variant?: "primary" | "secondary";
+  variant?: "primary" | "secondary" | "ghost";
   external?: boolean;
 }) {
-  const cls =
-    variant === "primary"
-      ? "rounded-md border border-neutral-900 bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-800"
-      : "rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-800 hover:border-neutral-500";
+  const variants: Record<string, string> = {
+    primary:
+      "border border-brand-700 bg-brand-700 text-white hover:bg-brand-800 hover:border-brand-800",
+    secondary:
+      "border border-neutral-300 bg-white text-neutral-800 hover:border-neutral-500",
+    ghost: "border border-transparent text-neutral-700 hover:bg-neutral-100"
+  };
+  const cls = `inline-flex items-center justify-center rounded-md px-3.5 py-2 text-sm font-medium transition-colors ${variants[variant]}`;
   if (external) {
     return (
       <a href={href} target="_blank" rel="noreferrer" className={cls}>
