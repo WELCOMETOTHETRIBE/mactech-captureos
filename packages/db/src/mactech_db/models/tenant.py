@@ -19,6 +19,7 @@ class Tenant(Base):
     plan: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'scout'"))
     uei: Mapped[str | None] = mapped_column(String, nullable=True)
     cage_code: Mapped[str | None] = mapped_column(String, nullable=True)
+    clerk_org_id: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
