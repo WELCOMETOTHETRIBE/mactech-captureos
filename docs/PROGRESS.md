@@ -477,3 +477,44 @@ Total Railway services: 5 (mactech-api, mactech-workers, mactech-web, Postgres, 
 
 ### Worker side note
 While I was at it, the worker had been crash-importing `mactech_workers.tasks.sam_descriptions` — the import statement and beat-schedule entry were dropped from the first commit due to a tool-error race. A second commit fixed both. Worth noting because: when adding a new worker task module, the registration is in two places (the side-effect import at the bottom of `celery_app.py` and the beat schedule in `celery_app.conf.update.beat_schedule`). Both must land for the task to fire on schedule.
+
+---
+
+## 2026-04-24 — UI catch-up sprint (Phase 2 Week 6 closeout)
+
+User feedback: *"the UI needs massive help and we need to be sure that the user is able to see everything they're supposed to."* Closed the gaps so every sidebar link points at a real page that surfaces what the API already knows.
+
+### Shipped — three new API endpoints
+- **`GET /opportunities`** at [apps/api/src/mactech_api/routes/opportunities.py](apps/api/src/mactech_api/routes/opportunities.py) — full filterable/sortable/paginated list. Filters: `q` (title contains), `naics_code`, `set_aside`, `notice_type`, `agency` (substring), `assigned_founder` (slug), `score_min`/`score_max`. Sort modes: `score_desc` (default), `posted_desc`, `deadline_asc`. Returns `items[]` plus `facets` (set_asides / notice_types / naics / assigned_founder counts) so the sidebar filters render with their tallies. One round-trip — raw SQL with `LEFT JOIN opportunity_scores` + `LEFT JOIN opportunities_enriched` + sub-select for the assigned-founder slug.
+- **`GET /capability-statements`** at [apps/api/src/mactech_api/routes/library.py](apps/api/src/mactech_api/routes/library.py) — capability statements with founder slug→full_name resolution, related NAICS codes, and a `has_embedding` flag. The flag comes from a separate `select id where embedding is not null` query so we don't drag the 1024-dim vector across the wire.
+- **`GET /me/settings`** at [apps/api/src/mactech_api/routes/settings.py](apps/api/src/mactech_api/routes/settings.py) — tenant header (UEI/CAGE pending placeholders, Clerk org id), founders[] with email + digest_enabled, NAICS matrix with founder_slugs per code, saved_searches[] with naics_codes/keywords/set_asides extracted from the filters JSON.
+
+### Shipped — UI primitives module
+- **[apps/web/components/ui.tsx](apps/web/components/ui.tsx)** — Tailwind-only, zero client JS, zero deps. `Card`, `PageHeader`, `Kpi`, `Badge` (6 tones), `ScoreBadge` (auto-tones by score: ≥80 green / ≥60 blue / ≥40 amber / else neutral), `Pillar` (security=blue, infrastructure=green, quality=amber, governance=violet), `SetAsideBadge` (SDVOSB family→violet, SBA family→green, NONE→unrestricted), `NoticeTypeBadge` (sources sought→amber, award→green, etc.), `EmptyState`, `LinkButton`, plus `fmtMoney`/`fmtDate`/`fmtRelativeDays` helpers. Goal: consistent visual rhythm across every page so a Brian or John can scan it without learning a new vocabulary on each route.
+
+### Shipped — page replacements
+- **`/opportunities`** at [apps/web/app/(app)/opportunities/page.tsx](apps/web/app/(app)/opportunities/page.tsx) — was a placeholder. Now: search box + sort selector + score-bucket quick-filters (Top ≥80 / Digest ≥60 / Med 40-59 / All) + facet sidebars (set-aside / notice type / NAICS / assigned founder, each with counts) + result cards showing ScoreBadge + NoticeTypeBadge + SetAsideBadge + NAICS + assigned founder + deadline countdown + truncated rationale + incumbent one-liner. Pagination at 25 per page with prev/next. The dashboard pillar cards now link to `/opportunities?assigned_founder=<slug>&score_min=60` so clicking "Brian's pillar" filters the list to Brian's assigned ≥60 opps.
+- **`/library`** at [apps/web/app/(app)/library/page.tsx](apps/web/app/(app)/library/page.tsx) — was a placeholder. Now: 4-stat header (statements / embedded / past performance:0 / teaming partners:0) + grid of statement cards each with title, summary, related NAICS badges, owner founders with pillar pips, has_embedding flag. The "0 past performance / 0 teaming partners" stats explicitly point at Phase 2 Week 8.
+- **`/settings`** at [apps/web/app/(app)/settings/page.tsx](apps/web/app/(app)/settings/page.tsx) — was a placeholder. Now: tenant card (name, slug, plan badge, UEI/CAGE with "(pending)" placeholders, clerk_org_id) + founders grid (4 cards with pillar/title/email/slug/digest status) + saved searches with threshold + cadence + channels inline + NAICS/set-asides/keywords for each + NAICS matrix table (code, title, primary/secondary tier badge, owner @-handles).
+- **`/pipeline`** at [apps/web/app/(app)/pipeline/page.tsx](apps/web/app/(app)/pipeline/page.tsx) — still a placeholder per Phase 2 Week 7, but now uses the `Card` + `PageHeader` + `EmptyState` primitives so it visually fits with the rest of the app and shows the 6 stages as preview cards.
+
+### Shipped — dashboard polish + detail page redesign
+- **[apps/web/app/(app)/dashboard/page.tsx](apps/web/app/(app)/dashboard/page.tsx)** — rebuilt on the new primitives. Top-5 cards now show ScoreBadge + NoticeTypeBadge + SetAsideBadge inline (instead of a string of ` · `-separated text), pillar cards are clickable links into the filtered opportunities list, "see all your assigned ≥60" CTA, EmptyState component when zero results.
+- **[apps/web/app/(app)/opportunities/[id]/page.tsx](apps/web/app/(app)/opportunities/[id]/page.tsx)** — score breakdown was getting cropped in the old 5/4/3 column split. Restructured to: header strip (full width) → 2-column main (description left, incumbent + capability matches stacked right) → **score+rationale full-width below** with the breakdown rendered as 4-column grid of mini-cards, each with the component label, the score, the max possible (eg "20 / 25"), and a horizontal progress bar. Now the founders can actually read the breakdown.
+
+### Shipped — `lib/api.ts` types
+- All response types for the three new endpoints were added to [apps/web/lib/api.ts](apps/web/lib/api.ts) so every page is fully typed against the actual API shape — `OpportunityListResponse` with `facets: { set_asides, notice_types, naics, assigned_founder } as Record<string,number>`, `CapabilityStatementsResponse`, `SettingsResponse`, etc.
+
+### Verification
+- `tsc --noEmit` clean across `apps/web`.
+- `next build` produces all 8 routes (`/`, `/dashboard`, `/library`, `/opportunities`, `/opportunities/[id]`, `/pipeline`, `/settings`, sign-in/sign-up).
+- API: `python3 -m py_compile` clean on the new `routes/library.py`, `routes/settings.py`, the extended `routes/opportunities.py`, and `main.py`.
+
+### Why this matters
+Brian and John don't read code — they need a UI that surfaces what the system knows. Before this sprint, three of the five sidebar links were placeholders ("ships Phase 2 Week 7"), the dashboard was the only real page, and the score breakdown on the detail page was getting cut off. After this sprint, every link goes somewhere useful, the visual vocabulary is consistent (every score is a `ScoreBadge`, every set-aside is a `SetAsideBadge`), and the score breakdown is the second thing a founder sees on a detail page (right after the description). The product can now be demoed end-to-end without "this part isn't built yet."
+
+### Still deferred
+- **Pipeline kanban** — Phase 2 Week 7. The placeholder is now visually integrated but still a placeholder.
+- **Past performance + teaming partners** in the library — Phase 2 Week 8.
+- **Filter/sort persistence + saved views** — nice-to-have.
+- **The right-column "Actions" panel** on the detail page (pursuit assignment, Sources Sought drafter) — Phase 2 Week 7 + Phase 3 Week 11.

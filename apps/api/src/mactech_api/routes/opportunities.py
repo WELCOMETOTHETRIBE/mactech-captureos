@@ -163,6 +163,234 @@ def _incumbent_one_liner(enr: OpportunityEnriched | None) -> str | None:
     return " — ".join(parts)
 
 
+class OpportunityListItem(_Out):
+    id: str
+    notice_id: str
+    title: str
+    notice_type: str | None
+    set_aside: str | None
+    naics_code: str | None
+    agency_short: str | None
+    posted_at: str | None
+    response_deadline: str | None
+    days_until_deadline: int | None
+    score: int | None
+    why_it_matters: str | None
+    incumbent_summary: str | None
+    assigned_founder_slug: str | None
+
+
+class OpportunityListResponse(_Out):
+    page: int
+    limit: int
+    total: int
+    has_next: bool
+    items: list[OpportunityListItem]
+    facets: dict[str, dict[str, int]]
+
+
+def _short_agency_path(p: str | None) -> str | None:
+    if not p:
+        return None
+    return p.split(".")[0].strip()
+
+
+def _days_until(dt: datetime | None) -> int | None:
+    if dt is None:
+        return None
+    delta = dt - datetime.now(timezone.utc)
+    return int(delta.total_seconds() / 86400)
+
+
+@router.get("/opportunities", response_model=OpportunityListResponse)
+async def list_opportunities(
+    ctx: Annotated[RequestContext, Depends(get_request_context)],
+    page: int = 1,
+    limit: int = 25,
+    q: str | None = None,
+    naics_code: str | None = None,
+    set_aside: str | None = None,
+    notice_type: str | None = None,
+    agency: str | None = None,
+    assigned_founder: str | None = None,
+    score_min: int = 0,
+    score_max: int = 100,
+    sort: str = "score_desc",  # 'score_desc' | 'posted_desc' | 'deadline_asc'
+) -> OpportunityListResponse:
+    if limit < 1 or limit > 100:
+        raise HTTPException(status_code=400, detail="limit must be 1..100")
+    if page < 1:
+        raise HTTPException(status_code=400, detail="page must be >=1")
+    if score_min < 0 or score_max > 100 or score_min > score_max:
+        raise HTTPException(status_code=400, detail="score_min/max out of range")
+
+    session = ctx.session
+    tenant_id = ctx.tenant.id
+    offset = (page - 1) * limit
+
+    # Build filters as a list of WHERE fragments + bound params, then run via
+    # raw SQL — gives us the LEFT JOIN to opportunity_scores + founder slug
+    # in one round-trip with full filtering.
+    where_parts: list[str] = []
+    params: dict[str, Any] = {"tenant_id": str(tenant_id)}
+
+    if q:
+        where_parts.append("o.title ilike '%' || :q || '%'")
+        params["q"] = q
+    if naics_code:
+        where_parts.append("o.naics_code = :naics")
+        params["naics"] = naics_code
+    if set_aside:
+        where_parts.append("o.set_aside = :sa")
+        params["sa"] = set_aside
+    if notice_type:
+        where_parts.append("o.notice_type = :nt")
+        params["nt"] = notice_type
+    if agency:
+        where_parts.append("o.agency ilike '%' || :ag || '%'")
+        params["ag"] = agency
+    if assigned_founder:
+        where_parts.append(
+            "(select f.slug from founders f where f.id = s.assigned_founder_id) = :af"
+        )
+        params["af"] = assigned_founder
+    where_parts.append(
+        "(s.score is null or (s.score >= :smin and s.score <= :smax))"
+    )
+    params["smin"] = score_min
+    params["smax"] = score_max
+
+    where_sql = " and ".join(where_parts) if where_parts else "true"
+
+    sort_sql = {
+        "score_desc": "s.score desc nulls last, o.posted_at desc nulls last",
+        "posted_desc": "o.posted_at desc nulls last",
+        "deadline_asc": "o.response_deadline asc nulls last",
+    }.get(sort, "s.score desc nulls last, o.posted_at desc nulls last")
+
+    rows_q = text(
+        f"""
+        select
+            o.id::text, o.source_id, o.title, o.notice_type, o.set_aside,
+            o.naics_code, o.agency, o.posted_at, o.response_deadline,
+            s.score, s.why_it_matters,
+            e.incumbent_name, e.incumbent_award_amount,
+            (select f.slug from founders f where f.id = s.assigned_founder_id)
+              as assigned_founder_slug
+        from opportunities_raw o
+        left join opportunity_scores s
+          on s.opportunity_id = o.id and s.tenant_id = :tenant_id
+        left join opportunities_enriched e on e.opportunity_id = o.id
+        where {where_sql}
+        order by {sort_sql}
+        limit :limit offset :offset
+        """
+    )
+    count_q = text(
+        f"""
+        select count(*) from opportunities_raw o
+        left join opportunity_scores s
+          on s.opportunity_id = o.id and s.tenant_id = :tenant_id
+        where {where_sql}
+        """
+    )
+
+    items_rows = (
+        await session.execute(rows_q, {**params, "limit": limit, "offset": offset})
+    ).all()
+    total = (await session.execute(count_q, params)).scalar_one()
+
+    items: list[OpportunityListItem] = []
+    for r in items_rows:
+        incumbent_summary: str | None = None
+        if r[11]:  # incumbent_name
+            parts = [r[11]]
+            if r[12] is not None:  # incumbent_award_amount
+                parts.append(f"${float(r[12]):,.0f} prior obligations")
+            incumbent_summary = " — ".join(parts)
+        items.append(
+            OpportunityListItem(
+                id=r[0],
+                notice_id=r[1],
+                title=r[2],
+                notice_type=r[3],
+                set_aside=r[4],
+                naics_code=r[5],
+                agency_short=_short_agency_path(r[6]),
+                posted_at=r[7].isoformat() if r[7] else None,
+                response_deadline=r[8].isoformat() if r[8] else None,
+                days_until_deadline=_days_until(r[8]),
+                score=int(r[9]) if r[9] is not None else None,
+                why_it_matters=r[10],
+                incumbent_summary=incumbent_summary,
+                assigned_founder_slug=r[13],
+            )
+        )
+
+    # Facets — counts of values within the unfiltered tenant view, useful for
+    # the sidebar filters. Cheap: aggregations on already-indexed columns.
+    facets: dict[str, dict[str, int]] = {
+        "set_asides": {},
+        "notice_types": {},
+        "naics": {},
+        "assigned_founder": {},
+    }
+    set_aside_counts = (
+        await session.execute(
+            text(
+                "select coalesce(set_aside, 'NONE'), count(*) "
+                "from opportunities_raw group by 1 order by 2 desc limit 20"
+            )
+        )
+    ).all()
+    facets["set_asides"] = {r[0]: r[1] for r in set_aside_counts}
+
+    notice_type_counts = (
+        await session.execute(
+            text(
+                "select coalesce(notice_type, 'unknown'), count(*) "
+                "from opportunities_raw group by 1 order by 2 desc"
+            )
+        )
+    ).all()
+    facets["notice_types"] = {r[0]: r[1] for r in notice_type_counts}
+
+    naics_counts = (
+        await session.execute(
+            text(
+                "select naics_code, count(*) from opportunities_raw "
+                "where naics_code is not null group by 1 order by 2 desc limit 25"
+            )
+        )
+    ).all()
+    facets["naics"] = {r[0]: r[1] for r in naics_counts}
+
+    founder_counts = (
+        await session.execute(
+            text(
+                """
+                select f.slug, count(*)
+                from opportunity_scores s
+                join founders f on f.id = s.assigned_founder_id
+                where s.tenant_id = :t and s.score >= 60
+                group by f.slug order by 2 desc
+                """
+            ),
+            {"t": str(tenant_id)},
+        )
+    ).all()
+    facets["assigned_founder"] = {r[0]: r[1] for r in founder_counts}
+
+    return OpportunityListResponse(
+        page=page,
+        limit=limit,
+        total=int(total),
+        has_next=offset + limit < int(total),
+        items=items,
+        facets=facets,
+    )
+
+
 @router.get("/opportunities/{opportunity_id}", response_model=OpportunityDetail)
 async def get_opportunity_detail(
     opportunity_id: UUID,

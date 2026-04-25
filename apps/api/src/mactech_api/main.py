@@ -3,8 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from sqlalchemy import text
 
+from mactech_api.routes.library import router as library_router
 from mactech_api.routes.me import router as me_router
 from mactech_api.routes.opportunities import router as opportunities_router
+from mactech_api.routes.settings import router as settings_router
 from mactech_api.settings import settings
 from mactech_db import async_session_factory
 
@@ -27,6 +29,8 @@ app.add_middleware(
 
 app.include_router(me_router)
 app.include_router(opportunities_router)
+app.include_router(library_router)
+app.include_router(settings_router)
 
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
