@@ -177,7 +177,7 @@ async def dashboard(
                         else None
                     ),
                     sam_link=payload.get("uiLink"),
-                    detail_url=f"/opportunities/{opp.id}/enriched",
+                    detail_url=f"/opportunities/{opp.id}",
                 )
             )
 
