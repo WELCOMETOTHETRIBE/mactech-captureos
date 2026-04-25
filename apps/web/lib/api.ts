@@ -333,3 +333,63 @@ export type KanbanResponse = {
   by_owner: Record<string, number>;
   columns: StageColumn[];
 };
+
+/* ── /past-performance ──────────────────────────────────────────── */
+
+export type PastPerformanceRole = "prime" | "sub" | "joint_venture" | "individual";
+export const PAST_PERFORMANCE_ROLES_ORDER: PastPerformanceRole[] = [
+  "prime",
+  "sub",
+  "joint_venture",
+  "individual"
+];
+
+export type PastPerformanceOut = {
+  id: string;
+  title: string;
+  customer_agency: string | null;
+  customer_office: string | null;
+  contract_number: string | null;
+  role: PastPerformanceRole;
+  period_start: string | null;
+  period_end: string | null;
+  contract_value: number | null;
+  naics_code: string | null;
+  summary: string;
+  keywords: string[];
+  related_capability_slugs: string[];
+  related_founder_slugs: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type PastPerformanceList = {
+  total: number;
+  items: PastPerformanceOut[];
+};
+
+/* ── /teaming-partners ──────────────────────────────────────────── */
+
+export type TeamingPartnerStatus = "active" | "inactive";
+
+export type TeamingPartnerOut = {
+  id: string;
+  name: string;
+  uei: string | null;
+  cage_code: string | null;
+  capabilities: string[];
+  naics_codes: string[];
+  set_aside_certifications: string[];
+  contact_name: string | null;
+  contact_email: string | null;
+  notes: string | null;
+  status: TeamingPartnerStatus;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TeamingPartnerList = {
+  total: number;
+  active_count: number;
+  items: TeamingPartnerOut[];
+};

@@ -576,3 +576,64 @@ Server-rendered with **Next.js server actions** for every mutation — no client
 - **Phase 2 Week 8** — capability statements + past performance ingest. The library page already shows the stat slots ("Past performance: 0 — Phase 2 Week 8").
 - **Drag-and-drop on the kanban** — nice-to-have. The button-based stage transitions work fully today; DnD is purely a polish item and would force a client component.
 - **Pursuit history log** — every stage change captured with timestamp + actor. Useful for win-rate analysis later.
+
+---
+
+## 2026-04-25 — Phase 2 Week 8: past performance + teaming partners
+
+The library is now a real catalogue, not just a list of seed-config capability statements. Both new tables are populated by the founders directly through the UI — no ingest worker yet (next iteration could pull MacTech's own contract history from USASpending once the UEI is registered).
+
+### Schema — migration 0008
+- **`past_performance`** ([0008_library_tables.py](packages/db/alembic/versions/0008_library_tables.py), model [library.py](packages/db/src/mactech_db/models/library.py)):
+  - title (unique per tenant), customer_agency, customer_office, contract_number
+  - role ∈ {prime, sub, joint_venture, individual} — enforced by check constraint
+  - period_start, period_end, contract_value (numeric 14,2)
+  - naics_code, summary (free text), keywords (array)
+  - related_capability_slugs[], related_founder_slugs[] — soft links into the existing capability + founder rows
+- **`teaming_partners`**:
+  - name (unique per tenant), uei, cage_code
+  - capabilities[], naics_codes[], set_aside_certifications[]
+  - contact_name, contact_email, notes
+  - status ∈ {active, inactive} — toggle on the card without leaving the library page
+  - Index on `(tenant_id, status)` for fast active-first ordering
+
+Both tenant-scoped with CASCADE on tenant delete. Both have ORM `onupdate=func.now()` on `updated_at`.
+
+### API — two new route modules
+- **[routes/past_performance.py](apps/api/src/mactech_api/routes/past_performance.py)** — full CRUD (`GET /past-performance`, `GET /{id}`, `POST`, `PATCH`, `DELETE`). PATCH supports explicit `clear_period_start` / `clear_period_end` / `clear_contract_value` flags so a user can null-out a previously set field. Sort: most recently completed first (period_end desc nulls last, then created_at desc).
+- **[routes/teaming_partners.py](apps/api/src/mactech_api/routes/teaming_partners.py)** — same CRUD shape. Uses `EmailStr` for `contact_email` validation (relies on `fastapi[standard]` pulling email-validator). PATCH supports `clear_contact_email` flag. List sorts active partners first.
+- Both routes filter by `ctx.tenant.id` everywhere — same tenancy isolation pattern as pursuits.
+- Both POST/PATCH catch `IntegrityError` and surface a graceful 409 instead of a 500 when the (tenant, title)/(tenant, name) unique constraint trips.
+
+### Web — restructured library
+- **[/library](apps/web/app/(app)/library/page.tsx)** — was a single capability-statements list. Now a 3-section page:
+  - 4-stat header (Statements / Past performance / Teaming partners / NAICS coverage — derived from the union of capability `related_naics` + past-performance `naics_code`).
+  - Capability statements section (existing, unchanged behaviour).
+  - **Past performance section** — newest-first cards with title + customer + role badge + contract value + 4-line summary + NAICS + period + owner founders + keyword chips. Inline Edit / Delete actions per card. Section-level "+ Add record" CTA.
+  - **Teaming partners section** — 2-column grid of partner cards with status badge (active/inactive), capabilities chips, NAICS, set-aside certifications, contact name + clickable email, free-form notes. Inline Edit / Archive↔Reactivate / Delete actions per card.
+- **Empty states** for both new sections frame them as setup tasks: "No past-performance records yet. Add the prior engagements you'd cite in a capability response." with the primary "+ Add the first record" CTA.
+
+### Web — form pages (4 new routes)
+- **[/library/past-performance/new](apps/web/app/(app)/library/past-performance/new/page.tsx)** + **[/library/past-performance/[id]/edit](apps/web/app/(app)/library/past-performance/[id]/edit/page.tsx)** — dedicated form pages with field-level hints ("Cited verbatim by the proposal drafter — write it the way you'd want a CO to read it"). Server actions handle create + update; redirect back to /library on success.
+- **[/library/teaming-partners/new](apps/web/app/(app)/library/teaming-partners/new/page.tsx)** + **[/library/teaming-partners/[id]/edit](apps/web/app/(app)/library/teaming-partners/[id]/edit/page.tsx)** — same shape.
+- Form components live in [components/library-forms.tsx](apps/web/components/library-forms.tsx) — server components that take a server-action prop. Update pages use `action.bind(null, id)` to bake the id into the action so the form doesn't need a hidden id input.
+
+### Server actions module — [lib/library-actions.ts](apps/web/lib/library-actions.ts)
+- `createPastPerformance` / `updatePastPerformance(id, formData)` / `deletePastPerformance` / `toggleTeamingPartnerStatus` / etc.
+- Each parses FormData into the API shape (comma-split arrays, optional dates/numbers with explicit clear-flag handling), calls apiFetch, revalidatePath('/library'), and where appropriate redirects back to /library.
+
+### What this unblocks
+- Phase 3 Sources Sought drafter has real data to cite. Past performance narratives are now first-class records the drafter prompt can pull.
+- Teaming-partner-aware suggestions on opportunity detail pages: "X partner has the FedRAMP-Mod ATO this opp requires."
+- Founders can self-service the catalogue — no more code edits to add a citation.
+
+### Verification
+- `tsc --noEmit` clean, `next build` produces all 12 routes (the 4 new form routes + the 8 existing).
+- `python3 -m py_compile` clean on the new model, migration, and 2 route modules.
+- Models import via uv-managed venv with all 17 + 14 columns + 2 + 1 constraints respectively.
+- Migration auto-runs on api boot via [entrypoint.sh](apps/api/entrypoint.sh).
+
+### Next up
+- **Phase 3 Week 9** — Sources Sought drafter. Take an opp + the capability statements + past performance + teaming partners, hand it all to Claude, return a draft response. This is the flagship feature.
+- **Capability statement editing UI** — currently still seed-config-driven. Could mirror the past-performance form pattern.
+- **USASpending past-performance auto-import** — once MacTech's UEI is active, pull the firm's own contract history into past_performance automatically.

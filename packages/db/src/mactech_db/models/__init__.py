@@ -1,5 +1,10 @@
 from mactech_db.models.enrichment import AwardHistory, ExclusionsCache, OpportunityEnriched
 from mactech_db.models.founder import Founder, FounderNaicsMatrix
+from mactech_db.models.library import (
+    PAST_PERFORMANCE_ROLES,
+    PastPerformance,
+    TeamingPartner,
+)
 from mactech_db.models.naics import NaicsCode
 from mactech_db.models.opportunity import IngestionState, OpportunityRaw
 from mactech_db.models.pursuit import PURSUIT_STAGES, Pursuit
@@ -19,9 +24,12 @@ __all__ = [
     "OpportunityEnriched",
     "OpportunityRaw",
     "OpportunityScore",
+    "PAST_PERFORMANCE_ROLES",
     "PURSUIT_STAGES",
+    "PastPerformance",
     "Pursuit",
     "SavedSearch",
+    "TeamingPartner",
     "Tenant",
     "User",
 ]

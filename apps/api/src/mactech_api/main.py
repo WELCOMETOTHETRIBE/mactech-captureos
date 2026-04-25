@@ -6,8 +6,10 @@ from sqlalchemy import text
 from mactech_api.routes.library import router as library_router
 from mactech_api.routes.me import router as me_router
 from mactech_api.routes.opportunities import router as opportunities_router
+from mactech_api.routes.past_performance import router as past_performance_router
 from mactech_api.routes.pursuits import router as pursuits_router
 from mactech_api.routes.settings import router as settings_router
+from mactech_api.routes.teaming_partners import router as teaming_partners_router
 from mactech_api.settings import settings
 from mactech_db import async_session_factory
 
@@ -33,6 +35,8 @@ app.include_router(opportunities_router)
 app.include_router(library_router)
 app.include_router(settings_router)
 app.include_router(pursuits_router)
+app.include_router(past_performance_router)
+app.include_router(teaming_partners_router)
 
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
