@@ -61,8 +61,11 @@ export default async function OpportunityDetailPage({
     throw err;
   }
 
-  // Pursuit + me run in parallel; pursuit may legitimately 404 if there's no
-  // pipeline entry for this opp yet — swallow that.
+  // Pursuit + me run in parallel. The pursuit lookup legitimately 404s when
+  // the opp isn't in the pipeline yet — that's the "Add to pipeline" CTA
+  // case. Swallowing here also masks 500s, which is acceptable because the
+  // PursuitPanel falls back to the "not yet" UI on null and an api error on
+  // /opportunities/{id} above would have already thrown.
   const [me, pursuit] = await Promise.all([
     apiFetch<MeResponse>("/me"),
     apiFetch<PursuitCardT>(`/pursuits/by-opportunity/${id}`).catch(

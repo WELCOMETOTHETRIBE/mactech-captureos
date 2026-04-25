@@ -21,6 +21,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
 
 from mactech_api.auth import RequestContext, get_request_context
 from mactech_db.models import Founder, OpportunityRaw, Pursuit
@@ -350,7 +351,16 @@ async def create_pursuit(
         notes=body.notes,
     )
     session.add(pursuit)
-    await session.flush()
+    try:
+        await session.flush()
+    except IntegrityError:
+        # Concurrent POST passed the existence check above — the unique
+        # constraint caught the duplicate. Surface as a 409 instead of 500.
+        await session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="pursuit already exists for this opportunity",
+        ) from None
 
     return await get_pursuit_for_opp(body.opportunity_id, ctx)
 
@@ -389,6 +399,11 @@ async def update_pursuit(
 
     if body.notes is not None:
         pursuit.notes = body.notes
+
+    # SQLAlchemy `onupdate=func.now()` should bump `updated_at` on flush, but
+    # set it explicitly so the value is correct even if a future raw-SQL path
+    # bypasses the ORM. Belt-and-suspenders.
+    pursuit.updated_at = datetime.now(timezone.utc)
 
     await session.flush()
     return await get_pursuit_for_opp(pursuit.opportunity_id, ctx)
