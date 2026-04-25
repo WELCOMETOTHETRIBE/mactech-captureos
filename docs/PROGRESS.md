@@ -449,3 +449,31 @@ Total Railway services: 5 (mactech-api, mactech-workers, mactech-web, Postgres, 
 - **Phase 2 Week 6** ([docs/ROADMAP.md](docs/ROADMAP.md)): full opportunities feed UI with filters (NAICS, agency, set-aside, value, score threshold), per-opp detail page (the deep-value capture surface from `docs/MACTECH_PLAYBOOK.md` §6).
 - **Phase 2 Week 7**: capture pipeline kanban (Lead → Qualify → Pursue → Propose → Submit → Won/Lost). The "Pipeline" sidebar link currently points to a placeholder.
 - **Phase 2 Week 8**: capability statements + past performance UI. The "Library" sidebar link is a placeholder.
+
+---
+
+## 2026-04-24 — Phase 2 Week 6 (partial): opportunity detail page
+
+### Shipped (the per-opp detail half of Week 6 — list/filter view deferred)
+- **`GET /opportunities/{id}`** at [apps/api/src/mactech_api/routes/opportunities.py](apps/api/src/mactech_api/routes/opportunities.py) — now authenticated (was unauthenticated `/opportunities/{id}/enriched` in Phase 1; the old URL kept as a 308 redirect for any bookmarked links). Returns the rich detail payload the UI renders:
+  - Header (title, agency, notice type, set-aside + description, NAICS, solicitation number, posted date, response deadline + days-until countdown, sam.gov link, additional info link)
+  - `description` block with `text` + `source_url` + `fetch_status: "fetched" | "pending" | "unavailable"`
+  - `incumbent` block (UEI, name, contract id, end date, cumulative obligations, exclusions check + freshness)
+  - `score` block (score, breakdown, why_it_matters, why_it_matters_model, assigned founder)
+  - `capability_matches[]` — top-5 MacTech capability statements ranked by **pgvector cosine similarity** between the opportunity embedding and capability statement embedding
+  - `sam_resource_links[]` — attachment URLs from SAM's raw payload (the PDFs/DOCX founders click through to)
+- **`mactech.sam.fetch_descriptions` worker** at [apps/workers/src/mactech_workers/tasks/sam_descriptions.py](apps/workers/src/mactech_workers/tasks/sam_descriptions.py) — implements the chained noticedesc fetch documented in [docs/SAM_GOV_API.md §4 Chain 1](docs/SAM_GOV_API.md). Walks rows where `description_url` is set + `description_text` is null, hits SAM's `/prod/opportunities/v1/noticedesc?noticeid=...` with the api key, populates the column. Marks empty bodies with a single-space sentinel so the worker doesn't loop on them. 200kb size cap on stored text.
+  - Beat schedule: every 30 min, batch=50.
+  - First two manual runs filled 97 of 895 opps in ~12 seconds total.
+- **Opportunity detail page** at [apps/web/app/(app)/opportunities/[id]/page.tsx](apps/web/app/(app)/opportunities/[id]/page.tsx) — three-column layout per [docs/MACTECH_PLAYBOOK.md §6](docs/MACTECH_PLAYBOOK.md):
+  - Header strip with agency, title, meta line, posted date, deadline countdown ("Apr 27, 2026 (3 days left)" or "passed Nd ago"), notice id, SAM link
+  - Left col: description card (renders `text` when fetched; "queued" message when pending; "no description" when unavailable) + Attachments list
+  - Center col: Incumbent intelligence card (name, UEI, $cumulative, end date, exclusions with green/red treatment) + MacTech capability matches (top 3 with similarity score and truncated summary)
+  - Right col: Score card (large number, breakdown per component with friendly labels, "Why this matters" paragraph + model attribution) + Actions card (stubbed today; pursuit pipeline + Sources Sought drafter ship in Phase 2 Week 7 and Phase 3 Week 11)
+- **Dashboard cards** are now `<Link>` elements that route to the detail page on click. "View on SAM.gov" was removed from the dashboard tile (it's on the detail page); replaced with a "View detail →" affordance.
+
+### Deferred to a follow-up Week 6 sprint
+- **Full opportunities feed list with filters** (NAICS / agency / set-aside / value / score threshold). The "Opportunities" sidebar link still points at the placeholder page. Detail page works regardless — the dashboard's top-5 + the detail page give Patrick a working capture surface today; the full filterable feed is a nice-to-have for browsing beyond the top 5.
+
+### Worker side note
+While I was at it, the worker had been crash-importing `mactech_workers.tasks.sam_descriptions` — the import statement and beat-schedule entry were dropped from the first commit due to a tool-error race. A second commit fixed both. Worth noting because: when adding a new worker task module, the registration is in two places (the side-effect import at the bottom of `celery_app.py` and the beat schedule in `celery_app.conf.update.beat_schedule`). Both must land for the task to fire on schedule.
