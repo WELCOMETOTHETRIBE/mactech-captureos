@@ -8,6 +8,12 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false }
 };
 
+// This is an auth-gated SaaS app — every route reads request headers via
+// Clerk's `auth()`. Prerendering doesn't apply, and forcing dynamic at the
+// root layout propagates to every nested route including auto-generated
+// /_not-found, avoiding "Dynamic server usage" build failures.
+export const dynamic = "force-dynamic";
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
