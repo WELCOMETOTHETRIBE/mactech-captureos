@@ -14,13 +14,14 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   if (!token) {
     throw new Error("apiFetch called without a Clerk session — guard the route");
   }
+  const headers = new Headers(init.headers);
+  headers.set("Authorization", `Bearer ${token}`);
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
-    headers: {
-      ...(init.headers ?? {}),
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json"
-    },
+    headers,
     cache: "no-store"
   });
   if (!res.ok) {
