@@ -518,3 +518,61 @@ Brian and John don't read code — they need a UI that surfaces what the system 
 - **Past performance + teaming partners** in the library — Phase 2 Week 8.
 - **Filter/sort persistence + saved views** — nice-to-have.
 - **The right-column "Actions" panel** on the detail page (pursuit assignment, Sources Sought drafter) — Phase 2 Week 7 + Phase 3 Week 11.
+
+---
+
+## 2026-04-24 — Phase 2 Week 7: capture pipeline kanban
+
+The placeholder is dead. Pursuits now have a real backing table, REST API, and a working kanban surface.
+
+### Schema — migration 0007
+- **`pursuits` table** (alembic [0007_pursuits.py](packages/db/alembic/versions/0007_pursuits.py), model [pursuit.py](packages/db/src/mactech_db/models/pursuit.py)):
+  - One row per `(tenant_id, opportunity_id)` — enforced by `uq_pursuits_tenant_opp` unique constraint.
+  - `stage` ∈ {lead, qualify, pursue, propose, submit, won, lost} — enforced by `ck_pursuits_stage` check constraint.
+  - `owner_founder_id` nullable (ondelete=SET NULL — losing a founder doesn't drop the pursuit).
+  - `notes` free-text.
+  - `last_stage_change_at` separate from `updated_at` so we can compute "days in stage" without scanning a history table.
+  - Indexes: `(tenant_id, stage)` for kanban grouping; `(owner_founder_id)` for owner filter.
+  - Decision: free transitions allowed (no enforced DAG). Real BD work drops back to a prior stage all the time — "we got more info, this is a Qualify not a Pursue."
+
+### API — [routes/pursuits.py](apps/api/src/mactech_api/routes/pursuits.py)
+- **`GET /pursuits[?owner=<slug>]`** — kanban payload. Returns `columns[]` (one per stage in canonical order) each with `cards[]` (pursuits in that stage). One round-trip — raw SQL with `JOIN opportunities_raw + LEFT JOIN opportunity_scores + LEFT JOIN founders` for the owner slug. Cards include score, set-aside, NAICS, deadline + days-until, owner slug+name, days-in-stage. Also returns `by_owner` dict (counts per owner including `_unassigned`) for the filter pills.
+- **`GET /pursuits/by-opportunity/{id}`** — single pursuit lookup, used by the detail page to decide whether to show "Add to pipeline" vs the pursuit panel. 404 when no pursuit exists.
+- **`POST /pursuits`** — create from `opportunity_id`, optional `stage`/`owner_founder_slug`/`notes`. 409 if a pursuit already exists for that opp.
+- **`PATCH /pursuits/{id}`** — change `stage` (auto-bumps `last_stage_change_at`), `owner_founder_slug` (or `clear_owner: true` to unassign), `notes`. Tenant-scoped — can't patch another tenant's pursuit.
+- **`DELETE /pursuits/{id}`** — remove from pipeline. 204 No Content.
+
+### Web — kanban page [/pipeline](apps/web/app/(app)/pipeline/page.tsx)
+Server-rendered with **Next.js server actions** for every mutation — no client JS needed.
+- **5-column active board** (Lead / Qualify / Pursue / Propose / Submit). Horizontal scroll on narrow viewports, 5-col grid on lg+. Each column shows count badge.
+- **Terminal stages row** (Won / Lost) — only renders when there's at least one card in either, so an empty pipeline doesn't show empty win/lose columns.
+- **Card UI** per pursuit: ScoreBadge + NoticeTypeBadge + truncated title (clickable to detail page) + SetAsideBadge + NAICS + deadline countdown + owner pill + "Nd in stage" + action row.
+- **Card actions** (all server actions, no client JS):
+  - `←` regress one stage / `→` advance one stage (active stages only).
+  - `Won` / `Lost` finish buttons (visible from Qualify onward).
+  - Owner select dropdown with "set" submit button. Includes `— unassigned` option (uses the `clear_owner: true` API flag).
+  - `✕` remove from pipeline.
+- **Owner filter pills** at the top — All / per-founder counts / unassigned chip. Clicking filters the kanban.
+
+### Web — opportunity detail page [opportunities/\[id\]](apps/web/app/(app)/opportunities/[id]/page.tsx)
+- New `<PursuitPanel>` strip directly under the header card.
+- When **no pursuit exists**: dashed-border CTA "Not in the pipeline yet. Add it to start tracking the pursuit." + primary "Add to pipeline →" button. The button defaults `owner_founder_slug` to the calling user's founder slug (from `/me`), so a founder clicking it on their own opp self-assigns automatically.
+- When **a pursuit exists**: stage badge with stage-specific tone (lead=neutral, qualify=blue, pursue=blue, propose=amber, submit=violet, won=green, lost=red), days-in-stage, owner display, notes, and inline action row (`← Prev` / `Next →` / `Won` / `Lost` / `Open kanban` / `Remove`).
+
+### Web — server actions module [lib/pursuits.ts](apps/web/lib/pursuits.ts)
+`"use server"` module with `createPursuit`, `updatePursuit`, `deletePursuit`. Each action calls the API, then `revalidatePath('/pipeline')` + `revalidatePath('/opportunities/[id]')` so the affected pages refresh without a hard nav. `apiFetch` was extended to handle 204 responses (was unconditionally calling `res.json()`).
+
+### What this unblocks
+- Brian / Patrick / James / John can now triage opportunities into the pipeline directly from the detail page.
+- The kanban gives a real end-to-end picture of MacTech's pursuit posture: how many leads, how many in proposal, who owns what, how long has it been sitting.
+- The "Why this matters" rationale + capability matches + score breakdown + pipeline state all live on one page now.
+
+### Verification
+- `tsc --noEmit` clean across `apps/web`. `next build` produces all 8 routes.
+- `python3 -m py_compile` clean on the new model, migration, route, and updated `main.py`.
+- Migration is idempotent (`create_table` + `create_index` + drop in reverse) and runs automatically on api boot via [entrypoint.sh](apps/api/entrypoint.sh).
+
+### Next up
+- **Phase 2 Week 8** — capability statements + past performance ingest. The library page already shows the stat slots ("Past performance: 0 — Phase 2 Week 8").
+- **Drag-and-drop on the kanban** — nice-to-have. The button-based stage transitions work fully today; DnD is purely a polish item and would force a client component.
+- **Pursuit history log** — every stage change captured with timestamp + actor. Useful for win-rate analysis later.

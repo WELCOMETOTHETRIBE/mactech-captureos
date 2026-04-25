@@ -1,12 +1,20 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { apiFetch, type OpportunityDetail } from "@/lib/api";
+import {
+  apiFetch,
+  type MeResponse,
+  type OpportunityDetail,
+  type PursuitCard as PursuitCardT,
+  type PursuitStage
+} from "@/lib/api";
+import { createPursuit, deletePursuit, updatePursuit } from "@/lib/pursuits";
 import {
   Badge,
   Card,
   LinkButton,
   NoticeTypeBadge,
   PageHeader,
+  Pillar,
   ScoreBadge,
   SetAsideBadge,
   fmtDate,
@@ -52,6 +60,15 @@ export default async function OpportunityDetailPage({
     if (msg.includes("404")) notFound();
     throw err;
   }
+
+  // Pursuit + me run in parallel; pursuit may legitimately 404 if there's no
+  // pipeline entry for this opp yet — swallow that.
+  const [me, pursuit] = await Promise.all([
+    apiFetch<MeResponse>("/me"),
+    apiFetch<PursuitCardT>(`/pursuits/by-opportunity/${id}`).catch(
+      () => null as PursuitCardT | null
+    )
+  ]);
 
   const opp = data.opportunity;
 
@@ -114,6 +131,13 @@ export default async function OpportunityDetailPage({
           />
         </div>
       </header>
+
+      {/* Pursuit / pipeline status strip */}
+      <PursuitPanel
+        opportunityId={opp.id}
+        pursuit={pursuit}
+        meFounderSlug={me.founder?.slug ?? null}
+      />
 
       {/* Two-column main: description left, incumbent + capability right */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -338,5 +362,210 @@ function Meta({ label, value }: { label: string; value: React.ReactNode }) {
       <p className="text-[11px] uppercase tracking-wider text-neutral-500">{label}</p>
       <p className="mt-0.5">{value}</p>
     </div>
+  );
+}
+
+const PURSUIT_STAGE_TONE: Record<PursuitStage, "neutral" | "blue" | "amber" | "violet" | "green" | "red"> = {
+  lead: "neutral",
+  qualify: "blue",
+  pursue: "blue",
+  propose: "amber",
+  submit: "violet",
+  won: "green",
+  lost: "red"
+};
+
+const PURSUIT_STAGE_LABEL: Record<PursuitStage, string> = {
+  lead: "Lead",
+  qualify: "Qualify",
+  pursue: "Pursue",
+  propose: "Propose",
+  submit: "Submit",
+  won: "Won",
+  lost: "Lost"
+};
+
+function PursuitPanel({
+  opportunityId,
+  pursuit,
+  meFounderSlug
+}: {
+  opportunityId: string;
+  pursuit: PursuitCardT | null;
+  meFounderSlug: string | null;
+}) {
+  if (!pursuit) {
+    return (
+      <section className="rounded-md border border-dashed border-neutral-300 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+              Capture pipeline
+            </p>
+            <p className="mt-1 text-sm text-neutral-700">
+              Not in the pipeline yet. Add it to start tracking the pursuit.
+            </p>
+          </div>
+          <form
+            action={async () => {
+              "use server";
+              await createPursuit({
+                opportunityId,
+                stage: "lead",
+                ownerFounderSlug: meFounderSlug
+              });
+            }}
+          >
+            <button
+              type="submit"
+              className="rounded-md border border-neutral-900 bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+            >
+              Add to pipeline →
+            </button>
+          </form>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-md border border-neutral-200 bg-white p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+              Capture pipeline
+            </p>
+            <Badge tone={PURSUIT_STAGE_TONE[pursuit.stage]}>
+              {PURSUIT_STAGE_LABEL[pursuit.stage]}
+            </Badge>
+            <span className="text-[11px] text-neutral-500 tabular-nums">
+              {pursuit.days_in_stage}d in stage
+            </span>
+          </div>
+          <p className="mt-2 text-sm text-neutral-700">
+            Owner:{" "}
+            {pursuit.owner_founder_slug ? (
+              <span className="font-medium">
+                {pursuit.owner_founder_name ?? pursuit.owner_founder_slug}{" "}
+                <span className="text-neutral-500">@{pursuit.owner_founder_slug}</span>
+              </span>
+            ) : (
+              <span className="italic text-neutral-500">unassigned</span>
+            )}
+          </p>
+          {pursuit.notes && (
+            <p className="mt-2 max-w-2xl whitespace-pre-wrap text-sm leading-relaxed text-neutral-700">
+              {pursuit.notes}
+            </p>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <DetailStageButtons pursuit={pursuit} />
+          <Link
+            href="/pipeline"
+            className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:border-neutral-500"
+          >
+            Open kanban →
+          </Link>
+          <form
+            action={async () => {
+              "use server";
+              await deletePursuit({
+                pursuitId: pursuit.id,
+                opportunityId
+              });
+            }}
+          >
+            <button
+              type="submit"
+              className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs text-neutral-500 hover:border-red-300 hover:text-red-700"
+              title="Remove from pipeline"
+            >
+              Remove
+            </button>
+          </form>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DetailStageButtons({ pursuit }: { pursuit: PursuitCardT }) {
+  const order: PursuitStage[] = [
+    "lead",
+    "qualify",
+    "pursue",
+    "propose",
+    "submit"
+  ];
+  const idx = order.indexOf(pursuit.stage);
+  const canRegress = idx > 0;
+  const canAdvance = idx >= 0 && idx < order.length - 1;
+  const canFinish = idx >= 1; // qualify or later
+
+  return (
+    <div className="flex items-center gap-1.5">
+      {canRegress && (
+        <DetailStageBtn
+          pursuit={pursuit}
+          stage={order[idx - 1]}
+          label={`← ${PURSUIT_STAGE_LABEL[order[idx - 1]]}`}
+          variant="ghost"
+        />
+      )}
+      {canAdvance && (
+        <DetailStageBtn
+          pursuit={pursuit}
+          stage={order[idx + 1]}
+          label={`${PURSUIT_STAGE_LABEL[order[idx + 1]]} →`}
+          variant="primary"
+        />
+      )}
+      {canFinish && pursuit.stage !== "won" && (
+        <DetailStageBtn pursuit={pursuit} stage="won" label="Won" variant="green" />
+      )}
+      {canFinish && pursuit.stage !== "lost" && (
+        <DetailStageBtn pursuit={pursuit} stage="lost" label="Lost" variant="red" />
+      )}
+    </div>
+  );
+}
+
+function DetailStageBtn({
+  pursuit,
+  stage,
+  label,
+  variant
+}: {
+  pursuit: PursuitCardT;
+  stage: PursuitStage;
+  label: string;
+  variant: "ghost" | "primary" | "green" | "red";
+}) {
+  const cls =
+    variant === "primary"
+      ? "rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800"
+      : variant === "green"
+      ? "rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+      : variant === "red"
+      ? "rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700"
+      : "rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:border-neutral-500";
+
+  return (
+    <form
+      action={async () => {
+        "use server";
+        await updatePursuit({
+          pursuitId: pursuit.id,
+          opportunityId: pursuit.opportunity.id,
+          stage
+        });
+      }}
+    >
+      <button type="submit" className={cls}>
+        {label}
+      </button>
+    </form>
   );
 }

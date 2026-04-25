@@ -28,6 +28,9 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     const body = await res.text();
     throw new Error(`API ${res.status} on ${path}: ${body.slice(0, 200)}`);
   }
+  if (res.status === 204) {
+    return undefined as T;
+  }
   return res.json() as Promise<T>;
 }
 
@@ -267,4 +270,66 @@ export type SettingsResponse = {
   founders: FounderOut[];
   naics: NaicsRow[];
   saved_searches: SavedSearchOut[];
+};
+
+/* ── /pursuits (capture pipeline kanban) ────────────────────────── */
+
+export type PursuitStage =
+  | "lead"
+  | "qualify"
+  | "pursue"
+  | "propose"
+  | "submit"
+  | "won"
+  | "lost";
+
+export const PURSUIT_STAGES_ORDER: PursuitStage[] = [
+  "lead",
+  "qualify",
+  "pursue",
+  "propose",
+  "submit",
+  "won",
+  "lost"
+];
+
+export type PursuitOpp = {
+  id: string;
+  notice_id: string;
+  title: string;
+  notice_type: string | null;
+  set_aside: string | null;
+  naics_code: string | null;
+  agency_short: string | null;
+  posted_at: string | null;
+  response_deadline: string | null;
+  days_until_deadline: number | null;
+  score: number | null;
+};
+
+export type PursuitCard = {
+  id: string;
+  stage: PursuitStage;
+  owner_founder_slug: string | null;
+  owner_founder_name: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  last_stage_change_at: string;
+  days_in_stage: number;
+  opportunity: PursuitOpp;
+};
+
+export type StageColumn = {
+  stage: PursuitStage;
+  label: string;
+  count: number;
+  cards: PursuitCard[];
+};
+
+export type KanbanResponse = {
+  rendered_at: string;
+  total: number;
+  by_owner: Record<string, number>;
+  columns: StageColumn[];
 };
