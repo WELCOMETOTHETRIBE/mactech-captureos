@@ -12,6 +12,7 @@ import {
   Badge,
   Card,
   LinkButton,
+  NaicsBadge,
   NoticeTypeBadge,
   PageHeader,
   Pillar,
@@ -44,6 +45,25 @@ const SCORE_COMPONENT_MAX: Record<string, number> = {
   founder_availability: 5,
   freshness: 5,
   capability_match: 15
+};
+
+const SCORE_COMPONENT_HELP: Record<string, string> = {
+  naics_match:
+    "Boosts when the opportunity's NAICS code is one of MacTech's 8 primary codes (full points) or 12 secondary codes (partial).",
+  keyword_density:
+    "Counts how often domain keywords (cybersecurity, RMF, ATO, infrastructure, etc.) appear in the title and description.",
+  set_aside_fit:
+    "SDVOSB-set-aside opportunities score highest. Small-business set-asides next, then unrestricted. NaSDQOSB set-asides cap the field.",
+  value_sanity:
+    "Penalizes opportunities outside MacTech's plausible ceiling range — too small to be worth pursuing, or too big for current bonding capacity.",
+  incumbent_weakness:
+    "Looks at incumbent obligations + contract end date. Higher when the incumbent is mid-cycle or has fewer prior wins (more vulnerable).",
+  founder_availability:
+    "Bonus when the assigned-pillar founder isn't already saturated with active pursuits.",
+  freshness:
+    "Recently posted opportunities score higher than ones approaching their archive date.",
+  capability_match:
+    "Cosine similarity between the opportunity's embedding and MacTech's capability statements. Higher = closer match to what we already do."
 };
 
 export default async function OpportunityDetailPage({
@@ -99,7 +119,7 @@ export default async function OpportunityDetailPage({
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <NoticeTypeBadge type={opp.notice_type} />
               <SetAsideBadge code={opp.set_aside} />
-              {opp.naics_code && <Badge tone="neutral">NAICS {opp.naics_code}</Badge>}
+              <NaicsBadge code={opp.naics_code} />
               {opp.solicitation_number && (
                 <Badge tone="neutral">Sol# {opp.solicitation_number}</Badge>
               )}
@@ -300,17 +320,24 @@ export default async function OpportunityDetailPage({
           </div>
 
           <div className="mt-5 border-t border-neutral-200 pt-4">
-            <p className="text-[11px] uppercase tracking-wider text-neutral-500">
-              Score breakdown
-            </p>
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+                Score breakdown
+              </p>
+              <p className="text-[11px] text-neutral-400">
+                Hover any component for the scoring rule.
+              </p>
+            </div>
             <ul className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {Object.entries(data.score.breakdown).map(([k, v]) => {
                 const max = SCORE_COMPONENT_MAX[k];
                 const pct = max ? Math.min(100, Math.max(0, (v / max) * 100)) : 0;
+                const help = SCORE_COMPONENT_HELP[k];
                 return (
                   <li
                     key={k}
-                    className="rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2"
+                    title={help}
+                    className="rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 transition-colors hover:border-neutral-300 hover:bg-white"
                   >
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="text-xs text-neutral-600">
@@ -330,6 +357,11 @@ export default async function OpportunityDetailPage({
                           style={{ width: `${pct}%` }}
                         />
                       </div>
+                    )}
+                    {help && (
+                      <p className="mt-1.5 line-clamp-2 text-[10px] leading-snug text-neutral-500">
+                        {help}
+                      </p>
                     )}
                   </li>
                 );

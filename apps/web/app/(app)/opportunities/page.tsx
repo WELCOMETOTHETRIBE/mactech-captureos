@@ -3,6 +3,7 @@ import { apiFetch, type OpportunityListResponse } from "@/lib/api";
 import {
   Badge,
   EmptyState,
+  NaicsBadge,
   NoticeTypeBadge,
   PageHeader,
   ScoreBadge,
@@ -242,9 +243,7 @@ export default async function OpportunitiesListPage({
                       <ScoreBadge score={opp.score} />
                       <NoticeTypeBadge type={opp.notice_type} />
                       <SetAsideBadge code={opp.set_aside} />
-                      {opp.naics_code && (
-                        <Badge tone="neutral">NAICS {opp.naics_code}</Badge>
-                      )}
+                      <NaicsBadge code={opp.naics_code} />
                       {opp.assigned_founder_slug && (
                         <Badge tone="violet">@{opp.assigned_founder_slug}</Badge>
                       )}

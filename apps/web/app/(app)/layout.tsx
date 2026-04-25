@@ -1,14 +1,7 @@
-import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
 import { apiFetch, type MeResponse } from "@/lib/api";
-
-const NAV = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/opportunities", label: "Opportunities" },
-  { href: "/pipeline", label: "Pipeline" },
-  { href: "/library", label: "Library" },
-  { href: "/settings", label: "Settings" }
-];
+import { SidebarNav } from "@/components/sidebar-nav";
+import { Pillar } from "@/components/ui";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   let me: MeResponse | null = null;
@@ -20,36 +13,62 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="grid min-h-screen grid-cols-[220px_1fr] bg-neutral-50">
-      <aside className="border-r border-neutral-200 bg-white">
+    <div className="grid min-h-screen grid-cols-[240px_1fr] bg-neutral-50">
+      <aside className="flex flex-col border-r border-neutral-200 bg-white">
         <div className="px-5 py-5 border-b border-neutral-200">
-          <p className="text-[10px] uppercase tracking-wider text-neutral-500">MacTech</p>
-          <p className="text-sm font-semibold text-neutral-900">CaptureOS</p>
+          <p className="text-[10px] uppercase tracking-wider text-neutral-500">
+            {me?.tenant.name ?? "MacTech"}
+          </p>
+          <p className="text-base font-semibold tracking-tight text-neutral-900">
+            CaptureOS
+          </p>
+          <p className="mt-1 text-[10px] text-neutral-400">
+            The operating system for defense contractors.
+          </p>
         </div>
-        <nav className="px-3 py-4 space-y-1">
-          {NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="block rounded-md px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900"
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-        {me?.founder && (
-          <div className="px-5 py-4 mt-4 border-t border-neutral-200 text-xs text-neutral-500">
-            <p className="font-medium text-neutral-700">{me.founder.full_name}</p>
-            <p>{me.founder.title}</p>
-            <p className="mt-1 capitalize">{me.founder.pillar} pillar</p>
-          </div>
-        )}
+
+        <SidebarNav />
+
+        <div className="mt-auto border-t border-neutral-200 px-5 py-4 text-xs">
+          {me?.founder ? (
+            <>
+              <p className="font-medium text-neutral-800">
+                {me.founder.full_name}
+              </p>
+              <p className="text-neutral-500">{me.founder.title}</p>
+              <div className="mt-2">
+                <Pillar pillar={me.founder.pillar} />
+              </div>
+            </>
+          ) : me ? (
+            <>
+              <p className="font-medium text-neutral-800">{me.user_email}</p>
+              <p className="mt-1 text-neutral-500">
+                Tenant member — not yet linked to a founder profile.
+              </p>
+            </>
+          ) : (
+            <p className="text-neutral-500">Loading session…</p>
+          )}
+        </div>
       </aside>
 
       <div className="flex flex-col">
         <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-3">
-          <div className="text-sm text-neutral-500">
-            {me?.tenant ? <span>{me.tenant.name}</span> : <span>—</span>}
+          <div className="flex items-center gap-3 text-sm text-neutral-600">
+            {me?.tenant ? (
+              <>
+                <span className="font-medium text-neutral-800">
+                  {me.tenant.name}
+                </span>
+                <span className="text-neutral-300">·</span>
+                <span className="text-xs uppercase tracking-wider text-neutral-500">
+                  {me.tenant.plan}
+                </span>
+              </>
+            ) : (
+              <span>—</span>
+            )}
           </div>
           <UserButton afterSignOutUrl="/" />
         </header>

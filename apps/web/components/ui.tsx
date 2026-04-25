@@ -89,10 +89,12 @@ export function Kpi({
 
 export function Badge({
   tone = "neutral",
-  children
+  children,
+  title
 }: {
   tone?: "neutral" | "blue" | "green" | "amber" | "red" | "violet";
   children: ReactNode;
+  title?: string;
 }) {
   const tones: Record<string, string> = {
     neutral: "bg-neutral-100 text-neutral-700 border-neutral-200",
@@ -104,7 +106,10 @@ export function Badge({
   };
   return (
     <span
-      className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium ${tones[tone]}`}
+      title={title}
+      className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium ${tones[tone]}${
+        title ? " cursor-help" : ""
+      }`}
     >
       {children}
     </span>
@@ -149,18 +154,106 @@ export function Pillar({ pillar }: { pillar: string }) {
     quality: "amber",
     governance: "violet"
   };
-  return <Badge tone={tones[pillar] ?? "neutral"}>{pillar}</Badge>;
+  const help: Record<string, string> = {
+    security:
+      "Security pillar (Patrick Caruso): RMF, ATO, ConMon, STIG, CMMC 2.0 L2, NIST CSF 2.0, FedRAMP Moderate.",
+    infrastructure:
+      "Infrastructure pillar (James Adams): data center architecture, virtualization, cloud, storage, network, IaC.",
+    quality:
+      "Quality pillar (Brian MacDonald): ISO 9001/17025, audit readiness, metrology, process documentation.",
+    governance:
+      "Governance pillar (John Milso): commercial contracts, corporate governance, M&A diligence, risk."
+  };
+  return (
+    <Badge tone={tones[pillar] ?? "neutral"} title={help[pillar]}>
+      {pillar}
+    </Badge>
+  );
+}
+
+export function NaicsBadge({ code }: { code: string | null | undefined }) {
+  if (!code) return null;
+  return (
+    <Badge
+      tone="neutral"
+      title="NAICS = North American Industry Classification System. The federal contracting taxonomy that determines small-business size standards and pursuit fit."
+    >
+      NAICS {code}
+    </Badge>
+  );
 }
 
 export function SetAsideBadge({ code }: { code: string | null }) {
-  if (!code) return <Badge tone="neutral">unrestricted</Badge>;
+  if (!code)
+    return (
+      <Badge
+        tone="neutral"
+        title="Unrestricted: any qualified business may compete. No socioeconomic preference."
+      >
+        unrestricted
+      </Badge>
+    );
   const upper = code.toUpperCase();
   if (upper.startsWith("SDVOSB") || upper === "VSA" || upper === "VSS") {
-    return <Badge tone="violet">{upper}</Badge>;
+    return (
+      <Badge
+        tone="violet"
+        title="Service-Disabled Veteran-Owned Small Business set-aside. MacTech's pending SDVOSB status applies here."
+      >
+        {upper}
+      </Badge>
+    );
   }
-  if (["SBA", "SBP", "SB"].includes(upper)) return <Badge tone="green">{upper}</Badge>;
-  if (upper === "NONE") return <Badge tone="neutral">unrestricted</Badge>;
-  return <Badge tone="neutral">{upper}</Badge>;
+  if (["SBA", "SBP", "SB"].includes(upper))
+    return (
+      <Badge
+        tone="green"
+        title="Small Business set-aside. Restricted to SBA-certified small businesses by NAICS size standard."
+      >
+        {upper}
+      </Badge>
+    );
+  if (upper === "NONE")
+    return (
+      <Badge
+        tone="neutral"
+        title="No set-aside designation; full-and-open competition."
+      >
+        unrestricted
+      </Badge>
+    );
+  if (upper === "8A" || upper.startsWith("8(A)"))
+    return (
+      <Badge
+        tone="violet"
+        title="SBA 8(a) Business Development program set-aside. Restricted to certified 8(a) firms."
+      >
+        {upper}
+      </Badge>
+    );
+  if (upper.startsWith("HUBZONE") || upper === "HZC")
+    return (
+      <Badge
+        tone="green"
+        title="HUBZone set-aside: businesses in Historically Underutilized Business Zones."
+      >
+        {upper}
+      </Badge>
+    );
+  if (upper.startsWith("WOSB") || upper.startsWith("EDWOSB"))
+    return (
+      <Badge
+        tone="green"
+        title="Women-Owned Small Business set-aside (or Economically Disadvantaged WOSB)."
+      >
+        {upper}
+      </Badge>
+    );
+  return (
+    <Badge tone="neutral" title={`Set-aside code: ${upper}`}>
+      {upper}
+    </Badge>
+  );
 }
 
 export function fmtMoney(n: number | null | undefined): string {
@@ -194,14 +287,60 @@ export function fmtRelativeDays(iso: string | null, days: number | null | undefi
 export function NoticeTypeBadge({ type }: { type: string | null }) {
   if (!type) return <Badge tone="neutral">unknown</Badge>;
   const t = type.toLowerCase();
-  if (t.includes("sources sought")) return <Badge tone="amber">sources sought</Badge>;
-  if (t.includes("award")) return <Badge tone="green">award</Badge>;
+  if (t.includes("sources sought"))
+    return (
+      <Badge
+        tone="amber"
+        title="Market research request. The agency wants capability statements before issuing a real RFP. Often the best leverage point — early."
+      >
+        sources sought
+      </Badge>
+    );
+  if (t.includes("award"))
+    return (
+      <Badge tone="green" title="Contract was awarded. Useful for incumbent intelligence on follow-on cycles.">
+        award
+      </Badge>
+    );
   if (t.includes("solicitation") && t.includes("synopsis"))
-    return <Badge tone="blue">combined synopsis</Badge>;
-  if (t.includes("solicitation")) return <Badge tone="blue">solicitation</Badge>;
-  if (t.includes("presolicitation")) return <Badge tone="blue">presolicitation</Badge>;
-  if (t.includes("special")) return <Badge tone="neutral">special notice</Badge>;
-  if (t.includes("justification")) return <Badge tone="neutral">justification</Badge>;
+    return (
+      <Badge
+        tone="blue"
+        title="Combined synopsis/solicitation: the formal RFP is on the table. Proposals are due."
+      >
+        combined synopsis
+      </Badge>
+    );
+  if (t.includes("solicitation"))
+    return (
+      <Badge tone="blue" title="Formal RFP / solicitation issued. Bidding window is open.">
+        solicitation
+      </Badge>
+    );
+  if (t.includes("presolicitation"))
+    return (
+      <Badge tone="blue" title="Heads-up: an RFP is coming on this requirement. Position now.">
+        presolicitation
+      </Badge>
+    );
+  if (t.includes("special"))
+    return (
+      <Badge
+        tone="neutral"
+        title="Special notice — agency announcement that doesn't fit standard categories."
+      >
+        special notice
+      </Badge>
+    );
+  if (t.includes("justification"))
+    return (
+      <Badge
+        tone="neutral"
+        title="Justification & Approval — sole-source award rationale. Generally too late to compete on this one but useful market signal."
+      >
+        justification
+      </Badge>
+    );
   return <Badge tone="neutral">{type}</Badge>;
 }
 

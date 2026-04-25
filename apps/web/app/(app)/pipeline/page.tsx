@@ -9,8 +9,7 @@ import {
 } from "@/lib/api";
 import { createPursuit, deletePursuit, updatePursuit } from "@/lib/pursuits";
 import {
-  Badge,
-  EmptyState,
+  NaicsBadge,
   NoticeTypeBadge,
   PageHeader,
   ScoreBadge,
@@ -107,18 +106,7 @@ export default async function PipelinePage({
       </div>
 
       {data.total === 0 ? (
-        <EmptyState
-          title="The pipeline is empty."
-          body="Pursuits live here once you triage an opportunity. Browse the scored list, open one, and click 'Add to pipeline' — it'll land in the Lead column."
-          action={
-            <Link
-              href="/opportunities?score_min=60"
-              className="rounded-md border border-neutral-900 bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-800"
-            >
-              Browse scored opportunities
-            </Link>
-          }
-        />
+        <FirstTimePipeline />
       ) : (
         <>
           {/* Active stages — horizontal scroll on small screens, 5-col grid on large */}
@@ -260,9 +248,7 @@ function Card({
       {!compact && (
         <div className="mt-2 flex flex-wrap gap-1">
           {opp.set_aside && <SetAsideBadge code={opp.set_aside} />}
-          {opp.naics_code && (
-            <Badge tone="neutral">NAICS {opp.naics_code}</Badge>
-          )}
+          <NaicsBadge code={opp.naics_code} />
         </div>
       )}
 
@@ -423,6 +409,80 @@ function OwnerSelect({
         set
       </button>
     </form>
+  );
+}
+
+function FirstTimePipeline() {
+  return (
+    <div className="rounded-md border border-neutral-200 bg-white p-8">
+      <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+        First time here?
+      </p>
+      <h2 className="mt-1 text-lg font-semibold text-neutral-900">
+        The pipeline is empty.
+      </h2>
+      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-neutral-600">
+        The kanban tracks active pursuits. Pursuits land here when you open an
+        opportunity and click <em>Add to pipeline</em>. Each pursuit moves
+        through six stages — you advance them with one click as the pursuit
+        matures.
+      </p>
+
+      <ol className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+        <li className="rounded-md border border-neutral-100 bg-neutral-50 p-4">
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-neutral-900 text-[10px] font-semibold text-white tabular-nums">
+            1
+          </span>
+          <h3 className="mt-2 text-sm font-semibold text-neutral-900">
+            Open an opportunity
+          </h3>
+          <p className="mt-1 text-xs leading-relaxed text-neutral-600">
+            From the dashboard top-5 or the full opportunities feed. Anything
+            scoring 60+ is digest-eligible and worth a closer look.
+          </p>
+        </li>
+        <li className="rounded-md border border-neutral-100 bg-neutral-50 p-4">
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-neutral-900 text-[10px] font-semibold text-white tabular-nums">
+            2
+          </span>
+          <h3 className="mt-2 text-sm font-semibold text-neutral-900">
+            Click &ldquo;Add to pipeline&rdquo;
+          </h3>
+          <p className="mt-1 text-xs leading-relaxed text-neutral-600">
+            On the opportunity detail page, just below the header. The pursuit
+            self-assigns to you and lands in the Lead column.
+          </p>
+        </li>
+        <li className="rounded-md border border-neutral-100 bg-neutral-50 p-4">
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-neutral-900 text-[10px] font-semibold text-white tabular-nums">
+            3
+          </span>
+          <h3 className="mt-2 text-sm font-semibold text-neutral-900">
+            Advance through stages
+          </h3>
+          <p className="mt-1 text-xs leading-relaxed text-neutral-600">
+            Lead &rarr; Qualify &rarr; Pursue &rarr; Propose &rarr; Submit
+            &rarr; Won/Lost. Reassign owners or remove from the pipeline at any
+            time.
+          </p>
+        </li>
+      </ol>
+
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        <Link
+          href="/opportunities?score_min=60"
+          className="rounded-md border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+        >
+          Browse scored opportunities &rarr;
+        </Link>
+        <Link
+          href="/dashboard"
+          className="rounded-md border border-neutral-300 px-4 py-2 text-sm hover:border-neutral-500"
+        >
+          Back to dashboard
+        </Link>
+      </div>
+    </div>
   );
 }
 

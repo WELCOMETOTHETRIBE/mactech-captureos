@@ -54,6 +54,9 @@ export default async function DashboardPage() {
         }
       />
 
+      <HowItWorks />
+
+
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Kpi
           label="Opportunities"
@@ -94,15 +97,27 @@ export default async function DashboardPage() {
         {data.your_top.length === 0 ? (
           <div className="mt-3">
             <EmptyState
-              title="No opportunities scored ≥ 60 in your lane today."
-              body="Ingestion runs every 2 hours, scoring every 20 minutes. Check back after the next sweep — or browse all opportunities."
+              title="No high-fit opportunities in your lane today."
+              body={
+                data.you
+                  ? `Nothing currently scored \u2265 60 with your NAICS / set-aside profile and assigned to ${data.you.full_name.split(" ")[0]}. Ingestion runs every 2h, scoring every 20m \u2014 the next sweep may add some. In the meantime, browsing all scored opps lowers the bar.`
+                  : "Once your account is linked to a founder profile, your top scored opportunities will surface here."
+              }
               action={
-                <Link
-                  href="/opportunities"
-                  className="rounded-md border border-neutral-300 px-3 py-2 text-sm hover:border-neutral-500"
-                >
-                  Browse opportunities
-                </Link>
+                <div className="flex justify-center gap-2">
+                  <Link
+                    href="/opportunities?score_min=40"
+                    className="rounded-md border border-neutral-900 bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+                  >
+                    Browse opps ≥ 40
+                  </Link>
+                  <Link
+                    href="/opportunities"
+                    className="rounded-md border border-neutral-300 px-3 py-2 text-sm hover:border-neutral-500"
+                  >
+                    Browse all
+                  </Link>
+                </div>
               }
             />
           </div>
@@ -184,8 +199,72 @@ export default async function DashboardPage() {
       </section>
 
       <footer className="pt-2 text-xs text-neutral-500">
-        Last refreshed {fmtDate(data.rendered_at)}
+        Last refreshed {fmtDate(data.rendered_at)}. Ingestion: every 2h. Scoring:
+        every 20m. Digest: weekdays 6am ET.
       </footer>
     </div>
+  );
+}
+
+function HowItWorks() {
+  return (
+    <section
+      aria-label="How CaptureOS works"
+      className="rounded-md border border-neutral-200 bg-white p-5"
+    >
+      <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+        How CaptureOS works
+      </p>
+      <ol className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+        <Step
+          n={1}
+          title="Browse"
+          body="Every federal SAM.gov notice scored 0–100 against MacTech's NAICS profile, set-aside fit, and capability statements via pgvector cosine similarity."
+          cta={{ href: "/opportunities", label: "Open the feed →" }}
+        />
+        <Step
+          n={2}
+          title="Triage"
+          body="Open any opportunity, review the score breakdown, incumbent intelligence, and matched capability statements. Click \u201CAdd to pipeline\u201D when it's worth a pursuit."
+          cta={{ href: "/opportunities?score_min=60", label: "Top scored →" }}
+        />
+        <Step
+          n={3}
+          title="Track"
+          body="Pursuits flow Lead \u2192 Qualify \u2192 Pursue \u2192 Propose \u2192 Submit \u2192 Won/Lost on the kanban. Advance with one click; reassign owners inline."
+          cta={{ href: "/pipeline", label: "Open kanban →" }}
+        />
+      </ol>
+    </section>
+  );
+}
+
+function Step({
+  n,
+  title,
+  body,
+  cta
+}: {
+  n: number;
+  title: string;
+  body: string;
+  cta: { href: string; label: string };
+}) {
+  return (
+    <li className="rounded-md border border-neutral-100 bg-neutral-50 p-4">
+      <div className="flex items-baseline gap-2">
+        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-neutral-900 text-[10px] font-semibold text-white tabular-nums">
+          {n}
+        </span>
+        <h3 className="text-sm font-semibold text-neutral-900">{title}</h3>
+      </div>
+      <p className="mt-2 text-xs leading-relaxed text-neutral-600">{body}</p>
+      <Link
+        href={cta.href}
+        className="mt-3 inline-block text-xs font-medium text-blue-700 hover:underline"
+      >
+        {cta.label}
+      </Link>
+    </li>
   );
 }
