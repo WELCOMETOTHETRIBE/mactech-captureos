@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     clerk_publishable_key: str = Field(default="")
     clerk_secret_key: str = Field(default="")
     clerk_jwt_key: str = Field(default="")
+    clerk_frontend_api: str = Field(default="")  # e.g. "something-12.clerk.accounts.dev"
+    cors_allow_origins: str = Field(
+        default="http://localhost:3000,https://capture.mactechsolutionsllc.com"
+    )
 
     sentry_dsn: str = Field(default="")
     posthog_api_key: str = Field(default="")

@@ -1,7 +1,9 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from sqlalchemy import text
 
+from mactech_api.routes.me import router as me_router
 from mactech_api.routes.opportunities import router as opportunities_router
 from mactech_api.settings import settings
 from mactech_db import async_session_factory
@@ -12,6 +14,18 @@ app = FastAPI(
     description="The operating system for defense contractors.",
 )
 
+_origins = [
+    o.strip() for o in settings.cors_allow_origins.split(",") if o.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+)
+
+app.include_router(me_router)
 app.include_router(opportunities_router)
 
 
