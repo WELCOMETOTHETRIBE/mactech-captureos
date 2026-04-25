@@ -389,3 +389,63 @@ Brian/Patrick/James each got 5 real scored opportunities with Claude rationale. 
 
 ### Phase 1: closed.
 Revenue Line Zero now has a continuous, autonomous federal-opportunity intelligence engine running on a $15–35/mo infrastructure footprint. Tuesday 6am ET, weekday autopilot. The instrument is live.
+
+---
+
+## 2026-04-24 — Phase 2 Week 5: dashboard shell + Clerk auth — LIVE
+
+### Shipped
+- **Migration 0006** (`0006_clerk_and_rls`) — `tenants.clerk_org_id` (unique, nullable). RLS deferred to Phase 4 with rationale captured in the migration docstring (one-tenant-only-now ⇒ no real risk to prevent ⇒ avoid worker-task SET LOCAL retrofit).
+- **Tenant-scoped session helper** at [packages/db/src/mactech_db/tenant_scope.py](packages/db/src/mactech_db/tenant_scope.py) — `scoped_session(tenant_id)` and `unscoped_session()` async context managers. The auth dep uses `scoped_session`; today it sets `app.tenant_id` (harmless), in Phase 4 the same call site enforces RLS — no call-site churn at flip time.
+- **FastAPI Clerk JWT verifier** at [apps/api/src/mactech_api/auth.py](apps/api/src/mactech_api/auth.py) — RS256 verification against Clerk's published JWKS. Reads the `tenant_org_id`, `tenant_org_slug`, `founder_slug` claims from the `mactech` JWT template. Resolves Clerk org → MacTech tenant by `tenants.clerk_org_id`, JIT-provisions a `users` row if one doesn't exist, returns `RequestContext` with user + tenant + founder + a tenant-scoped DB session.
+- **`GET /me` + `GET /me/dashboard`** at [apps/api/src/mactech_api/routes/me.py](apps/api/src/mactech_api/routes/me.py). Dashboard endpoint returns the entire "This Week" payload in one call: top-5 scored opps assigned to the authenticated founder, four pillar cards, four tenant-wide KPIs.
+- **CORS middleware** reading `CORS_ALLOW_ORIGINS` env var.
+- **Next.js 16 web app** at [apps/web/](apps/web/):
+  - `<ClerkProvider>` inside `<body>` (per the Next 16 / current Clerk quickstart)
+  - `clerkMiddleware()` in [`apps/web/proxy.ts`](apps/web/proxy.ts) — Next.js 16 renamed the `middleware.ts` convention to `proxy.ts`. Aligned and bumped to `next ^16.2.0`.
+  - Hosted Clerk sign-in/sign-up at `/sign-in` and `/sign-up`
+  - Authenticated `(app)/` route group with sidebar (Dashboard / Opportunities / Pipeline / Library / Settings) + topbar with `<UserButton />`
+  - Dashboard page at `/dashboard` rendering live KPI cards, "Your top N" with Claude rationale, incumbent line, SAM.gov link, four pillar cards
+  - Server-side `apiFetch<T>()` helper that pulls a Clerk session token signed with the `mactech` template and attaches as Bearer
+  - `force-dynamic` at root layout + custom `not-found.tsx` to skip prerender for an entirely auth-gated app
+- **`mactech-web` Railway service** ([service id `896d0220-b226-4052-92c1-0f2eafb85550`](https://railway.com/project/644284bd-ab31-41cd-89ae-fc3ce0c8a705/service/896d0220-b226-4052-92c1-0f2eafb85550?environmentId=b5587be1-7c74-44eb-a7ad-a71766f80693)) — fourth GitHub-connected service. Per-service `apps/web/railway.json` config (set via dashboard `Config-as-Code Path` field — same one-click step as workers). Public URL: https://mactech-web-production.up.railway.app
+
+### Verified live
+Patrick signed in via Clerk's hosted UI on https://mactech-web-production.up.railway.app/sign-in, set `founder_slug: "patrick-caruso"` in his Clerk public metadata, signed back in, and landed on `/dashboard` showing:
+- Sidebar: Patrick Caruso, Director of Cyber Assurance, Security Pillar
+- Header: MacTech Solutions LLC + UserButton with org switcher
+- KPIs: 895 opportunities, 95 scored ≥60, 138 enriched with incumbent intel
+- Top 5: VISN 5 Video Surveillance (score 70), VA Long Beach RTLS (score 69, Dell Federal $1.7B), TBM and Accounting Technical Enablement (score 69), and two more, each with Claude-written rationale citing MacTech's specific capabilities
+- Pillar cards across the bottom
+
+Screenshot caught it; product working end-to-end.
+
+### Bugs caught and fixed during the sprint
+- **Initial Clerk org id mismatch** — the `org_3CpL...` value originally provided didn't match what Patrick's actual Clerk session carried (`org_3CpM...`). Clerk likely auto-created an org during onboarding. Fix: one SQL UPDATE on `tenants.clerk_org_id` to match the JWT.
+- **Postgres `SET LOCAL` doesn't accept bind parameters** — `tenant_scope.scoped_session()` originally ran `SET LOCAL app.tenant_id = :t` which asyncpg converted to `SET LOCAL app.tenant_id = $1::VARCHAR`. Postgres rejects this with `syntax error at or near "$1"`. Fix: switched to `select set_config('app.tenant_id', :t, true)` — the `true` third arg makes set_config transaction-local, equivalent to SET LOCAL, AND set_config does accept bind params.
+- **Next.js 16 prerender for auth-gated routes** — Next.js 16 statically prerenders by default. `(app)/layout.tsx` calls `auth()` from Clerk which reads request headers, making routes inherently dynamic. Build failed with "Dynamic server usage" + "_not-found prerender". Fix: `export const dynamic = "force-dynamic"` at the root layout (propagates to all children) + custom `not-found.tsx`.
+- **`<ClerkProvider>` placement** — the original code wrapped the `<html>` element; Next.js 16 + current Clerk docs put it inside `<body>`. Aligned.
+- **`headers` spread strict-TS** — initial `apiFetch` spread `init.headers` over an object literal; switched to `new Headers(init.headers)` + `.set()` for cleaner typing.
+- **`eslint` config key in next.config.js** — Next.js 16 deprecated. Removed (lint is run separately via `next lint` flags now).
+- **`capitalize` cascade on email** — the dashboard subtitle's `<p className="capitalize">` title-cased the founder's email. Fix: scoped `capitalize` to a `<span>` around the pillar word only.
+
+### Phase 4 prep that landed alongside (architecturally clean)
+The `tenant_scope.scoped_session()` interface, `tenants.clerk_org_id` column, and the auth dep that already calls `scoped_session(tenant.id)` mean activating RLS in Phase 4 is a one-migration change with **zero call-site churn**. We're not building tech debt; we're shipping the right architecture from the start.
+
+### What runs continuously now (final Phase 1 + Phase 2 Week 5 cadence)
+| Cadence | Job | What it does |
+|---|---|---|
+| Every 2h | `mactech.sam.ingest_all` | Sweep MacTech's 20 NAICS for new SAM opportunities |
+| Every 30 min | `mactech.enrich.batch` | USASpending incumbent + SAM exclusions |
+| Every 15 min | `mactech.embed.batch` | Voyage embeddings |
+| Every 20 min | `mactech.score.batch` | Scoring + Claude rationale |
+| 6am ET Mon-Fri | `mactech.digest.send_all` | Founder morning digest via Resend |
+| On user request | `GET /me/dashboard` | Same data, via the live web dashboard |
+
+### Cost
+Total Railway services: 5 (mactech-api, mactech-workers, mactech-web, Postgres, Redis). Estimated monthly: $25–50. Within budget.
+
+### Next up
+- **Phase 2 Week 6** ([docs/ROADMAP.md](docs/ROADMAP.md)): full opportunities feed UI with filters (NAICS, agency, set-aside, value, score threshold), per-opp detail page (the deep-value capture surface from `docs/MACTECH_PLAYBOOK.md` §6).
+- **Phase 2 Week 7**: capture pipeline kanban (Lead → Qualify → Pursue → Propose → Submit → Won/Lost). The "Pipeline" sidebar link currently points to a placeholder.
+- **Phase 2 Week 8**: capability statements + past performance UI. The "Library" sidebar link is a placeholder.

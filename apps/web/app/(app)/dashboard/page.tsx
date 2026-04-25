@@ -30,8 +30,10 @@ export default async function DashboardPage() {
           {data.you ? `Good morning, ${data.you.full_name.split(" ")[0]}.` : "Dashboard"}
         </h1>
         {data.you && (
-          <p className="mt-1 text-sm text-neutral-600 capitalize">
-            {data.you.pillar} pillar · {data.you.email ?? "no email on file"}
+          <p className="mt-1 text-sm text-neutral-600">
+            <span className="capitalize">{data.you.pillar}</span> pillar
+            {" · "}
+            {data.you.email ?? "no email on file"}
           </p>
         )}
       </header>
