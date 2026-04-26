@@ -1372,3 +1372,50 @@ Sprint 9's NAICS picker writes `tenant.target_naics`. Sprint 10 wired the scorin
 - **Async OCR worker task** — move OCR to a Celery job so import requests stay fast on big scans.
 - **Drop the non-streaming `/ask`, `/drafts/.../sources-sought`, `/regenerate` endpoints** now that streaming is proven.
 - **Tenant-bound SAM ingest on onboarding** — for genuinely net-new NAICS, fire a one-off SAM search alongside the first-score task so the tenant doesn't wait the full 2h for the next cron ingest.
+
+---
+
+## 2026-04-25 — Sprint 16: tenant-bound SAM ingest on onboarding
+
+User said "execute sprint 16". Closes the last productization loophole. Sprint 15 fired a scoring task on onboarding completion, but only worked for tenants whose NAICS overlapped with the existing corpus. For genuinely novel NAICS, the tenant still waited up to 2h for the next cron-driven SAM ingest. Sprint 16 chains a one-off SAM ingest before the score so any tenant — including ones with NAICS we've never pulled — sees their first slate within minutes.
+
+### Worker — first_feed_ingest_for_tenant
+- **[sam_ingest.py](apps/workers/src/mactech_workers/tasks/sam_ingest.py)** new `first_feed_ingest_for_tenant(tenant_slug, *, backfill_days=30)`:
+  - Loads the tenant's `target_naics` (Sprint 9). If empty, falls back to seed-config NAICS so MacTech-style tenants still get a useful first feed.
+  - Sequentially calls `ingest_one_naics(code, backfill_days=30)` for each. The existing per-NAICS ingest is idempotent (uses `IngestionState` for resume + opportunity-source-id upserts), so re-runs are safe.
+  - On completion, fires `mactech.onboarding.first_score` via Celery so scoring kicks in against the freshly-ingested opps.
+- New Celery task `mactech.onboarding.first_feed_ingest(tenant_slug, backfill_days=30)`. Auto-registers via the existing `import mactech_workers.tasks.sam_ingest` side-effect.
+
+### API — onboarding/complete branches on target_naics
+- **[routes/onboarding.py](apps/api/src/mactech_api/routes/onboarding.py) `complete_onboarding`** branches:
+  - **target_naics non-empty** → fire `mactech.onboarding.first_feed_ingest` (Sprint 16 path). The ingest task chains into scoring on completion.
+  - **target_naics empty** → fire `mactech.onboarding.first_score` directly (Sprint 15 path; existing corpus already covers what the cron beat ingests).
+- Both paths are non-blocking. Failures logged; cron beats are the safety net.
+
+### Web — dashboard banner copy + window
+- **[dashboard/page.tsx](apps/web/app/(app)/dashboard/page.tsx)** the `firstFeedLoading` window stretches to 60 minutes when `target_naics` is non-empty (SAM ingest path), 30 minutes otherwise.
+- Banner copy adapts:
+  - With NAICS targets: "Pulling opportunities from SAM.gov for your N NAICS targets, then scoring them against your firm profile. Usually 3–10 minutes for the first run."
+  - Without: "Scoring opportunities against your firm profile — usually 1–3 minutes."
+- Banner disappears naturally once any KPI goes non-zero.
+
+### Verification
+- `tsc --noEmit` clean across `apps/web`.
+- `python3 -m py_compile` clean on the modified worker + API route.
+- Existing `ingest_one_naics` is idempotent so a tenant's NAICS that overlaps with the cron beat's seed-driven set just no-ops — no duplicate opportunity rows.
+
+### What this changes for users
+- **Brand-new tenant with cybersecurity NAICS** (e.g., 541512, 541519): wizard completes → SAM ingest fires for those codes → scoring fires → dashboard shows scored opps in ~3–10 min. Was: wait up to 2h for the next cron SAM ingest, then up to 20 min for scoring.
+- **Brand-new tenant with overlapping NAICS** (matches cron's seed list): scoring-only path from Sprint 15 still applies. ~1–3 min.
+- **MacTech today**: identical (`target_naics` is null; banner condition never triggers because plenty of scored opps exist).
+
+### Trade-offs called out
+- **30-day SAM lookback**, not 14. SAM's posted-date window for the initial pull is generous because a tenant might pick a NAICS the cron beat hasn't ingested for the full 30-day window. This is a one-time cost per tenant.
+- **Sequential per-NAICS**, not parallel. SAM rate-limits aggressive parallelism; the cron beat is sequential too. A tenant with 10 NAICS targets will see ingest take ~3-10 minutes.
+- **No progress signal beyond the banner.** The user sees "Loading your first feed" + a Refresh button. We don't expose ingest progress as a structured percentage. If users complain, a future sprint can wire the `IngestionState` per-NAICS rows into a progress UI.
+- **Failure mode is silent.** If SAM rate-limits or errors mid-ingest, the banner stays visible until 60 min elapses or the cron beat catches up. Good enough.
+
+### Sprint 17 candidates left
+- **Async OCR worker task** — move OCR to a Celery job so import requests stay fast on big scans.
+- **Drop the non-streaming `/ask`, `/drafts/.../sources-sought`, `/regenerate` endpoints** now that streaming is proven across both surfaces.
+- **Multi-tenant scoring fan-out** — the cron `score_batch_task` is still pinned to one tenant via `MACTECH_TENANT_SLUG` env. With the Sprint 11 founder-scoping done, the cron should iterate tenants too.

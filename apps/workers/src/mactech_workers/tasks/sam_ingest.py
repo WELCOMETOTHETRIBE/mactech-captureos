@@ -314,3 +314,95 @@ def ingest_one_naics_task(naics_code: str, *, backfill_days: int = DEFAULT_BACKF
 @celery_app.task(name="mactech.sam.ingest_all")
 def ingest_all_task(*, backfill_days: int = DEFAULT_BACKFILL_DAYS) -> list[dict[str, Any]]:
     return [asdict(s) for s in asyncio.run(ingest_all_mactech_naics(backfill_days=backfill_days))]
+
+
+# --- First-feed ingest for net-new tenants (Sprint 16) ---
+
+
+async def first_feed_ingest_for_tenant(
+    tenant_slug: str,
+    *,
+    backfill_days: int = 30,
+) -> dict[str, Any]:
+    """Sequential ingest for one tenant's full NAICS list, then chain
+    into a one-off scoring sweep so the new tenant sees scored opps in
+    minutes instead of hours.
+
+    If the tenant has no `target_naics` set, this falls back to the
+    seed-config NAICS list — same behaviour as the cron beat — so
+    MacTech-style tenants who haven't customised their picker still
+    get a useful first feed.
+    """
+    from mactech_db.models import Tenant as _T
+
+    session_factory = async_session_factory()
+    async with session_factory() as session:
+        tenant = (
+            await session.execute(select(_T).where(_T.slug == tenant_slug))
+        ).scalar_one_or_none()
+        if tenant is None:
+            return {
+                "tenant_slug": tenant_slug,
+                "status": "tenant_not_found",
+                "naics_count": 0,
+                "ingest_stats": [],
+            }
+
+        target_naics: list[str] = list(tenant.target_naics or [])
+
+        if not target_naics:
+            seeded = (
+                await session.execute(
+                    select(NaicsCode.code).where(
+                        NaicsCode.mactech_tier.in_(["primary", "secondary"])
+                    )
+                )
+            ).scalars().all()
+            target_naics = list(seeded)
+
+    log.info(
+        "first-feed ingest for tenant=%s — %d NAICS, backfill=%d days",
+        tenant_slug,
+        len(target_naics),
+        backfill_days,
+    )
+    stats: list[IngestStats] = []
+    for code in target_naics:
+        try:
+            s = await ingest_one_naics(code, backfill_days=backfill_days)
+            stats.append(s)
+        except Exception as exc:  # noqa: BLE001
+            log.exception("first-feed ingest naics=%s failed: %s", code, exc)
+
+    # Chain into scoring so the freshly-ingested opps land in the user's
+    # dashboard via the same Sprint 15 path. Fire as a separate Celery
+    # task so this function returns promptly and the chain stays observable.
+    try:
+        celery_app.send_task(
+            "mactech.onboarding.first_score",
+            args=[tenant_slug],
+            kwargs={"batch_size": 200},
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning(
+            "first-feed ingest finished but couldn't fire score task: %s",
+            exc,
+        )
+
+    return {
+        "tenant_slug": tenant_slug,
+        "status": "ok",
+        "naics_count": len(target_naics),
+        "ingest_stats": [asdict(s) for s in stats],
+    }
+
+
+@celery_app.task(name="mactech.onboarding.first_feed_ingest")
+def first_feed_ingest_task(
+    tenant_slug: str, backfill_days: int = 30
+) -> dict[str, Any]:
+    return asyncio.run(
+        first_feed_ingest_for_tenant(
+            tenant_slug, backfill_days=backfill_days
+        )
+    )

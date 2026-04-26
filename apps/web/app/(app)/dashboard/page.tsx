@@ -32,19 +32,24 @@ export default async function DashboardPage() {
   const onboardingIncomplete =
     me.tenant.onboarding_completed_at === null;
 
-  // First-feed preview banner: onboarding just completed (within 30 min)
-  // AND no opportunities have scored yet. The first_score Celery task
-  // fired by /me/onboarding/complete typically lands within 1–3 minutes;
-  // the 30-min window covers worst-case worker backlog.
+  // First-feed preview banner: onboarding just completed AND no scored
+  // opps yet. Two paths:
+  //   - target_naics set → SAM ingest + score chain (Sprint 16):
+  //     ingest pulls all opps for picked NAICS (~1-3 min per NAICS),
+  //     then chains scoring. Worst-case ~10 minutes for 5+ NAICS.
+  //   - target_naics empty → score-only against existing corpus
+  //     (Sprint 15): ~1-3 minutes.
+  // 60-min window covers worst-case for the SAM path.
   const completedAt = me.tenant.onboarding_completed_at
     ? new Date(me.tenant.onboarding_completed_at)
     : null;
   const minsSinceCompletion = completedAt
     ? (Date.now() - completedAt.getTime()) / 60_000
     : Infinity;
+  const hasNaicsTargets = me.tenant.target_naics.length > 0;
   const firstFeedLoading =
     !onboardingIncomplete &&
-    minsSinceCompletion < 30 &&
+    minsSinceCompletion < (hasNaicsTargets ? 60 : 30) &&
     data.kpis.scored_above_60 === 0 &&
     data.kpis.your_high_fit_open === 0 &&
     data.kpis.your_active_pursuits === 0;
@@ -107,9 +112,20 @@ export default async function DashboardPage() {
               Loading your first feed
             </p>
             <p className="mt-1 text-sm text-brand-900">
-              We&rsquo;re scoring opportunities against your NAICS profile
-              right now — usually takes 1–3 minutes. Refresh this page to
-              see the first scored opps as they land.
+              {hasNaicsTargets ? (
+                <>
+                  Pulling opportunities from SAM.gov for your{" "}
+                  {me.tenant.target_naics.length} NAICS targets, then scoring
+                  them against your firm profile. Usually 3–10 minutes for
+                  the first run; refresh to see opps as they land.
+                </>
+              ) : (
+                <>
+                  Scoring opportunities against your firm profile — usually
+                  1–3 minutes. Refresh this page to see the first scored
+                  opps as they land.
+                </>
+              )}
             </p>
           </div>
           <Link

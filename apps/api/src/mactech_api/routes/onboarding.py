@@ -224,24 +224,43 @@ async def complete_onboarding(
     tenant.onboarding_completed_at = datetime.now(timezone.utc)
     await ctx.session.flush()
 
-    # First-feed preview (Sprint 15): fire a one-off scoring sweep so the
-    # tenant doesn't have to wait for the next 20-min cron beat to see
-    # scored opportunities. Non-blocking — failure here doesn't block
-    # onboarding completion (the cron beat picks them up anyway).
+    # First-feed preview: fire SAM ingest (Sprint 16) + scoring (Sprint 15)
+    # so the tenant doesn't have to wait for cron beats. Non-blocking;
+    # failure here doesn't block the onboarding flag flip — the cron beats
+    # will eventually catch up.
     try:
         from mactech_workers.celery_app import celery_app
 
-        celery_app.send_task(
-            "mactech.onboarding.first_score",
-            args=[tenant.slug],
-            kwargs={"batch_size": 200},
-        )
-        log.info(
-            "fired first_score task for newly-completed tenant %s", tenant.slug
-        )
+        if tenant.target_naics:
+            # Tenant picked specific NAICS — pull SAM for those (most likely
+            # scenario), then chain into scoring. Sprint 16 path.
+            celery_app.send_task(
+                "mactech.onboarding.first_feed_ingest",
+                args=[tenant.slug],
+                kwargs={"backfill_days": 30},
+            )
+            log.info(
+                "fired first_feed_ingest for tenant %s (%d NAICS targets)",
+                tenant.slug,
+                len(tenant.target_naics),
+            )
+        else:
+            # No NAICS targets set — opportunities corpus already covers
+            # whatever the cron beat ingests. Just score what's there.
+            # Sprint 15 path.
+            celery_app.send_task(
+                "mactech.onboarding.first_score",
+                args=[tenant.slug],
+                kwargs={"batch_size": 200},
+            )
+            log.info(
+                "fired first_score for tenant %s (no target_naics; "
+                "scoring against existing corpus)",
+                tenant.slug,
+            )
     except Exception as exc:  # noqa: BLE001
         log.warning(
-            "failed to fire first_score task for tenant %s: %s",
+            "failed to fire first-feed task for tenant %s: %s",
             tenant.slug,
             exc,
         )
