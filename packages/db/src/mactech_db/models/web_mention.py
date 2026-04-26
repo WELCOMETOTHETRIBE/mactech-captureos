@@ -24,7 +24,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from mactech_db.base import Base
 
 
-WEB_MENTION_KINDS = ("program", "incumbent", "agency_news")
+WEB_MENTION_KINDS = ("program", "incumbent", "press", "agency_news")
 
 
 class WebMentionCache(Base):

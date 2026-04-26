@@ -1443,8 +1443,9 @@ function IntelStat({
 /* ── Web mentions card (SerpAPI) ───────────────────────────────── */
 
 const KIND_LABEL: Record<string, string> = {
-  program: "Program / press",
-  incumbent: "Incumbent context",
+  program: "Program",
+  incumbent: "Incumbent risk",
+  press: "Industry press",
   agency_news: "Agency news"
 };
 

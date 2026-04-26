@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
@@ -79,33 +80,126 @@ class WebMentionsResponse(_Out):
     has_serpapi_key: bool
 
 
+# Domains that just mirror SAM.gov listings without adding intel —
+# excluding them with -site: dramatically increases signal quality.
+# Tuned against real opportunities; revisit when bookmarking new
+# aggregators in the wild.
+_AGGREGATOR_DOMAINS = (
+    "sam.gov",
+    "govtribe.com",
+    "highergov.com",
+    "samclerk.com",
+    "mysetaside.com",
+    "globaltenders.com",
+    "tenderimpulse.com",
+    "govcontoday.com",
+    "g2xchange.com",
+    "gsaelibrary.gsa.gov",
+    "proposalhelper.com",
+    "bidbanana.thebidlab.com",
+    "opengrants.io",
+    "ops.opengrants.io",
+    "sweetspotgov.com",
+    "cleat.ai",
+    "govcontractfinder.com",
+    "govdash.com",
+    "usaspending.gov",
+    "federalschedules.com",
+    "biddetail.com",
+    "publicbidsearch.com",
+    "instantmarkets.com",
+    "tendersontime.com",
+    "tendersinfo.com",
+    "biztorg.com",
+)
+_EXCLUDE_AGGREGATORS = " ".join(f"-site:{d}" for d in _AGGREGATOR_DOMAINS)
+
+
+# Top-level agency names that are too broad to be useful in a query.
+# Map to a canonical short form, then fall through to a deeper segment
+# for specificity.
+_AGENCY_TOP_REWRITES = {
+    "VETERANS AFFAIRS, DEPARTMENT OF": "VA",
+    "DEPT OF DEFENSE": "DoD",
+    "DEPT OF HOMELAND SECURITY": "DHS",
+}
+
+
+def _short_agency(agency_full: str | None) -> str:
+    """Pick the most specific *useful* agency segment from a SAM full
+    path. Prefer segments[2] (sub-bureau like NAVAIR, USACE) when it
+    exists and isn't a duplicate of segments[0]. Strip parenthesized
+    office codes like "(36C247)" and leading numeric prefixes like
+    "247-"."""
+    if not agency_full:
+        return ""
+    segs = [s.strip() for s in agency_full.split(".") if s.strip()]
+    if not segs:
+        return ""
+    top_canonical = _AGENCY_TOP_REWRITES.get(segs[0], segs[0])
+    if len(segs) >= 3 and segs[2] != segs[0]:
+        seg = segs[2]
+        # Drop "(36C247)" and "247-" admin codes that hurt query recall.
+        seg = re.sub(r"\(\d+[A-Z]+\d*\)", "", seg).strip()
+        seg = re.sub(r"^\d+-", "", seg).strip()
+        if seg:
+            return seg
+    return top_canonical
+
+
 def _build_queries(
     opp: OpportunityRaw, enr: OpportunityEnriched | None
 ) -> list[tuple[str, str]]:
-    """Return (kind, query) pairs to issue. Skip kinds whose inputs are
-    missing — e.g., no incumbent name, no agency."""
+    """Return (kind, query) pairs to issue. Three kinds:
+
+      program    — direct match on the program/RFP title scoped to the
+                   sub-bureau. Aggregator exclusions kill SAM-mirror SEO.
+      incumbent  — incumbent contractor + substantive corporate signal
+                   keywords (lawsuit, layoffs, GAO, settlement, etc.).
+                   The interesting question isn't "do they have any
+                   federal contracts" (we know from USASpending) — it's
+                   "is this incumbent in trouble?"
+      press      — program-specific press scoped to industry-news
+                   surfaces (govconwire, fedscoop, breaking defense).
+
+    Skip kinds whose inputs are missing — e.g., no incumbent name. The
+    old `agency_news` kind was structurally noisy (returned NAICS
+    directory pages) and is replaced by `press`.
+    """
     out: list[tuple[str, str]] = []
     title = (opp.title or "").strip()
-    agency_full = (opp.agency or "").strip()
-    agency_short = agency_full.split(".")[0].strip() if agency_full else ""
+    agency = _short_agency(opp.agency)
+    sol = (opp.solicitation_number or "").strip()
 
     if title:
-        # Quote the title so search hits press/govwide releases that
-        # reference the program by name, not just keyword overlap.
-        q = f'"{title[:120]}"'
-        if agency_short:
-            q = f"{q} {agency_short}"
+        title_core = title[:80]
+        q = f'"{title_core}" {agency} {_EXCLUDE_AGGREGATORS}'.strip()
         out.append(("program", q))
 
     if enr and enr.incumbent_name:
         incumbent = enr.incumbent_name.strip()
         if incumbent:
-            q = f'"{incumbent}" {agency_short or "federal"} contract'
-            out.append(("incumbent", q.strip()))
+            # Hunt for substance, not award listings.
+            q = (
+                f'"{incumbent}" '
+                f'(lawsuit OR earnings OR layoff OR layoffs OR protest OR '
+                f'"GAO" OR settlement OR resigns OR acquires OR fraud) '
+                f"{_EXCLUDE_AGGREGATORS}"
+            ).strip()
+            out.append(("incumbent", q))
 
-    if agency_short and opp.naics_code:
-        q = f"{agency_short} NAICS {opp.naics_code} contract"
-        out.append(("agency_news", q))
+    if agency and title:
+        title_core = title[:60]
+        q_parts = [f'"{title_core}"', agency]
+        if sol:
+            q_parts.append(f'OR "{sol}"')
+        q_parts.append(
+            "(news OR awarded OR protest OR announce OR "
+            '"breaking defense" OR fedscoop OR nextgov OR '
+            "govconwire OR federalnewsnetwork)"
+        )
+        q_parts.append(_EXCLUDE_AGGREGATORS)
+        out.append(("press", " ".join(q_parts).strip()))
 
     return out
 
@@ -167,7 +261,7 @@ async def get_web_mentions(
     rows = await _read_cache(ctx, opportunity_id)
     now = datetime.now(UTC)
     groups = [_to_group(r, now=now) for r in rows]
-    groups.sort(key=lambda g: ("program", "incumbent", "agency_news").index(g.kind) if g.kind in ("program", "incumbent", "agency_news") else 99)
+    groups.sort(key=lambda g: ("program", "incumbent", "press", "agency_news").index(g.kind) if g.kind in ("program", "incumbent", "press", "agency_news") else 99)
     return WebMentionsResponse(
         opportunity_id=str(opportunity_id),
         groups=groups,
@@ -278,8 +372,8 @@ async def refresh_web_mentions(
     groups = [_to_group(r, now=now) for r in rows]
     groups.sort(
         key=lambda g: (
-            ("program", "incumbent", "agency_news").index(g.kind)
-            if g.kind in ("program", "incumbent", "agency_news")
+            ("program", "incumbent", "press", "agency_news").index(g.kind)
+            if g.kind in ("program", "incumbent", "press", "agency_news")
             else 99
         )
     )

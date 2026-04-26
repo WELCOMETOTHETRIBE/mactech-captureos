@@ -48,47 +48,101 @@ WEBSITE_CONTENT_CRAWLER_ACTOR = "apify/website-content-crawler"
 
 # Wait at most this long for the actor run on the daily beat. Apify's
 # server-side waitForFinish blocks server-side until the run resolves
-# or the deadline expires. 8 seed pages × maxCrawlDepth=2 finishes in
-# ~30-90s in practice; 300s is a comfortable ceiling.
-INDUSTRY_DAYS_RUN_TIMEOUT_SECS = 300
+# or the deadline expires. With ~15 seeds × depth=3 + adaptive browser
+# rendering, runs typically take 3-7 minutes. Apify's max waitForFinish
+# is 600s; we use 540s and rely on tomorrow's beat if a run overruns.
+INDUSTRY_DAYS_RUN_TIMEOUT_SECS = 540
 
-# Curated agency event / industry-day pages. Hand-picked from agencies
-# whose forecasts already drive MacTech NAICS. Keep this list short so
-# the daily Apify spend stays predictable.
+# Curated agency event / industry-day hub URLs. Each entry was verified
+# against Google's current index — earlier hand-picked URLs (six of
+# eight) returned 404 from the agency. The crawler runs depth=3 from
+# these hubs so it follows into individual event pages.
 INDUSTRY_DAY_SEED_URLS = [
-    # DoD OSBP outreach calendar
-    "https://business.defense.gov/Small-Business/Events/",
-    # NIWC Atlantic + Pacific industry days
+    # AFCEA — biggest cross-agency calendar surface (DoD/Navy/Intel community).
+    "https://www.afcea.org/events/",
+    "http://www.afcea.org/calendar/pubcalendar.jsp",
+    "https://www.afcea.org/events/2026-spring-intelligence-symposium",
+    "https://www.afcea.org/events/2026-navy-information-warfare-industry-day",
+    # NIWC Atlantic — confirmed-yield hub.
     "https://www.niwcatlantic.navy.mil/Industry/",
-    "https://www.niwcpacific.navy.mil/Partnerships/Industry-Days/",
-    # GSA OSDBU events
-    "https://www.gsa.gov/about-us/organization/office-of-small-and-disadvantaged-business-utilization/events",
-    # AFCEA chapter calendar (cross-agency)
-    "https://events.afcea.org/AFCEAEventCalendar/",
-    # DHS S&T Industry Engagement
-    "https://www.dhs.gov/science-and-technology/news/industry-day",
-    # Air Force AFLCMC industry day index
-    "https://www.aflcmc.af.mil/Events/",
-    # Army ASA(ALT) OSBP outreach
-    "https://www.army.mil/asaalt/osbp/",
+    # DLA outreach calendar.
+    "https://www.dla.mil/Small-Business/Resource-Center/Outreach-Calendar/",
+    # AFLCMC Life Cycle Industry Days + C3BM events.
+    "https://www.aflcmc.af.mil/LCID/",
+    "https://www.aflcmc.af.mil/C3BM/Events/",
+    # NAVAIR / NAWCAD industry-day news.
+    "https://www.navair.navy.mil/news/",
+    # IWRP consortium industry days (Navy info warfare).
+    "https://www.theiwrp.org/events",
+    # NDIA — top defense-industry conference body.
+    "https://www.ndia.org/events",
+    # GovCon Wire industry day digest.
+    "https://www.govconwire.com/category/events/",
+    # Federal News Network events page.
+    "https://federalnewsnetwork.com/category/events/",
+    # SBIR.gov events (small biz innovation).
+    "https://www.sbir.gov/events",
 ]
 
 
-EXTRACTOR_PROMPT_VERSION = "industry-days-v1"
-EXTRACTOR_SYSTEM = (
-    "You extract structured event metadata from a federal-agency web "
-    "page. Return STRICT JSON: a single object with key 'events' that "
-    "is a JSON array. For each event found in the page text, emit "
-    "{title, kind, agency, starts_at, ends_at, location, "
-    "registration_url, summary, naics_codes}. starts_at/ends_at are "
-    "ISO 8601 dates or datetimes; null when not stated. kind is one of "
-    "'industry_day', 'pre_solicitation', 'meet_the_buyer', 'symposium', "
-    "'conference', 'webinar', 'other'. naics_codes is an array of "
-    "strings if the page lists target NAICS, otherwise []. "
-    "If the page has no events at all, emit {events: []}. "
-    "Do not invent dates, agencies, or NAICS — use null and []. "
-    "Output ONLY the JSON object, no prose."
-)
+EXTRACTOR_PROMPT_VERSION = "industry-days-v2"
+EXTRACTOR_SYSTEM = """You extract federal-procurement event metadata from a web page.
+Federal contractors (the readers) need to decide whether to attend.
+
+Return STRICT JSON: an object with one key, "events", which is a JSON array.
+For each distinct event you find on the page, emit one object:
+
+  {
+    "title":           string — the official event name
+    "kind":            "industry_day" | "pre_solicitation" | "meet_the_buyer"
+                       | "symposium" | "conference" | "webinar" | "other"
+    "agency":          string | null — the sponsoring agency / office
+                       (e.g. "NAVAIR", "DHS S&T", "USACE Kansas City")
+    "starts_at":       ISO 8601 date or datetime, e.g. "2026-12-08" or
+                       "2026-12-08T09:00:00-05:00"; null if not stated
+    "ends_at":         ISO 8601, or null
+    "location":        string | null — physical city/venue or "Virtual"
+    "registration_url": string | null — direct registration link if on the page
+    "summary":         string — 1-3 sentence plain-English description
+                       of who/what/why a federal contractor would attend
+    "naics_codes":     array of NAICS strings if the page lists targets,
+                       otherwise []
+  }
+
+Counts as an event when:
+  - The page says it's happening on a specific date or date range, OR
+  - The page lists registration / RSVP / "save the date" with a month+year
+
+Do NOT emit:
+  - Past events (treat anything before today's date as out of scope)
+  - General office descriptions ("about NIWC", "what is OSDBU")
+  - News articles about events that happened
+  - Solicitation-only listings without an attached event date
+  - Duplicates of the same event
+
+Examples:
+
+INPUT (excerpt): "December 8-10, 2026 — Eastern Defense Summit, Charleston Area
+Convention Center. Hosted by NIWC Atlantic and the CDCA. Bringing together 1,800
+government, military, and industry leaders. Register at cdcasummit.org."
+
+OUTPUT: {"events": [{"title": "Eastern Defense Summit", "kind": "conference",
+"agency": "NIWC Atlantic", "starts_at": "2026-12-08", "ends_at": "2026-12-10",
+"location": "Charleston Area Convention Center", "registration_url":
+"https://cdcasummit.org", "summary": "Major East Coast defense conference
+hosted by NIWC Atlantic and CDCA, drawing ~1,800 government and industry
+leaders.", "naics_codes": []}]}
+
+INPUT: "Welcome to the GSA OSDBU events page."
+
+OUTPUT: {"events": []}
+
+Rules:
+  - Never invent dates, agencies, locations, or registration URLs.
+  - If something is partial (date but no location), still emit it; nullable
+    fields exist for that.
+  - Output ONLY the JSON object. No prose, no markdown fences, no commentary.
+"""
 
 
 @dataclass
@@ -133,11 +187,25 @@ async def _kick_and_ingest() -> dict[str, Any]:
 
     run_input = {
         "startUrls": [{"url": u} for u in INDUSTRY_DAY_SEED_URLS],
-        "maxCrawlPages": 80,
-        "maxCrawlDepth": 2,
+        # Adaptive switching between browser and HTTP — handles JS-rendered
+        # event widgets (afcea.org calendar, IWRP) without burning browser
+        # CU on already-static pages.
+        "crawlerType": "playwright:adaptive",
+        # Crawl deeper. Hubs (afcea events list, ndia events list) link to
+        # individual event pages — depth=3 lets us follow them.
+        "maxCrawlDepth": 3,
+        # Generous page cap; the LLM filter below skips low-signal pages
+        # so unused crawl is cheap.
+        "maxCrawlPages": 250,
         "saveHtml": False,
         "saveMarkdown": True,
-        "removeElementsCssSelector": "nav, footer, .ads, .menu",
+        "removeElementsCssSelector": (
+            "nav, footer, header, .ads, .menu, .skip-link, .breadcrumbs, "
+            "form, aside, .sidebar"
+        ),
+        # Stay on the same agency/host. Without this, AFCEA links out to
+        # exhibitor sites, NDIA to academic partners, etc., spiking cost.
+        "keepUrlFragments": False,
     }
 
     async with ApifyClient(api_token) as client:
@@ -320,11 +388,20 @@ async def _ingest(
 
     upserted = 0
     failures = 0
+    skipped_low_signal = 0
     async with unscoped_session() as session:
         for item in items:
             url = str(item.get("url") or "").strip()
             text = str(item.get("text") or item.get("markdown") or "").strip()
             if not url or len(text) < 200:
+                skipped_low_signal += 1
+                continue
+            # Pre-filter: only call the LLM on pages that look like event
+            # pages, to avoid burning Haiku tokens on agency front-doors,
+            # 404 placeholders, or generic news indexes that crawled
+            # alongside the actual targets.
+            if not _looks_like_event_page(url, text):
+                skipped_low_signal += 1
                 continue
             try:
                 events = await _extract_events(llm, url, text)
@@ -384,9 +461,11 @@ async def _ingest(
     await _mark_audit_processed(audit_id)
 
     log.info(
-        "industry-days ingest: run=%s items=%d upserted=%d failures=%d",
+        "industry-days ingest: run=%s items=%d skipped=%d "
+        "upserted=%d failures=%d",
         apify_run_id,
         len(items),
+        skipped_low_signal,
         upserted,
         failures,
     )
@@ -447,6 +526,29 @@ async def _mark_audit_processed(
         row.processed_at = datetime.now(UTC)
         if error:
             row.ingest_error = error[:1000]
+
+
+# Substrings that, when present in URL or text, indicate an event page
+# worth running through the LLM. Tuned conservatively — false negatives
+# just mean we miss an event tomorrow.
+_EVENT_URL_HINTS = (
+    "event", "industry-day", "industry_day", "industryday",
+    "calendar", "symposium", "conference", "meet-the-buyer",
+    "meet_the_buyer", "outreach", "lcid", "summit", "expo",
+)
+_EVENT_TEXT_HINTS = (
+    "industry day", "register", "registration", "save the date",
+    "agenda", "schedule of events", "rsvp", "attendees",
+    "convention center", "symposium", "conference",
+)
+
+
+def _looks_like_event_page(url: str, text: str) -> bool:
+    u = url.lower()
+    if any(h in u for h in _EVENT_URL_HINTS):
+        return True
+    t = text.lower()
+    return any(h in t for h in _EVENT_TEXT_HINTS)
 
 
 def _str_or_none(v: Any) -> str | None:
