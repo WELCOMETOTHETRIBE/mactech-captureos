@@ -48,6 +48,7 @@ class TenantHeader(_Out):
     uei: str | None = None
     cage_code: str | None = None
     set_aside_certifications: list[str] = []
+    target_naics: list[str] = []
     onboarding_completed_at: str | None = None
 
 
@@ -136,6 +137,7 @@ async def me(
             set_aside_certifications=list(
                 ctx.tenant.set_aside_certifications or []
             ),
+            target_naics=list(ctx.tenant.target_naics or []),
             onboarding_completed_at=(
                 ctx.tenant.onboarding_completed_at.isoformat()
                 if ctx.tenant.onboarding_completed_at

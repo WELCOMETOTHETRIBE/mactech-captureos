@@ -46,7 +46,7 @@ export default async function DashboardPage() {
   const minsSinceCompletion = completedAt
     ? (Date.now() - completedAt.getTime()) / 60_000
     : Infinity;
-  const hasNaicsTargets = me.tenant.target_naics.length > 0;
+  const hasNaicsTargets = (me.tenant.target_naics?.length ?? 0) > 0;
   const firstFeedLoading =
     !onboardingIncomplete &&
     minsSinceCompletion < (hasNaicsTargets ? 60 : 30) &&
@@ -115,7 +115,7 @@ export default async function DashboardPage() {
               {hasNaicsTargets ? (
                 <>
                   Pulling opportunities from SAM.gov for your{" "}
-                  {me.tenant.target_naics.length} NAICS targets, then scoring
+                  {(me.tenant.target_naics?.length ?? 0)} NAICS targets, then scoring
                   them against your firm profile. Usually 3–10 minutes for
                   the first run; refresh to see opps as they land.
                 </>
