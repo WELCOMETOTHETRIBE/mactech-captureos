@@ -36,13 +36,13 @@ const clerkAppearance = {
   },
   elements: {
     rootBox: "w-full",
-    cardBox: "w-full bg-white border border-neutral-200 rounded-xl shadow-sm p-7",
+    cardBox: "w-full shadow-none border-0 bg-transparent p-0",
     card: "shadow-none border-0 bg-transparent p-0 w-full",
     header: "hidden",
     headerTitle: "hidden",
     headerSubtitle: "hidden",
     socialButtonsBlockButton:
-      "h-12 rounded-lg border border-neutral-300 bg-white hover:bg-brand-50 hover:border-brand-300 text-neutral-900 font-medium normal-case text-sm transition-colors",
+      "h-12 rounded-lg border border-neutral-400 bg-white hover:bg-brand-50 hover:border-brand-700 text-neutral-900 font-medium normal-case text-sm transition-colors",
     socialButtonsBlockButtonText: "text-neutral-900 font-medium text-sm",
     socialButtonsBlockButtonArrow: "hidden",
     socialButtonsProviderIcon: "h-5 w-5",
@@ -51,7 +51,7 @@ const clerkAppearance = {
     dividerText: "text-neutral-500 text-[11px] uppercase tracking-[0.18em] font-medium px-3",
     formFieldLabel: "text-neutral-700 font-medium text-sm mb-1.5",
     formFieldInput:
-      "h-12 rounded-lg border border-neutral-300 bg-white text-neutral-900 placeholder:text-neutral-400 focus:border-brand-600 focus:ring-2 focus:ring-brand-600/20 transition-colors",
+      "h-12 rounded-lg border border-neutral-400 bg-white text-neutral-900 placeholder:text-neutral-400 hover:border-neutral-500 focus:border-brand-600 focus:ring-2 focus:ring-brand-600/20 transition-colors",
     formButtonPrimary:
       "h-12 rounded-lg bg-brand-700 hover:bg-brand-800 active:bg-brand-900 text-white font-semibold normal-case text-sm shadow-sm transition-colors",
     footerActionText: "text-neutral-600 text-sm",

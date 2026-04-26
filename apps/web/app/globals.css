@@ -34,10 +34,16 @@ input:-webkit-autofill:active {
   caret-color: #1f1f1f !important;
   transition: background-color 9999s ease-in-out 0s !important;
 }
-/* Hide Clerk's powered-by badge — kept for the dev banner so we still see it. */
-.cl-internal-b3fm6y,
+/* Hide Clerk's "Secured by Clerk" branding everywhere we can target it.
+   The orange dev-mode banner is enforced by Clerk in dev instances and
+   only goes away when we promote to a Clerk Production instance. */
 .cl-poweredBy,
 .cl-badge,
-[data-localization-key="badge__poweredBy"] {
+.cl-footer,
+.cl-cardFooter,
+.cl-internal-1dauvpw,
+.cl-internal-b3fm6y,
+[data-localization-key="badge__poweredBy"],
+[class*="cl-internal-"] a[href*="clerk.com"] {
   display: none !important;
 }
