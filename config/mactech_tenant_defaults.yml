@@ -10,7 +10,7 @@ tenant:
   plan: internal
   uei: null              # TODO: fill after SAM.gov registration
   cage_code: null        # TODO: fill after CAGE assignment
-  sdvosb_status: pending
+  sdvosb_status: certified
   # Clerk Organization ID for the MacTech workspace. Required for the
   # API's tenant resolution (auth.py looks up by clerk_org_id).
   # Update if the Clerk org ID rotates.
@@ -273,6 +273,7 @@ compliance_gates:
     - key_personnel_exclusions_clean: true
     - legal_review_complete: true
     - legal_reviewer_slug: john-milso
-  sdvosb_pending_warning: |
-    SDVOSB certification is pending. Confirm eligibility with the
-    contracting officer before submission.
+  # SDVOSB pending-warning retired: MacTech is SDVOSB-certified by the VA.
+  # Kept as an empty string for backwards-compatibility with any reader
+  # that still references this key.
+  sdvosb_pending_warning: ""

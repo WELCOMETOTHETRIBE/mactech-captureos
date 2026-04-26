@@ -125,7 +125,7 @@ export default function Page() {
           </div>
 
           <p className="text-xs text-[#7bcdc7]/60">
-            mactechsolutionsllc.com · Veteran-owned · SDVOSB pending
+            mactechsolutionsllc.com · Veteran-owned · SDVOSB-certified
           </p>
         </div>
       </div>

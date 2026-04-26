@@ -2,7 +2,7 @@
   "company": {
     "legal_name": "MacTech Solutions LLC",
     "website": "https://www.mactechsolutionsllc.com",
-    "status": ["SDVOSB (pending)", "Veteran-Owned"],
+    "status": ["SDVOSB-certified", "Veteran-Owned"],
     "frameworks": [
       "CMMC 2.0 Level 2 (compliance aligned)",
       "NIST CSF 2.0 (aligned)",

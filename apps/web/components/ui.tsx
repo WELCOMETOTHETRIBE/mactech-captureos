@@ -309,7 +309,7 @@ export function SetAsideBadge({ code }: { code: string | null }) {
     return (
       <Badge
         tone="violet"
-        title="Service-Disabled Veteran-Owned Small Business set-aside. MacTech's pending SDVOSB status applies here."
+        title="Service-Disabled Veteran-Owned Small Business set-aside. MacTech is SDVOSB-certified."
       >
         {upper}
       </Badge>

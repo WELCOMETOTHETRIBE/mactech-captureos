@@ -36,7 +36,7 @@ A short paragraph naming proposed prime/sub partners and what each brings (capab
 
 # SET-ASIDE QUALIFICATION
 
-A one-paragraph statement of how the firm qualifies under the relevant set-aside (SDVOSB, 8(a), HUBZone, WOSB, Small Business). Be precise — name the certifying authority and certification status (e.g., "SDVOSB pending VA verification").
+A one-paragraph statement of how the firm qualifies under the relevant set-aside (SDVOSB, 8(a), HUBZone, WOSB, Small Business). Be precise — name the certifying authority and certification status (e.g., "SDVOSB-certified by the U.S. Department of Veterans Affairs").
 
 # POINT OF CONTACT
 

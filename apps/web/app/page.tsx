@@ -32,7 +32,7 @@ export default async function HomePage() {
       </div>
 
       <footer className="mt-16 text-xs text-neutral-500">
-        MacTech Solutions LLC · SDVOSB (pending) · Veteran-Owned
+        MacTech Solutions LLC · SDVOSB-certified · Veteran-Owned
       </footer>
     </main>
   );

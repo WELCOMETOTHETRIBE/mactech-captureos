@@ -39,7 +39,7 @@ If you're an AI coding agent working on this repo: start with `CLAUDE.md`.
 
 ## Ownership
 
-MacTech Solutions LLC • SDVOSB (pending) • Veteran-Owned
+MacTech Solutions LLC • SDVOSB-certified • Veteran-Owned
 https://www.mactechsolutionsllc.com
 
 Copyright © 2026 MacTech Solutions LLC. All rights reserved.

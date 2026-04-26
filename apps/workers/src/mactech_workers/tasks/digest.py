@@ -186,7 +186,7 @@ def _render_html(founder: Founder, rows: list[DigestRow]) -> str:
         {items_block}
       </td></tr>
       <tr><td style="padding:16px 28px;border-top:1px solid #e5e5e5;font-size:12px;color:#888">
-        <p style="margin:0">MacTech Solutions LLC · SDVOSB (pending) · Veteran-Owned</p>
+        <p style="margin:0">MacTech Solutions LLC · SDVOSB-certified · Veteran-Owned</p>
         <p style="margin:4px 0 0">Replies go to patrick@mactechsolutionsllc.com</p>
       </td></tr>
     </table>
@@ -221,7 +221,7 @@ def _render_text(founder: Founder, rows: list[DigestRow]) -> str:
             out.append(f"    {r.sam_link}")
         out.append("")
     out.append("--")
-    out.append("MacTech Solutions LLC · SDVOSB (pending) · Veteran-Owned")
+    out.append("MacTech Solutions LLC · SDVOSB-certified · Veteran-Owned")
     return "\n".join(out)
 
 

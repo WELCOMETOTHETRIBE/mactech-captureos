@@ -78,7 +78,7 @@ These go into the seed data exactly as specified. The scoring engine uses them a
 
 ## 3. MacTech's set-aside filter profile
 
-MacTech is **SDVOSB (pending)** and **veteran-owned**. Default SAM.gov query set-aside filters include:
+MacTech is **SDVOSB-certified** (by the U.S. Department of Veterans Affairs) and **veteran-owned**. Default SAM.gov query set-aside filters include:
 
 - `SDVOSBC` — SDVOSB Set-Aside
 - `SDVOSBS` — SDVOSB Sole Source
@@ -94,7 +94,7 @@ Exclude by default (low fit for a 4-person firm early-stage):
 - `HZC`, `HZS` — HUBZone (not certified)
 - `WOSB`, `EDWOSB` — WOSB (not applicable)
 
-The SDVOSB (pending) status is material: until certification is confirmed, opportunities flagged as SDVOSB set-aside should include a visible "certification-pending" warning on the pursuit record.
+MacTech is now SDVOSB-certified by the VA, so SDVOSB set-asides are fully eligible. The legacy `sdvosb_pending_warning` config key is retired (kept as an empty string for backwards-compat); pursuit records no longer surface a certification-pending banner.
 
 ---
 
@@ -307,7 +307,7 @@ tenant:
   plan: internal
   uei: <TO BE FILLED BY BRIAN>
   cage_code: <TO BE FILLED BY BRIAN>
-  sdvosb_status: pending
+  sdvosb_status: certified
   naics:
     primary: [541519, 541512, 518210, 541513, 541611, 541330, 541380, 541110]
     secondary: [541618, 541511, 541614, 611420, 611430, 541199, 561621, 561210, 541715, 541690, 541990, 611710]
@@ -415,9 +415,9 @@ Before a pursuit advances to "Submit":
 
 Gate action: block with checklist showing which items are incomplete.
 
-### Gate 3 — SDVOSB certification-pending warning
+### Gate 3 — *(retired)*
 
-Until MacTech's SDVOSB certification is formal, any pursuit of an SDVOSB set-aside opportunity displays a yellow banner: *"SDVOSB certification is pending. Confirm eligibility with the contracting officer before submission."*
+Previously: SDVOSB certification-pending warning on any SDVOSB set-aside pursuit. Retired now that MacTech is SDVOSB-certified by the VA. SDVOSB set-asides are fully eligible with no banner.
 
 ---
 

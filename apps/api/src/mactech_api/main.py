@@ -135,7 +135,7 @@ _LANDING_HTML = """<!doctype html>
   </div>
 
   <footer>
-    MacTech Solutions LLC &middot; SDVOSB (pending) &middot; Veteran-Owned<br>
+    MacTech Solutions LLC &middot; SDVOSB-certified &middot; Veteran-Owned<br>
     <a href="https://www.mactechsolutionsllc.com">mactechsolutionsllc.com</a>
   </footer>
 </main>

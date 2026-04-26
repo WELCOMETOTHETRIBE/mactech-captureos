@@ -6,7 +6,7 @@
 
 ## 1. Who we are
 
-**MacTech Solutions LLC** — Veteran-owned consulting firm (SDVOSB pending), specializing in DoD cybersecurity, infrastructure engineering, and compliance for federal programs and defense contractors.
+**MacTech Solutions LLC** — Veteran-owned consulting firm (SDVOSB-certified by the VA), specializing in DoD cybersecurity, infrastructure engineering, and compliance for federal programs and defense contractors.
 
 Web: https://www.mactechsolutionsllc.com
 
