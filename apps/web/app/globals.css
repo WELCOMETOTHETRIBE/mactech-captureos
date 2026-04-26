@@ -47,3 +47,12 @@ input:-webkit-autofill:active {
 [class*="cl-internal-"] a[href*="clerk.com"] {
   display: none !important;
 }
+/* Force Clerk's inner .cl-card / .cl-main to be transparent so our cardBox
+   owns the visual frame — prevents a double-border in newer SDK versions. */
+.cl-card,
+.cl-main {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
