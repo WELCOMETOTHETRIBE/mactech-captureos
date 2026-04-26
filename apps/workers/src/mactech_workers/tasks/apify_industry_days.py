@@ -35,7 +35,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from mactech_db import unscoped_session
 from mactech_db.models import AgencyEvent, ApifyRun
-from mactech_db.session import get_engine
+from mactech_db.session import async_session_factory, get_engine
 from mactech_intelligence import AnthropicLLMClient
 from mactech_integrations.apify import ApifyClient, ApifyError
 from mactech_workers.celery_app import celery_app
@@ -110,13 +110,19 @@ def kick_industry_days_run_task() -> dict[str, Any]:
 
 
 async def _kick_and_ingest() -> dict[str, Any]:
-    # Dispose the lru_cache'd async engine so its asyncpg connection
-    # pool is empty for this task's event loop. Without this, a prior
-    # task's loop could have left connections in the pool whose
-    # internal futures are bound to a closed loop — when this loop
-    # tries to use them we hit "got Future ... attached to a different
-    # loop." Cheap (no connections to close on first call) and safe.
-    await get_engine().dispose()
+    # The async engine is lru_cache'd at module level. Across Celery
+    # tasks (each runs under its own asyncio.run() loop), a prior
+    # task's asyncpg connections live in the cached pool, with futures
+    # bound to a now-closed loop. The next task hits "got Future ...
+    # attached to a different loop." We can't even dispose() the prior
+    # engine cleanly because dispose itself awaits on the dead loop.
+    # Evict the cache so the next get_engine() builds a fresh engine
+    # on this loop. async_session_factory is also lru_cache'd and holds
+    # a reference to the prior engine, so clear it too. The orphaned
+    # engine + its asyncpg connections leak until GC, but for a daily
+    # beat that's acceptable.
+    get_engine.cache_clear()
+    async_session_factory.cache_clear()
 
     api_token = os.environ.get("APIFY_API_TOKEN", "")
     if not api_token:
