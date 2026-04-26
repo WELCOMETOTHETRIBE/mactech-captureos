@@ -42,6 +42,10 @@ log = logging.getLogger(__name__)
 DEFAULT_BASE_URL: Final = "https://api.usaspending.gov/api/v2"
 DEFAULT_USER_AGENT: Final = "MacTechCaptureOS/0.1 (+https://www.mactechsolutionsllc.com)"
 DEFAULT_TIMEOUT: Final = httpx.Timeout(60.0, connect=10.0)
+# USASpending's /search/spending_by_award/ requires award_type_codes on every
+# call — it determines the response shape (contracts vs grants vs loans). For
+# MacTech (DoD-focused) the relevant codes are the four contract types.
+DEFAULT_AWARD_TYPE_CODES: Final[tuple[str, ...]] = ("A", "B", "C", "D")
 DEFAULT_FIELDS: Final[tuple[str, ...]] = (
     "Award ID",
     "Recipient Name",
@@ -168,8 +172,7 @@ class UsaSpendingClient:
                     "end_date": time_period_end.isoformat(),
                 }
             ]
-        if award_type_codes:
-            f["award_type_codes"] = list(award_type_codes)
+        f["award_type_codes"] = list(award_type_codes or DEFAULT_AWARD_TYPE_CODES)
         if award_amount_min is not None:
             f["award_amounts"] = [{"lower_bound": award_amount_min}]
         if recipient_uei:
