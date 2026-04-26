@@ -11,7 +11,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export default async function ForecastsPage({
+export default async function RecompetesPage({
   searchParams
 }: {
   searchParams?: Promise<{ all?: string }>;
@@ -19,21 +19,29 @@ export default async function ForecastsPage({
   const sp = (await searchParams) ?? {};
   const showAll = sp.all === "1";
   const data = await apiFetch<ForecastsResponse>(
-    `/forecasts?upcoming_only=true&naics_filter=${showAll ? "false" : "true"}&limit=120`
+    `/recompetes?naics_filter=${showAll ? "false" : "true"}&limit=200`
   ).catch(
-    () => ({ total: 0, items: [], target_naics_filter: false, target_naics: [] }) as ForecastsResponse
+    () =>
+      ({
+        total: 0,
+        items: [],
+        target_naics_filter: false,
+        target_naics: []
+      }) as ForecastsResponse
   );
 
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Pre-SAM intent"
-        title="Agency forecasts"
+        eyebrow="Recompete radar"
+        title="Forecasts with named incumbents"
         subtitle={
           <span>
-            Procurement forecasts published by DHS APFS, VA FCO, USACE,
-            AFBES, GSA, HHS — typically 30 to 180 days before the
-            matching SAM solicitation. Captured daily via Apify.
+            Every forecast where we know who currently holds the contract.
+            The strongest single signal in capture: showing up to a recompete
+            with the incumbent identified, their period of performance pinned,
+            and their contract number on file. Sorted by fit score for your
+            NAICS profile.
           </span>
         }
       />
@@ -41,17 +49,16 @@ export default async function ForecastsPage({
       {data.target_naics_filter ? (
         <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-500">
           <span>
-            Filtered to your {data.target_naics.length} target NAICS:{" "}
-            <span className="text-neutral-700">{data.target_naics.join(", ")}</span>
+            Filtered to your {data.target_naics.length} target NAICS.
           </span>
-          <Link href="/forecasts?all=1" className="text-brand-700 hover:underline">
-            Show all forecasts
+          <Link href="/recompetes?all=1" className="text-brand-700 hover:underline">
+            Show all recompetes
           </Link>
         </div>
       ) : data.target_naics.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-500">
-          <span>Showing all forecasts.</span>
-          <Link href="/forecasts" className="text-brand-700 hover:underline">
+          <span>Showing all recompetes.</span>
+          <Link href="/recompetes" className="text-brand-700 hover:underline">
             Filter to your NAICS
           </Link>
         </div>
@@ -60,10 +67,9 @@ export default async function ForecastsPage({
       {data.items.length === 0 ? (
         <Card>
           <p className="text-sm text-neutral-500">
-            No forecasts captured yet. The Apify daily beat (0530 ET)
-            populates this on completion. Check back tomorrow, or
-            verify <code>APIFY_API_TOKEN</code> is set on the workers
-            service.
+            No recompete-flagged forecasts captured yet. Forecast ingest runs
+            daily; agencies usually only list incumbents on a fraction of
+            their forecast records.
           </p>
         </Card>
       ) : (
@@ -77,7 +83,9 @@ export default async function ForecastsPage({
                       <ScoreBadge score={fc.score} />
                       <span className="ml-2">
                         {fc.agency ?? "Unknown agency"}
-                        {fc.contracting_office ? ` · ${fc.contracting_office}` : ""}
+                        {fc.contracting_office
+                          ? ` · ${fc.contracting_office}`
+                          : ""}
                       </span>
                       {fc.matches_target_naics ? (
                         <span className="ml-2 rounded-sm bg-brand-50 px-1.5 py-0.5 font-semibold text-brand-800">
@@ -89,10 +97,21 @@ export default async function ForecastsPage({
                       {fc.title}
                     </h3>
                     {fc.description ? (
-                      <p className="mt-2 text-sm leading-snug text-neutral-700">
+                      <p className="mt-2 line-clamp-2 text-sm leading-snug text-neutral-700">
                         {fc.description}
                       </p>
                     ) : null}
+                    <div className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                      <strong>Incumbent:</strong> {fc.incumbent_name}
+                      {fc.incumbent_contract_number
+                        ? ` · contract ${fc.incumbent_contract_number}`
+                        : ""}
+                      {fc.period_of_performance_end ? (
+                        <span className="ml-2">
+                          POP ends {fmtDate(fc.period_of_performance_end)}
+                        </span>
+                      ) : null}
+                    </div>
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-500">
                       {fc.naics_code ? (
                         <span>
@@ -100,7 +119,9 @@ export default async function ForecastsPage({
                         </span>
                       ) : null}
                       {fc.set_aside ? <span>Set-aside: {fc.set_aside}</span> : null}
-                      {fc.contract_type ? <span>Type: {fc.contract_type}</span> : null}
+                      {fc.contract_type ? (
+                        <span>Type: {fc.contract_type}</span>
+                      ) : null}
                       {fc.estimated_value_text ? (
                         <span>Value: {fc.estimated_value_text}</span>
                       ) : fc.estimated_value_high !== null ? (
@@ -113,9 +134,6 @@ export default async function ForecastsPage({
                         <span className="text-amber-700">
                           RFP expected: {fmtDate(fc.expected_solicitation_date)}
                         </span>
-                      ) : null}
-                      {fc.incumbent_name ? (
-                        <span>Incumbent: {fc.incumbent_name}</span>
                       ) : null}
                     </div>
                     {fc.poc_email || fc.poc_name ? (

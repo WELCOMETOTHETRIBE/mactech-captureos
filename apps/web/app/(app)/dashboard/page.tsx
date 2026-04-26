@@ -4,6 +4,7 @@ import {
   apiFetch,
   type AgencyEventsResponse,
   type DashboardResponse,
+  type ForecastsResponse,
   type MeResponse
 } from "@/lib/api";
 import { dismissHowItWorks, showHowItWorks } from "@/lib/preferences";
@@ -27,12 +28,21 @@ export const dynamic = "force-dynamic";
 const HOW_IT_WORKS_COOKIE = "mactech.dismiss.howitworks";
 
 export default async function DashboardPage() {
-  const [data, me, ck, events] = await Promise.all([
+  const [data, me, ck, events, recompetes] = await Promise.all([
     apiFetch<DashboardResponse>("/me/dashboard"),
     apiFetch<MeResponse>("/me"),
     cookies(),
     apiFetch<AgencyEventsResponse>("/events?upcoming_only=true&limit=4").catch(
       () => ({ total: 0, items: [] }) as AgencyEventsResponse
+    ),
+    apiFetch<ForecastsResponse>("/recompetes?naics_filter=true&limit=4").catch(
+      () =>
+        ({
+          total: 0,
+          items: [],
+          target_naics_filter: false,
+          target_naics: []
+        }) as ForecastsResponse
     )
   ]);
 
@@ -347,6 +357,52 @@ export default async function DashboardPage() {
                   {ev.registration_url ? "Register →" : "Source →"}
                 </p>
               </a>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Recompete radar — top forecasts with named incumbents */}
+      {recompetes.items.length > 0 && (
+        <section>
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-base font-semibold text-neutral-900">
+              Recompete radar{" "}
+              <span className="font-normal text-neutral-500">
+                — incumbents with NAICS-fit contracts in forecast
+              </span>
+            </h2>
+            <Link
+              href="/recompetes"
+              className="text-sm font-medium text-brand-700 hover:underline"
+            >
+              See all →
+            </Link>
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+            {recompetes.items.slice(0, 4).map((fc) => (
+              <Link
+                key={fc.id}
+                href="/recompetes"
+                className="block rounded-lg border border-neutral-200 bg-white p-4 transition-colors hover:border-brand-300 hover:shadow-sm"
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+                    {fc.agency ?? "agency"}
+                    {fc.naics_code ? ` · NAICS ${fc.naics_code}` : ""}
+                  </p>
+                  <span className="rounded-sm bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-800">
+                    score {fc.score}
+                  </span>
+                </div>
+                <p className="mt-1 line-clamp-2 text-sm font-medium text-neutral-900">
+                  {fc.title}
+                </p>
+                <p className="mt-2 line-clamp-1 text-xs text-amber-900">
+                  Incumbent: {fc.incumbent_name}
+                  {fc.estimated_value_text ? ` · ${fc.estimated_value_text}` : ""}
+                </p>
+              </Link>
             ))}
           </div>
         </section>

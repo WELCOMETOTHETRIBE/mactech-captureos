@@ -712,13 +712,18 @@ export type ForecastOut = {
   estimated_value_text: string | null;
   expected_solicitation_date: string | null;
   expected_award_date: string | null;
+  period_of_performance_end: string | null;
   incumbent_name: string | null;
+  incumbent_contract_number: string | null;
   poc_name: string | null;
   poc_email: string | null;
   source_url: string;
   source_host: string | null;
   last_seen_at: string;
   matches_target_naics: boolean;
+  score: number;
+  score_breakdown: Record<string, number>;
+  assigned_founder_slug: string | null;
 };
 
 export type ForecastsResponse = {
