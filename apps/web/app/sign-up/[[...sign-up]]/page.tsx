@@ -1,4 +1,5 @@
 import { SignUp } from "@clerk/nextjs";
+import { MacTechFooter } from "@/components/footer";
 
 const ACCENT = "#48b3ac";
 const BUTTON = "#207b78";
@@ -84,7 +85,8 @@ const trustCues = [
 
 export default function Page() {
   return (
-    <div className="min-h-screen flex bg-[#0A0A0A] text-gray-100">
+    <div className="min-h-screen flex flex-col bg-[#0A0A0A] text-gray-100">
+      <div className="flex-1 flex">
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-[#04060a] via-[#08120f] to-[#0a1816] relative overflow-hidden border-r border-[#1a2a26]">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(72,179,172,.09)_1px,transparent_1px),linear-gradient(90deg,rgba(72,179,172,.09)_1px,transparent_1px)] bg-[size:48px_48px]" />
         <div className="absolute -top-32 -left-32 w-[420px] h-[420px] rounded-full bg-[#48b3ac]/15 blur-3xl pointer-events-none" />
@@ -156,6 +158,8 @@ export default function Page() {
           <SignUp appearance={clerkAppearance} signInUrl="/sign-in" />
         </div>
       </div>
+      </div>
+      <MacTechFooter />
     </div>
   );
 }
