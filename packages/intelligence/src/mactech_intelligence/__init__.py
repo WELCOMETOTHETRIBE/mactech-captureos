@@ -52,6 +52,7 @@ from mactech_intelligence.sources_sought_drafter import (
     TenantIdentity,
     context_hash,
     generate_sources_sought_draft,
+    stream_sources_sought_draft,
 )
 from mactech_intelligence.why_it_matters import generate_why_it_matters
 
@@ -92,4 +93,5 @@ __all__ = [
     "parse_explain_slug",
     "score_opportunity",
     "stream_ask_about_opportunity",
+    "stream_sources_sought_draft",
 ]

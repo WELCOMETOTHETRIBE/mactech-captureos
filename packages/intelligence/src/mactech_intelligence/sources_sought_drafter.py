@@ -15,11 +15,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 
-from mactech_intelligence.llm import AnthropicLLMClient, LLMResponse
+from mactech_intelligence.llm import AnthropicLLMClient, LLMResponse, StreamChunk
 
 SYSTEM_PROMPT_PATH = Path(__file__).parent / "prompts" / "sources_sought.md"
 PROMPT_VERSION = "v1"
@@ -310,3 +311,28 @@ async def generate_sources_sought_draft(
         max_tokens=max_tokens,
         purpose=f"sources_sought_draft:{PROMPT_VERSION}",
     )
+
+
+async def stream_sources_sought_draft(
+    client: AnthropicLLMClient,
+    inp: SourcesSoughtInput,
+    *,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+) -> AsyncIterator[StreamChunk]:
+    """Streaming variant of `generate_sources_sought_draft`.
+
+    Yields `StreamChunk(kind="delta", text=...)` events as the model
+    composes, then a final `StreamChunk(kind="final", ...)` carrying the
+    assembled markdown + token usage. Same prompt + context path as the
+    non-streaming version so prompt-cache hits are identical.
+    """
+    system_prompt = _load_system_prompt()
+    user_message = _build_user_message(inp)
+    async for chunk in client.complete_stream(
+        system=system_prompt,
+        user=user_message,
+        complexity="smart",
+        max_tokens=max_tokens,
+        purpose=f"sources_sought_draft:{PROMPT_VERSION}",
+    ):
+        yield chunk

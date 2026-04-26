@@ -22,8 +22,11 @@ from datetime import date as _date_t, datetime
 from typing import Annotated
 from uuid import UUID
 
+import json
+from collections.abc import AsyncIterator
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import desc, select
 
@@ -48,6 +51,7 @@ from mactech_intelligence import (
     TenantIdentity,
     context_hash,
     generate_sources_sought_draft,
+    stream_sources_sought_draft,
 )
 
 log = logging.getLogger(__name__)
@@ -411,6 +415,225 @@ async def regenerate_draft(
         ctx, opp, instructions, parent=parent, max_tokens=body.max_tokens
     )
     return _draft_out(new_draft, opp, ctx.founder)
+
+
+# ── Streaming variants ───────────────────────────────────────────────
+
+
+async def _stream_draft(
+    *,
+    ctx: RequestContext,
+    opp: OpportunityRaw,
+    custom_instructions: str | None,
+    parent: ProposalDraft | None,
+    max_tokens: int,
+) -> StreamingResponse:
+    """Build the input, kick off Anthropic streaming, persist on finish.
+
+    Emits SSE events:
+      - data: {"type":"delta","text":"..."}
+      - data: {"type":"complete","draft_id":"...","version":N,"model":"...","input_tokens":N,"output_tokens":N}
+      - data: {"type":"error","message":"..."} on failure mid-stream
+    """
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="ANTHROPIC_API_KEY not configured on the API service.",
+        )
+
+    inp = await _build_input(ctx, opp, custom_instructions)
+    # Capture state by value before entering the streaming generator —
+    # ctx.session is closed once StreamingResponse takes over.
+    tenant_id = ctx.tenant.id
+    opp_id = opp.id
+    parent_id = parent.id if parent else None
+    parent_version = parent.version if parent else 0
+    created_by_founder_id = ctx.founder.id if ctx.founder else None
+    title = _make_title(opp, (parent.version + 1) if parent else 1)
+    ctx_hash = context_hash(inp)
+    cap_count = len(inp.capabilities)
+    pp_count = len(inp.past_performance)
+    tp_count = len(inp.teaming_partners)
+
+    async def stream() -> AsyncIterator[bytes]:
+        client = AnthropicLLMClient(api_key=api_key)
+        accumulated: list[str] = []
+        final_model: str | None = None
+        final_input_tokens: int | None = None
+        final_output_tokens: int | None = None
+        final_stop_reason: str | None = None
+        try:
+            async for chunk in stream_sources_sought_draft(
+                client, inp, max_tokens=max_tokens
+            ):
+                if chunk.kind == "delta":
+                    accumulated.append(chunk.text)
+                    payload = {"type": "delta", "text": chunk.text}
+                    yield f"data: {json.dumps(payload)}\n\n".encode()
+                elif chunk.kind == "final":
+                    final_model = chunk.model
+                    final_input_tokens = chunk.input_tokens
+                    final_output_tokens = chunk.output_tokens
+                    final_stop_reason = chunk.stop_reason
+        except Exception as exc:
+            log.exception("draft streaming failed: %s", exc)
+            err = {
+                "type": "error",
+                "message": f"{exc.__class__.__name__}: {exc}"[:200],
+            }
+            yield f"data: {json.dumps(err)}\n\n".encode()
+            return
+
+        content = "".join(accumulated).strip()
+        if not content:
+            yield (
+                b'data: {"type":"error","message":"empty model response"}\n\n'
+            )
+            return
+
+        # Persist on stream completion via fresh session.
+        from mactech_db import scoped_session
+
+        try:
+            async with scoped_session(tenant_id) as persist_session:
+                version = parent_version + 1 if parent_id else 1
+                draft = ProposalDraft(
+                    tenant_id=tenant_id,
+                    opportunity_id=opp_id,
+                    parent_draft_id=parent_id,
+                    created_by_founder_id=created_by_founder_id,
+                    draft_type="sources_sought",
+                    title=title,
+                    content=content,
+                    status="draft",
+                    version=version,
+                    custom_instructions=custom_instructions,
+                    prompt_context_hash=ctx_hash,
+                    model=final_model,
+                    input_tokens=final_input_tokens,
+                    output_tokens=final_output_tokens,
+                    citations={
+                        "capability_count": cap_count,
+                        "past_performance_count": pp_count,
+                        "teaming_partner_count": tp_count,
+                        "stop_reason": final_stop_reason,
+                    },
+                )
+                persist_session.add(draft)
+                await persist_session.flush()
+                draft_id = str(draft.id)
+                final_version = draft.version
+        except Exception as exc:  # noqa: BLE001
+            log.exception("draft persistence failed: %s", exc)
+            payload = {
+                "type": "error",
+                "message": f"draft streamed but persistence failed: {exc.__class__.__name__}",
+            }
+            yield f"data: {json.dumps(payload)}\n\n".encode()
+            return
+
+        complete = {
+            "type": "complete",
+            "draft_id": draft_id,
+            "version": final_version,
+            "model": final_model,
+            "input_tokens": final_input_tokens,
+            "output_tokens": final_output_tokens,
+        }
+        yield f"data: {json.dumps(complete)}\n\n".encode()
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+@router.post(
+    "/opportunities/{opportunity_id}/drafts/sources-sought/stream",
+    responses={
+        200: {
+            "content": {"text/event-stream": {}},
+            "description": "SSE stream of {type:'delta',text:...} + final {type:'complete',draft_id,version,...}",
+        }
+    },
+)
+async def create_sources_sought_draft_stream(
+    opportunity_id: UUID,
+    body: GenerateSourcesSoughtRequest,
+    ctx: Annotated[RequestContext, Depends(get_request_context)],
+) -> StreamingResponse:
+    """Streaming variant of POST /opportunities/{id}/drafts/sources-sought.
+
+    Same persistence + tenant scoping as the non-streaming version; the
+    UI sees the markdown compose live and navigates to /drafts/{id} on
+    the final event.
+    """
+    opp = (
+        await ctx.session.execute(
+            select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id)
+        )
+    ).scalar_one_or_none()
+    if opp is None:
+        raise HTTPException(status_code=404, detail="opportunity not found")
+
+    return await _stream_draft(
+        ctx=ctx,
+        opp=opp,
+        custom_instructions=body.custom_instructions,
+        parent=None,
+        max_tokens=body.max_tokens,
+    )
+
+
+@router.post(
+    "/drafts/{draft_id}/regenerate/stream",
+    responses={
+        200: {
+            "content": {"text/event-stream": {}},
+            "description": "Streaming regeneration; emits a new draft with parent_draft_id chained.",
+        }
+    },
+)
+async def regenerate_draft_stream(
+    draft_id: UUID,
+    body: GenerateSourcesSoughtRequest,
+    ctx: Annotated[RequestContext, Depends(get_request_context)],
+) -> StreamingResponse:
+    parent = (
+        await ctx.session.execute(
+            select(ProposalDraft).where(
+                ProposalDraft.id == draft_id,
+                ProposalDraft.tenant_id == ctx.tenant.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if parent is None:
+        raise HTTPException(status_code=404, detail="draft not found")
+
+    opp = (
+        await ctx.session.execute(
+            select(OpportunityRaw).where(OpportunityRaw.id == parent.opportunity_id)
+        )
+    ).scalar_one_or_none()
+    if opp is None:
+        raise HTTPException(
+            status_code=404, detail="parent draft's opportunity is gone"
+        )
+
+    instructions = body.custom_instructions or parent.custom_instructions
+    return await _stream_draft(
+        ctx=ctx,
+        opp=opp,
+        custom_instructions=instructions,
+        parent=parent,
+        max_tokens=body.max_tokens,
+    )
 
 
 @router.get("/drafts", response_model=DraftListResponse)

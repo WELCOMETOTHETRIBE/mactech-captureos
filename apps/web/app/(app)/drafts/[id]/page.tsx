@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { apiFetch, type DraftOut, type DraftStatus } from "@/lib/api";
 import {
   deleteDraft,
-  regenerateDraft,
   setDraftStatus,
   updateDraftContent
 } from "@/lib/drafts";
@@ -13,6 +12,7 @@ import {
   PageHeader,
   fmtDate
 } from "@/components/ui";
+import { StreamingRegeneratePanel } from "@/components/draft-streaming";
 
 export const dynamic = "force-dynamic";
 
@@ -53,7 +53,6 @@ export default async function DraftDetailPage({
   }
 
   const updateAction = updateDraftContent.bind(null, draft.id);
-  const regenerateAction = regenerateDraft.bind(null, draft.id);
   const tokensInOut = `${draft.input_tokens?.toLocaleString() ?? "?"} in · ${draft.output_tokens?.toLocaleString() ?? "?"} out`;
   const allowedStatuses = STATUS_FLOW[draft.status] ?? [];
 
@@ -229,24 +228,13 @@ export default async function DraftDetailPage({
               Run the drafter again with the same context. Optionally add custom
               instructions — the new version will be a child of this one.
             </p>
-            <form action={regenerateAction} className="mt-3 space-y-2">
-              <textarea
-                name="custom_instructions"
-                rows={5}
-                defaultValue={draft.custom_instructions ?? ""}
-                placeholder="e.g. Lead with our cybersecurity past performance. Emphasize CMMC L2 readiness. Tone: more formal."
-                className="w-full rounded-md border border-neutral-300 px-2 py-2 text-xs shadow-sm focus:border-neutral-500 focus:outline-none"
+            <div className="mt-3">
+              <StreamingRegeneratePanel
+                draftId={draft.id}
+                initialInstructions={draft.custom_instructions}
+                nextVersion={draft.version + 1}
               />
-              <button
-                type="submit"
-                className="w-full rounded-md border border-neutral-900 bg-neutral-900 px-3 py-2 text-xs font-medium text-white hover:bg-neutral-800"
-              >
-                Generate v{draft.version + 1}
-              </button>
-              <p className="text-[10px] text-neutral-400">
-                Takes 20–60s. Page will refresh on the new version.
-              </p>
-            </form>
+            </div>
           </div>
         </aside>
       </div>

@@ -1285,3 +1285,49 @@ User said "execute sprint 13". Picked the highest-perceived-impact item: streami
 - **Async OCR worker task** — move OCR to a Celery job.
 - **Streaming for the Sources Sought drafter** — same SSE pattern for the proposal drafter so the user sees the draft compose live.
 - **Drop the non-streaming `/ask` endpoint** once telemetry confirms reliability.
+
+---
+
+## 2026-04-25 — Sprint 14: streaming for the Sources Sought drafter
+
+User said "execute sprint 14". Mirrors Sprint 13's Q&A streaming pattern but for the proposal drafter — even higher-impact because drafter calls take 30–60s synchronously, so live composition turns the wait from "go get coffee" into "watch it write."
+
+### Intelligence — streaming primitive
+- **[sources_sought_drafter.py](packages/intelligence/src/mactech_intelligence/sources_sought_drafter.py)** — new `stream_sources_sought_draft()` mirrors `generate_sources_sought_draft()` (same prompt + context + cache key) but yields `StreamChunk(kind="delta"|"final")` events via the `complete_stream()` primitive added in Sprint 13.
+
+### API — two new SSE endpoints ([routes/drafts.py](apps/api/src/mactech_api/routes/drafts.py))
+- **`POST /opportunities/{id}/drafts/sources-sought/stream`** — initial generation, mirrors the existing non-streaming endpoint.
+- **`POST /drafts/{id}/regenerate/stream`** — chained regeneration, mirrors the existing `/regenerate`.
+- Both use a shared `_stream_draft()` helper that builds the input, **captures all dependent state by value** before the streaming generator runs (tenant_id, opp_id, parent_id+version, founder_id, title, context_hash, citation counts) — the request session closes once `StreamingResponse` takes over. Persists in a fresh `scoped_session(tenant_id)` after the stream completes, then emits `data: {"type":"complete","draft_id":"...","version":N,...}\n\n`.
+- Anti-buffering headers identical to the Sprint 13 ask-stream endpoint.
+
+### Web — two new route handlers
+- **[/opportunities/[id]/draft-stream/route.ts](apps/web/app/opportunities/[id]/draft-stream/route.ts)** — proxies SSE for initial draft generation with the caller's Clerk JWT.
+- **[/drafts/[id]/regenerate-stream/route.ts](apps/web/app/drafts/[id]/regenerate-stream/route.ts)** — proxies SSE for regeneration.
+- Both live outside the `(app)` route group (same pattern as DOCX export from Sprint 6 + ask-stream from Sprint 13) so the layout shell doesn't wrap streaming responses.
+
+### Web — client component ([components/draft-streaming.tsx](apps/web/components/draft-streaming.tsx))
+- **`<StreamingDraftButton>`** replaces the static form on the opp detail's `DrafterPanel`. Custom-instructions textarea + "Draft response →" button. On click: `fetch()` POST → `consumeSSE()` async generator → accumulates markdown into a live `<pre>` with an animated caret. On `complete`: navigates to `/drafts/{new_id}` with a 600ms delay so "Draft complete — redirecting" reads.
+- **`<StreamingRegeneratePanel>`** replaces the regenerate form on the draft detail page. Same SSE consumer. Pre-fills custom instructions from the parent draft.
+- **`<DraftStreamPanel>`** shared rendering for streaming / complete / error states. Live token-chunk counter, scrollable max-h-96 markdown preview with caret, retry on error, cancel mid-stream via `AbortController`.
+- Unmount aborts in-flight streams.
+
+### Verification
+- `tsc --noEmit` clean across `apps/web`.
+- `next build` produces all 25 routes (2 new: `/opportunities/[id]/draft-stream`, `/drafts/[id]/regenerate-stream`).
+- `python3 -m py_compile` clean on streaming intelligence + extended drafts route.
+
+### What this changes for users
+- **Before**: click "Draft response" → 30–60 second blank wait → page redirects to the draft editor.
+- **After**: click → ~1-second wait → markdown streams into a live preview panel for ~25–55 seconds → "Draft complete" → page redirects to the editor.
+- Same total cost; dramatically lower time-to-first-token.
+
+### Trade-offs called out
+- **Persistence at the end.** Connection drop mid-stream loses the draft entirely.
+- **No partial regeneration.** Aborting mid-regeneration discards the partial — but the original parent draft is unchanged because regeneration creates a chained child record.
+- **Non-streaming endpoints preserved** for any external caller. Removable in a future cleanup once telemetry confirms streaming is reliable.
+
+### Sprint 15 candidates left
+- **First-feed preview** — synchronous one-off SAM ingestion at wizard completion for net-new tenants.
+- **Async OCR worker task** — move OCR to a Celery job.
+- **Drop the non-streaming `/ask`, `/drafts/...`, `/regenerate` endpoints** once telemetry confirms reliability.

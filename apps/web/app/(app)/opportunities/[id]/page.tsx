@@ -14,9 +14,9 @@ import {
   type TermExplanationResponse
 } from "@/lib/api";
 import { createPursuit, deletePursuit, updatePursuit } from "@/lib/pursuits";
-import { generateSourcesSoughtDraft } from "@/lib/drafts";
 import { deleteOpportunityQuestion } from "@/lib/ask";
 import { AskStreamingPanel } from "@/components/ask-streaming";
+import { StreamingDraftButton } from "@/components/draft-streaming";
 import {
   deleteOpportunityBrief,
   generateOpportunityBrief
@@ -681,7 +681,6 @@ function DrafterPanel({
 }) {
   const isSourcesSought =
     noticeType?.toLowerCase().includes("sources sought") ?? false;
-  const action = generateSourcesSoughtDraft.bind(null, opportunityId);
 
   return (
     <section className="rounded-md border border-neutral-200 bg-white p-5">
@@ -714,63 +713,47 @@ function DrafterPanel({
       </div>
 
       {drafts.items.length === 0 ? (
-        <form action={action} className="mt-4 space-y-3">
-          <label className="block">
-            <span className="block text-[11px] uppercase tracking-wider text-neutral-500">
-              Custom instructions (optional)
-            </span>
-            <textarea
-              name="custom_instructions"
-              rows={2}
-              placeholder="e.g. Lead with cybersecurity past performance. Tone: formal."
-              className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-xs shadow-sm focus:border-neutral-500 focus:outline-none"
-            />
-          </label>
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="submit"
-              className="rounded-md border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
-            >
-              Draft response →
-            </button>
-            <span className="text-[11px] text-neutral-400">
-              Takes 20–60s. Uses Claude Sonnet 4.6.
-            </span>
-          </div>
-        </form>
+        <div className="mt-4">
+          <StreamingDraftButton
+            opportunityId={opportunityId}
+            hasExistingDrafts={false}
+            recommended={isSourcesSought}
+          />
+        </div>
       ) : (
-        <ul className="mt-4 space-y-2 border-t border-neutral-100 pt-3">
-          {drafts.items.slice(0, 5).map((d) => (
-            <li
-              key={d.id}
-              className="flex items-center justify-between gap-3 rounded-md border border-neutral-100 px-3 py-2 text-xs"
-            >
-              <div className="flex min-w-0 items-center gap-2">
-                <Badge tone="violet">v{d.version}</Badge>
-                <Badge tone={d.status === "submitted" ? "green" : "neutral"}>
-                  {d.status}
-                </Badge>
-                <Link
-                  href={`/drafts/${d.id}`}
-                  className="truncate text-neutral-800 hover:underline"
-                >
-                  {d.title}
-                </Link>
-              </div>
-              <span className="shrink-0 tabular-nums text-[10px] text-neutral-400">
-                {fmtDate(d.created_at)}
-              </span>
-            </li>
-          ))}
-          <form action={action} className="pt-2">
-            <button
-              type="submit"
-              className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:border-neutral-500"
-            >
-              + Generate new version
-            </button>
-          </form>
-        </ul>
+        <>
+          <ul className="mt-4 space-y-2 border-t border-neutral-100 pt-3">
+            {drafts.items.slice(0, 5).map((d) => (
+              <li
+                key={d.id}
+                className="flex items-center justify-between gap-3 rounded-md border border-neutral-100 px-3 py-2 text-xs"
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <Badge tone="violet">v{d.version}</Badge>
+                  <Badge tone={d.status === "submitted" ? "green" : "neutral"}>
+                    {d.status}
+                  </Badge>
+                  <Link
+                    href={`/drafts/${d.id}`}
+                    className="truncate text-neutral-800 hover:underline"
+                  >
+                    {d.title}
+                  </Link>
+                </div>
+                <span className="shrink-0 tabular-nums text-[10px] text-neutral-400">
+                  {fmtDate(d.created_at)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-3">
+            <StreamingDraftButton
+              opportunityId={opportunityId}
+              hasExistingDrafts={true}
+              recommended={false}
+            />
+          </div>
+        </>
       )}
     </section>
   );
