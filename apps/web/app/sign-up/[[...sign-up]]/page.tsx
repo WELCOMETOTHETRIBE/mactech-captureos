@@ -37,19 +37,24 @@ const clerkAppearance = {
   elements: {
     rootBox: "w-full",
     card: "shadow-none border-0 bg-transparent p-0 w-full",
-    headerTitle: "text-2xl font-semibold tracking-tight text-neutral-900",
-    headerSubtitle: "text-sm text-neutral-600",
+    header: "hidden",
+    headerTitle: "hidden",
+    headerSubtitle: "hidden",
+    socialButtonsBlockButton:
+      "h-11 rounded-md border border-neutral-300 bg-white hover:bg-neutral-50 text-neutral-900 font-medium normal-case text-sm",
+    socialButtonsBlockButtonText: "text-neutral-900 font-medium",
+    socialButtonsBlockButtonArrow: "hidden",
+    socialButtonsProviderIcon: "h-5 w-5",
+    dividerRow: "my-4",
+    dividerLine: "bg-neutral-200",
+    dividerText: "text-neutral-400 text-xs uppercase tracking-wide",
     formFieldLabel: "text-neutral-700 font-medium text-sm",
     formFieldInput:
-      "h-11 rounded-md border-neutral-300 bg-white text-neutral-900 shadow-sm focus:border-[#207b78] focus:ring-2 focus:ring-[#207b78]/20",
+      "h-11 rounded-md border-neutral-300 bg-white text-neutral-900 placeholder:text-neutral-400 focus:border-[#207b78] focus:ring-2 focus:ring-[#207b78]/20",
     formButtonPrimary:
-      "h-11 rounded-md bg-[#1c6362] hover:bg-[#1a504f] text-white font-medium shadow-sm normal-case text-sm",
-    socialButtonsBlockButton:
-      "h-11 rounded-md border-neutral-300 hover:bg-neutral-50",
+      "h-11 rounded-md bg-[#1c6362] hover:bg-[#1a504f] text-white font-semibold normal-case text-sm shadow-none",
     footerActionText: "text-neutral-600 text-sm",
     footerActionLink: "text-[#207b78] hover:text-[#1c6362] font-medium",
-    dividerLine: "bg-neutral-200",
-    dividerText: "text-neutral-500 text-xs",
     footer: "hidden",
   },
 } as const;
@@ -124,6 +129,14 @@ export default function Page() {
             <h1 className="text-2xl font-bold tracking-tight text-white">
               The operating system for defense contractors.
             </h1>
+          </div>
+          <div className="mb-6">
+            <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">
+              Create your MacTech CaptureOS account
+            </h1>
+            <p className="mt-1 text-sm text-neutral-600">
+              Continue with Google or use your email below.
+            </p>
           </div>
           <SignUp appearance={clerkAppearance} signInUrl="/sign-in" />
         </div>
