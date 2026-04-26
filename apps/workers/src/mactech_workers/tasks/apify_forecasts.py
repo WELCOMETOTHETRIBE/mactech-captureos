@@ -216,6 +216,9 @@ async def _kick_and_ingest() -> dict[str, Any]:
                 WEBSITE_CONTENT_CRAWLER_ACTOR,
                 run_input,
                 wait_for_finish_secs=FORECASTS_RUN_TIMEOUT_SECS,
+                # 4GB cap so we can coexist with the industry-days run
+                # on Apify's free 8GB-total tier.
+                memory_mbytes=4096,
             )
         except ApifyError as exc:
             log.warning("apify kick forecasts failed: %s", exc)

@@ -133,16 +133,21 @@ class ApifyClient:
         *,
         wait_for_finish_secs: int = 0,
         webhooks_b64: str | None = None,
+        memory_mbytes: int | None = None,
+        timeout_secs: int | None = None,
     ) -> ApifyRunInfo:
         """Start an Actor run.
 
         - `wait_for_finish_secs=0` (default) returns immediately with a
           RUNNING run object. Caller polls or relies on the webhook.
         - `wait_for_finish_secs>0` blocks server-side until the run
-          finishes or the deadline expires (Apify's `waitForFinish`).
-        - `webhooks_b64` lets a per-run webhook override the actor-level
-          schedule (we use the actor-level one for industry-day; this is
-          here for future on-demand cases).
+          finishes or the deadline expires (Apify's `waitForFinish`,
+          which itself caps at 60s — use `run_actor_sync` for longer).
+        - `memory_mbytes` overrides the actor's default memory. On the
+          free tier (8GB total budget) we set this to 4096 so two
+          MacTech crawls can coexist without 402'ing each other.
+        - `timeout_secs` caps the total run wall-clock time on Apify's
+          side.
         """
         path = f"/acts/{_quote_actor_id(actor_id)}/runs"
         params: dict[str, str | int] = {}
@@ -150,6 +155,10 @@ class ApifyClient:
             params["waitForFinish"] = wait_for_finish_secs
         if webhooks_b64:
             params["webhooks"] = webhooks_b64
+        if memory_mbytes is not None:
+            params["memory"] = memory_mbytes
+        if timeout_secs is not None:
+            params["timeout"] = timeout_secs
         payload = await self._request("POST", path, json=run_input, params=params)
         return _parse_run(payload.get("data") or payload)
 
@@ -160,6 +169,8 @@ class ApifyClient:
         *,
         wait_for_finish_secs: int = DEFAULT_RUN_TIMEOUT_SECS,
         poll_interval_secs: int = 15,
+        memory_mbytes: int | None = None,
+        timeout_secs: int | None = None,
     ) -> ApifyRunInfo:
         """Start a run and block until it terminates or our deadline expires.
 
@@ -173,7 +184,12 @@ class ApifyClient:
         import asyncio
         import time
 
-        run = await self.run_actor(actor_id, run_input)
+        run = await self.run_actor(
+            actor_id,
+            run_input,
+            memory_mbytes=memory_mbytes,
+            timeout_secs=timeout_secs,
+        )
         deadline = time.monotonic() + max(0, wait_for_finish_secs)
         terminal = {"SUCCEEDED", "FAILED", "ABORTED", "TIMED_OUT"}
         while run.status not in terminal:

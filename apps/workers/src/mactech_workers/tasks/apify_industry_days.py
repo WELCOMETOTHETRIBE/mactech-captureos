@@ -180,11 +180,7 @@ async def _kick_and_ingest() -> dict[str, Any]:
         # event widgets (afcea.org calendar, IWRP) without burning browser
         # CU on already-static pages.
         "crawlerType": "playwright:adaptive",
-        # Crawl deeper. Hubs (afcea events list, ndia events list) link to
-        # individual event pages — depth=3 lets us follow them.
         "maxCrawlDepth": 3,
-        # Generous page cap; the LLM filter below skips low-signal pages
-        # so unused crawl is cheap.
         "maxCrawlPages": 250,
         "saveHtml": False,
         "saveMarkdown": True,
@@ -192,10 +188,11 @@ async def _kick_and_ingest() -> dict[str, Any]:
             "nav, footer, header, .ads, .menu, .skip-link, .breadcrumbs, "
             "form, aside, .sidebar"
         ),
-        # Stay on the same agency/host. Without this, AFCEA links out to
-        # exhibitor sites, NDIA to academic partners, etc., spiking cost.
         "keepUrlFragments": False,
     }
+    # Cap actor memory at 4GB so we can run forecasts (also 4GB) alongside
+    # this on Apify's free 8GB-total tier without 402'ing each other out.
+    run_options = {"memoryMbytes": 4096}
 
     async with ApifyClient(api_token) as client:
         try:
@@ -203,6 +200,7 @@ async def _kick_and_ingest() -> dict[str, Any]:
                 WEBSITE_CONTENT_CRAWLER_ACTOR,
                 run_input,
                 wait_for_finish_secs=INDUSTRY_DAYS_RUN_TIMEOUT_SECS,
+                memory_mbytes=run_options["memoryMbytes"],
             )
         except ApifyError as exc:
             log.warning("apify kick industry-days failed: %s", exc)
