@@ -17,11 +17,13 @@ dependencies = [
     "httpx>=0.27",
     "mactech-db",
     "mactech-intelligence",
+    "mactech-integrations",
 ]
 
 [tool.uv.sources]
 mactech-db = { workspace = true }
 mactech-intelligence = { workspace = true }
+mactech-integrations = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

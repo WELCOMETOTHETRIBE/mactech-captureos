@@ -230,8 +230,30 @@ function Card({
   const canAdvance = stageIdx >= 0 && stageIdx < 4; // up to "submit"
   const canRegress = stageIdx > 0 && stageIdx <= 4;
 
+  // Aging signal: terminal stages (won/lost) never go stale; active stages
+  // turn amber at 7 days and red at 14. The visual cue is a colored ring
+  // on the card itself so it pops without a badge taking up space.
+  const isTerminal = card.stage === "won" || card.stage === "lost";
+  const stale = !isTerminal && card.days_in_stage >= 14;
+  const warming = !isTerminal && card.days_in_stage >= 7 && card.days_in_stage < 14;
+  const cardCls = stale
+    ? "rounded-md border-2 border-red-300 bg-white p-3 shadow-sm"
+    : warming
+    ? "rounded-md border-2 border-amber-300 bg-white p-3 shadow-sm"
+    : "rounded-md border border-neutral-200 bg-white p-3 shadow-sm";
+  const ageCls = stale
+    ? "tabular-nums font-semibold text-red-700"
+    : warming
+    ? "tabular-nums font-semibold text-amber-700"
+    : "tabular-nums text-neutral-500";
+  const ageTitle = stale
+    ? `Stale: in ${card.stage} for ${card.days_in_stage} days. Move it forward, kill it, or accept it's parked.`
+    : warming
+    ? `Aging: ${card.days_in_stage} days in ${card.stage}. Time to advance or document why it's parked.`
+    : `${card.days_in_stage} days in ${card.stage}.`;
+
   return (
-    <article className="rounded-md border border-neutral-200 bg-white p-3 shadow-sm">
+    <article className={cardCls}>
       <Link
         href={`/opportunities/${opp.id}`}
         className="block hover:underline"
@@ -258,15 +280,17 @@ function Card({
         </p>
       )}
 
-      <div className="mt-2 flex items-center justify-between text-[11px] text-neutral-500">
-        <span>
+      <div className="mt-2 flex items-center justify-between text-[11px]">
+        <span className="text-neutral-500">
           {card.owner_founder_slug ? (
             <span className="text-neutral-700">@{card.owner_founder_slug}</span>
           ) : (
             <span className="italic text-neutral-400">unassigned</span>
           )}
         </span>
-        <span className="tabular-nums">{card.days_in_stage}d in stage</span>
+        <span className={ageCls} title={ageTitle}>
+          {card.days_in_stage}d in stage
+        </span>
       </div>
 
       {!compact && (

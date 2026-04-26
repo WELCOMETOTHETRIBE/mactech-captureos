@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   apiFetch,
+  type AgencyIntelOut,
   type BriefOut,
   type DraftListResponse,
   type MeResponse,
@@ -22,6 +23,7 @@ import {
   deleteOpportunityBrief,
   generateOpportunityBrief
 } from "@/lib/brief";
+import { pullAgencyIntel } from "@/lib/agency-intel";
 import {
   Badge,
   Card,
@@ -100,30 +102,38 @@ export default async function OpportunityDetailPage({
     throw err;
   }
 
-  // Pursuit + me + drafts + Q&A + brief + (optional) explanation run in
-  // parallel. Brief and questions legitimately 404/empty when not yet
-  // generated — caller swallows.
-  const [me, pursuit, drafts, questions, brief, explanation] = await Promise.all([
-    apiFetch<MeResponse>("/me"),
-    apiFetch<PursuitCardT>(`/pursuits/by-opportunity/${id}`).catch(
-      () => null as PursuitCardT | null
-    ),
-    apiFetch<DraftListResponse>(`/opportunities/${id}/drafts`).catch(
-      () => ({ total: 0, items: [] }) as DraftListResponse
-    ),
-    apiFetch<QuestionListResponse>(`/opportunities/${id}/questions`).catch(
-      () => ({ total: 0, items: [], starters: {} }) as QuestionListResponse
-    ),
-    apiFetch<BriefOut>(`/opportunities/${id}/brief`).catch(
-      () => null as BriefOut | null
-    ),
-    explainSlug
-      ? apiFetch<TermExplanationResponse>(
-          `/explain/${encodeURIComponent(explainSlug)}`,
-          { timeoutMs: 45_000 }
-        ).catch(() => null as TermExplanationResponse | null)
-      : Promise.resolve(null as TermExplanationResponse | null)
-  ]);
+  // Pursuit + me + drafts + Q&A + brief + agency intel + (optional)
+  // explanation run in parallel. Brief, questions, and agency intel
+  // legitimately 404/empty/timeout — caller swallows.
+  // Agency intel uses a short timeout: if the cache is cold the API will
+  // hit USASpending live (5-10s), and we don't want that to block page
+  // render. Cache hits return in <100ms; cold misses fall through to the
+  // "Pull agency intel" CTA which uses the explicit server action.
+  const [me, pursuit, drafts, questions, brief, agencyIntel, explanation] =
+    await Promise.all([
+      apiFetch<MeResponse>("/me"),
+      apiFetch<PursuitCardT>(`/pursuits/by-opportunity/${id}`).catch(
+        () => null as PursuitCardT | null
+      ),
+      apiFetch<DraftListResponse>(`/opportunities/${id}/drafts`).catch(
+        () => ({ total: 0, items: [] }) as DraftListResponse
+      ),
+      apiFetch<QuestionListResponse>(`/opportunities/${id}/questions`).catch(
+        () => ({ total: 0, items: [], starters: {} }) as QuestionListResponse
+      ),
+      apiFetch<BriefOut>(`/opportunities/${id}/brief`).catch(
+        () => null as BriefOut | null
+      ),
+      apiFetch<AgencyIntelOut>(`/opportunities/${id}/agency-intel`, {
+        timeoutMs: 4_000
+      }).catch(() => null as AgencyIntelOut | null),
+      explainSlug
+        ? apiFetch<TermExplanationResponse>(
+            `/explain/${encodeURIComponent(explainSlug)}`,
+            { timeoutMs: 45_000 }
+          ).catch(() => null as TermExplanationResponse | null)
+        : Promise.resolve(null as TermExplanationResponse | null)
+    ]);
 
   const opp = data.opportunity;
 
@@ -312,6 +322,14 @@ export default async function OpportunityDetailPage({
           </Card>
         </div>
       </div>
+
+      {/* Agency intel — full-width strip below the 2-col main */}
+      <AgencyIntelCard
+        opportunityId={opp.id}
+        agency={opp.agency}
+        naics={opp.naics_code}
+        intel={agencyIntel}
+      />
 
       {/* Score + rationale — full-width */}
       {data.score ? (
@@ -1231,6 +1249,233 @@ function BriefEmpty({
           </button>
         </form>
       )}
+    </div>
+  );
+}
+
+/* ── Agency intel card ───────────────────────────────────────────── */
+
+function AgencyIntelCard({
+  opportunityId,
+  agency,
+  naics,
+  intel
+}: {
+  opportunityId: string;
+  agency: string | null;
+  naics: string | null;
+  intel: AgencyIntelOut | null;
+}) {
+  const action = pullAgencyIntel.bind(null, opportunityId);
+
+  if (!agency || !naics) {
+    return null; // Nothing to query without both fields.
+  }
+
+  return (
+    <section className="rounded-lg border border-neutral-200 bg-white p-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-brand-700">
+            Agency intel
+          </p>
+          <p className="mt-1 text-sm text-neutral-600">
+            How {agency.split(".")[0]} has spent under NAICS {naics} in the
+            last 12 months. Pulled from USASpending; cached 7 days.
+          </p>
+        </div>
+        {intel && (
+          <form action={action}>
+            <button
+              type="submit"
+              className="rounded-md px-2 py-1 text-[11px] text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
+              title="Re-fetch from USASpending. Takes 5–10 seconds."
+            >
+              ↻ Refresh
+            </button>
+          </form>
+        )}
+      </div>
+
+      {!intel ? (
+        <AgencyIntelEmpty action={action} />
+      ) : intel.lookup_failed ? (
+        <AgencyIntelFailure intel={intel} action={action} />
+      ) : intel.award_count === 0 ? (
+        <AgencyIntelNoMatches intel={intel} />
+      ) : (
+        <AgencyIntelBody intel={intel} />
+      )}
+    </section>
+  );
+}
+
+function AgencyIntelEmpty({
+  action
+}: {
+  action: () => Promise<void>;
+}) {
+  return (
+    <div className="mt-4 rounded-md border border-dashed border-neutral-300 bg-neutral-50 p-5 text-center">
+      <p className="text-sm font-medium text-neutral-800">
+        Agency intel not loaded yet
+      </p>
+      <p className="mt-2 text-sm text-neutral-600">
+        Click below to pull spending history from USASpending.gov for this
+        agency + NAICS combination. Takes 5–10 seconds the first time;
+        subsequent loads are instant for 7 days.
+      </p>
+      <form action={action} className="mt-4">
+        <button
+          type="submit"
+          className="rounded-md border border-brand-700 bg-brand-700 px-4 py-2 text-sm font-medium text-white hover:bg-brand-800"
+        >
+          Pull agency intel →
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function AgencyIntelFailure({
+  intel,
+  action
+}: {
+  intel: AgencyIntelOut;
+  action: () => Promise<void>;
+}) {
+  return (
+    <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+      <p className="font-medium">USASpending lookup didn&rsquo;t resolve.</p>
+      <p className="mt-1 text-xs">
+        {intel.failure_note ??
+          "The agency name may not match a USASpending toptier exactly."}
+      </p>
+      <form action={action} className="mt-3">
+        <button
+          type="submit"
+          className="rounded-md border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-900 hover:border-amber-500"
+        >
+          Retry
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function AgencyIntelNoMatches({ intel }: { intel: AgencyIntelOut }) {
+  return (
+    <p className="mt-4 text-sm text-neutral-600">
+      USASpending returned <strong className="text-neutral-900">0 awards</strong>{" "}
+      for {intel.agency_name} under NAICS {intel.naics_code} in the last{" "}
+      {intel.lookback_days} days. Either this agency hasn&rsquo;t bought
+      under this NAICS recently, or the agency name doesn&rsquo;t match a
+      USASpending toptier exactly.
+    </p>
+  );
+}
+
+function AgencyIntelBody({ intel }: { intel: AgencyIntelOut }) {
+  return (
+    <div className="mt-5 space-y-5">
+      {/* Top-line stats */}
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <IntelStat
+          label="Awards (12mo)"
+          value={intel.award_count.toLocaleString()}
+          hint={
+            intel.sample_size && intel.sample_size < intel.award_count
+              ? `top ${intel.sample_size} sampled`
+              : undefined
+          }
+        />
+        <IntelStat
+          label="Total obligated"
+          value={
+            intel.total_obligated != null
+              ? fmtMoney(intel.total_obligated)
+              : "—"
+          }
+          hint="across the sample"
+        />
+        <IntelStat
+          label="Average award"
+          value={
+            intel.avg_award_value != null ? fmtMoney(intel.avg_award_value) : "—"
+          }
+        />
+        <IntelStat
+          label="Median award"
+          value={
+            intel.median_award_value != null
+              ? fmtMoney(intel.median_award_value)
+              : "—"
+          }
+          hint="less skewed by outliers"
+        />
+      </div>
+
+      {/* Top recipients */}
+      {intel.top_recipients.length > 0 && (
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">
+            Top recipients
+          </p>
+          <ol className="mt-2 space-y-1.5">
+            {intel.top_recipients.map((r, i) => (
+              <li
+                key={`${r.name}-${i}`}
+                className="flex items-baseline justify-between gap-3 text-sm"
+              >
+                <span className="flex min-w-0 items-baseline gap-2">
+                  <span className="text-neutral-400 tabular-nums">
+                    {i + 1}.
+                  </span>
+                  <span className="truncate font-medium text-neutral-900">
+                    {r.name}
+                  </span>
+                  <span className="shrink-0 text-[11px] text-neutral-500 tabular-nums">
+                    {r.award_count} {r.award_count === 1 ? "award" : "awards"}
+                  </span>
+                </span>
+                <span className="shrink-0 tabular-nums font-semibold text-neutral-800">
+                  {fmtMoney(r.total)}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
+      <p className="border-t border-neutral-100 pt-3 text-[11px] text-neutral-400">
+        Refreshed {fmtDate(intel.refreshed_at)} ·{" "}
+        {intel.is_fresh
+          ? `cache hit (${Math.round(intel.cache_age_hours)}h old)`
+          : "stale, refresh on next view"}{" "}
+        · Source: USASpending.gov
+      </p>
+    </div>
+  );
+}
+
+function IntelStat({
+  label,
+  value,
+  hint
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
+  return (
+    <div className="rounded-md border border-neutral-100 bg-neutral-50 p-3">
+      <p className="text-[10px] font-medium uppercase tracking-wide text-neutral-500">
+        {label}
+      </p>
+      <p className="mt-1 text-xl font-semibold tabular-nums text-neutral-900">
+        {value}
+      </p>
+      {hint && <p className="text-[10px] text-neutral-500">{hint}</p>}
     </div>
   );
 }

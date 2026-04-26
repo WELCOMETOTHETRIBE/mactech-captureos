@@ -1,3 +1,4 @@
+from mactech_db.models.agency_intel import AgencyNaicsIntel
 from mactech_db.models.draft import DRAFT_STATUSES, DRAFT_TYPES, ProposalDraft
 from mactech_db.models.enrichment import AwardHistory, ExclusionsCache, OpportunityEnriched
 from mactech_db.models.founder import Founder, FounderNaicsMatrix
@@ -18,6 +19,7 @@ from mactech_db.models.term_explanation import TermExplanation
 from mactech_db.models.user import User
 
 __all__ = [
+    "AgencyNaicsIntel",
     "AwardHistory",
     "CapabilityStatement",
     "DRAFT_STATUSES",

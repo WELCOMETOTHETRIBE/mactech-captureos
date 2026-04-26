@@ -516,6 +516,56 @@ export type QuestionListResponse = {
   starters: Record<string, string>;
 };
 
+/* ── /search (Cmd-K global search) ─────────────────────────────── */
+
+export type SearchHitKind =
+  | "opportunity"
+  | "draft"
+  | "teaming_partner"
+  | "past_performance";
+
+export type SearchHit = {
+  kind: SearchHitKind;
+  id: string;
+  title: string;
+  subtitle: string | null;
+  score: number | null;
+  url: string;
+};
+
+export type SearchResponse = {
+  query: string;
+  total: number;
+  hits: SearchHit[];
+  grouped: Record<string, SearchHit[]>;
+};
+
+/* ── /opportunities/{id}/agency-intel ──────────────────────────── */
+
+export type AgencyIntelTopRecipient = {
+  name: string;
+  uei: string | null;
+  total: number;
+  award_count: number;
+};
+
+export type AgencyIntelOut = {
+  agency_name: string;
+  naics_code: string;
+  lookback_days: number;
+  award_count: number;
+  total_obligated: number | null;
+  avg_award_value: number | null;
+  median_award_value: number | null;
+  top_recipients: AgencyIntelTopRecipient[];
+  sample_size: number | null;
+  refreshed_at: string;
+  cache_age_hours: number;
+  is_fresh: boolean;
+  lookup_failed: boolean;
+  failure_note: string | null;
+};
+
 /* ── /opportunities/{id}/brief ─────────────────────────────────── */
 
 export type BriefOut = {

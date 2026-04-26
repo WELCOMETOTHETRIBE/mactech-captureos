@@ -1,6 +1,7 @@
 import { UserButton } from "@clerk/nextjs";
 import { apiFetch, type MeResponse } from "@/lib/api";
 import { SidebarNav } from "@/components/sidebar-nav";
+import { CmdK, CmdKTrigger } from "@/components/cmd-k";
 import { Pillar } from "@/components/ui";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -25,6 +26,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <p className="mt-1 text-[10px] text-neutral-400">
             The operating system for defense contractors.
           </p>
+        </div>
+
+        {/* Cmd-K trigger — keyboard works anywhere; this button is the
+            discoverable affordance for users who haven't learned the
+            shortcut yet. */}
+        <div className="px-3 pt-3">
+          <CmdKTrigger />
         </div>
 
         <SidebarNav />
@@ -74,6 +82,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </header>
         <main className="flex-1 px-6 py-6">{children}</main>
       </div>
+
+      {/* Global Cmd-K modal — single mount, listens for the shortcut
+          anywhere in the app. */}
+      <CmdK />
     </div>
   );
 }

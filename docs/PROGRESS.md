@@ -837,3 +837,66 @@ Replaces the raw SAM `<pre>` description with a 30-second structured read. Lazy 
 - USASpending agency-level rollups card on detail page.
 - Hybrid pgvector + pg_trgm Cmd-K global search.
 - PDF upload on /library with auto-parse (deferred from Sprint 4 to keep this commit reviewable).
+
+---
+
+## 2026-04-25 — UX overhaul, Sprint 5 (partial): pipeline aging + agency intel + Cmd-K
+
+User said "sprint 5 lets go!" Three high-impact pieces shipped; onboarding flow + PDF upload deferred to Sprint 6 — they each warrant their own session.
+
+### Pipeline aging signal ([app/(app)/pipeline/page.tsx](apps/web/app/(app)/pipeline/page.tsx))
+- Cards in active stages get a 2px colored border based on `days_in_stage`:
+  - **0–6 days**: neutral, normal border.
+  - **7–13 days**: amber border + amber bold age text. "Time to advance or document why it's parked."
+  - **≥14 days**: red border + red bold age text. "Move it forward, kill it, or accept it's parked."
+- Won/Lost cards never go stale (terminal stages are correctly inert).
+- Hover tooltip on the age line includes a contextual prompt for the user.
+
+### Agency intel card
+
+**Schema** — migration 0012 ([0012_agency_intel.py](packages/db/alembic/versions/0012_agency_intel.py), model [agency_intel.py](packages/db/src/mactech_db/models/agency_intel.py))
+- `agency_naics_intel` cache table — `(agency_name, naics_code, lookback_days)` unique key. Stores `award_count`, `total_obligated`, `avg_award_value`, `median_award_value`, `top_recipients` JSONB, `set_aside_breakdown` JSONB, `lookup_failed` flag + `failure_note` for graceful negative caching.
+- Migration also `CREATE EXTENSION IF NOT EXISTS pg_trgm` and adds GIN indexes on `opportunities_raw.title`, `proposal_drafts.title`, `teaming_partners.name`, `past_performance.title` — these power the Cmd-K search below.
+
+**API** ([routes/agency_intel.py](apps/api/src/mactech_api/routes/agency_intel.py))
+- `GET /opportunities/{id}/agency-intel` — read-through cache with 7-day TTL; failures cached 1 day so the UI doesn't retry-storm transient USASpending issues. Falls back to stale data on USASpending error if a cached row exists. 503 on rate limit; 409 if the opp is missing agency name or NAICS code.
+- Aggregate is computed from the top 100 awards in the last 365 days (USASpending limit) — sample-size disclosed in the response. Top 5 recipients ranked by total dollars across the sample.
+- API package now declares `mactech-integrations` as an explicit dep (was already present at runtime via `uv sync --all-packages`).
+
+**Web** ([apps/web/lib/agency-intel.ts](apps/web/lib/agency-intel.ts) + [opp detail page](apps/web/app/(app)/opportunities/[id]/page.tsx))
+- New `<AgencyIntelCard>` strip below the 2-column main on the opportunity detail page.
+- Page fetches `/agency-intel` in parallel with the existing requests using a **4-second timeout** — cache hits (<100ms) render the data immediately; cache misses (5–10s) gracefully fall through to a "Pull agency intel →" CTA. The CTA fires `pullAgencyIntel` server action with a 30s timeout.
+- States: empty (CTA), failure (USASpending didn't resolve, with retry), zero matches (this agency hasn't bought under this NAICS recently), and full data render with 4 stat tiles + top 5 recipients + cache metadata.
+
+### Cmd-K hybrid global search
+
+**API** ([routes/search.py](apps/api/src/mactech_api/routes/search.py))
+- `GET /search?q=<query>&limit=8` — pg_trgm `%` operator + `similarity()` ranking across:
+  - opportunities (title; tenant-bridged via `opportunity_scores`)
+  - proposal drafts (title)
+  - teaming partners (name)
+  - past performance (title)
+- Empty query returns recents per kind (acts as the "default" view when the modal opens).
+- Response is grouped by kind and flattened — UI consumes the grouped form for sectioned rendering plus the flat form for keyboard navigation indices.
+- `set_config('pg_trgm.similarity_threshold', '0.10', true)` per request to keep `%` selective without polluting the global setting.
+
+**Web** ([components/cmd-k.tsx](apps/web/components/cmd-k.tsx))
+- New client component `<CmdK>` mounted once in [app/(app)/layout.tsx](apps/web/app/(app)/layout.tsx).
+- Cmd-K (or Ctrl-K) toggles the modal globally; Escape closes; click on the dimmed scrim closes; ↑↓ navigate; Enter opens the highlighted result.
+- 200ms debounced search via `useTransition`. Each keystroke calls the `searchEverything` server action; pending state shows "Searching…".
+- Sectioned result rendering with brand-50 highlight on the active item.
+- Footer shows the keyboard hints (`↑↓`, `↵`, `esc`) so the layman discovers the controls.
+- New `<CmdKTrigger>` button mounted in the sidebar header — for users who haven't learned the shortcut. Synthesizes a Cmd-K keystroke on click so the trigger and shortcut share the same code path.
+- Single client island; everything else stays server-rendered.
+
+### Verification
+- `tsc --noEmit` clean across `apps/web`.
+- `next build` produces all 14 routes (no new pages — Cmd-K is an overlay; agency intel is an inline card).
+- `python3 -m py_compile` clean on the new model, migration, intelligence module not needed (pure SQL/Python in the route), and 2 route modules.
+- Migration 0012 auto-runs on api boot via [entrypoint.sh](apps/api/entrypoint.sh). pg_trgm extension creation is idempotent.
+
+### Still ahead (Sprint 6 candidates)
+- **Onboarding flow** — 5-step wizard for new tenants with SAM Entity API auto-fill on UEI, capability statement parsing, NAICS picker, founder add, first-feed preview.
+- **PDF upload** on /library — drag-drop a capability-statement PDF or past-performance write-up; PyMuPDF parse → Claude extract → preview-and-confirm flow.
+- **Streaming Q&A** — replace the synchronous `ask_about_opportunity` with native Next.js streaming server components so the answer composes live.
+- **DOCX export** for proposal drafts — server-side markdown → docx via python-docx.
