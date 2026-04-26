@@ -52,6 +52,19 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 async def seed_tenant(session: AsyncSession, config: dict[str, Any]) -> Tenant:
     t = config["tenant"]
+    # clerk_org_id from yaml is authoritative for fresh inserts. For existing
+    # rows we ONLY update it when set in the yaml; if the yaml omits it (or
+    # sets null), we preserve whatever's already in the DB so a partial yaml
+    # can't accidentally wipe a valid org link.
+    clerk_org_id = t.get("clerk_org_id")
+    update_set: dict[str, Any] = {
+        "name": t["name"],
+        "plan": t.get("plan", "internal"),
+        "uei": t.get("uei"),
+        "cage_code": t.get("cage_code"),
+    }
+    if clerk_org_id:
+        update_set["clerk_org_id"] = clerk_org_id
     stmt = (
         pg_insert(Tenant)
         .values(
@@ -60,15 +73,11 @@ async def seed_tenant(session: AsyncSession, config: dict[str, Any]) -> Tenant:
             plan=t.get("plan", "internal"),
             uei=t.get("uei"),
             cage_code=t.get("cage_code"),
+            clerk_org_id=clerk_org_id,
         )
         .on_conflict_do_update(
             index_elements=["slug"],
-            set_={
-                "name": t["name"],
-                "plan": t.get("plan", "internal"),
-                "uei": t.get("uei"),
-                "cage_code": t.get("cage_code"),
-            },
+            set_=update_set,
         )
     )
     await session.execute(stmt)

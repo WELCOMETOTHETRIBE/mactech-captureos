@@ -11,6 +11,10 @@ tenant:
   uei: null              # TODO: fill after SAM.gov registration
   cage_code: null        # TODO: fill after CAGE assignment
   sdvosb_status: pending
+  # Clerk Organization ID for the MacTech workspace. Required for the
+  # API's tenant resolution (auth.py looks up by clerk_org_id).
+  # Update if the Clerk org ID rotates.
+  clerk_org_id: org_3CpMVyinL6o6SydBwIPaz188MWk
   naics:
     primary:
       - 541519
