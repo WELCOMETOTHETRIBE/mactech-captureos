@@ -645,3 +645,52 @@ export type BriefOut = {
   created_at: string;
   updated_at: string;
 };
+
+/* ── /opportunities/{id}/web-mentions ──────────────────────────── */
+
+export type WebMentionResult = {
+  position: number;
+  title: string;
+  link: string;
+  displayed_link: string | null;
+  snippet: string | null;
+  source: string | null;
+  date: string | null;
+};
+
+export type WebMentionGroup = {
+  kind: "program" | "incumbent" | "agency_news" | string;
+  query: string;
+  results: WebMentionResult[];
+  fetched_at: string | null;
+  is_stale: boolean;
+};
+
+export type WebMentionsResponse = {
+  opportunity_id: string;
+  groups: WebMentionGroup[];
+  has_serpapi_key: boolean;
+};
+
+/* ── /events ───────────────────────────────────────────────────── */
+
+export type AgencyEventOut = {
+  id: string;
+  title: string;
+  agency: string | null;
+  kind: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  location: string | null;
+  source_url: string;
+  source_host: string | null;
+  registration_url: string | null;
+  naics_codes: string[];
+  summary: string | null;
+  last_seen_at: string;
+};
+
+export type AgencyEventsResponse = {
+  total: number;
+  items: AgencyEventOut[];
+};

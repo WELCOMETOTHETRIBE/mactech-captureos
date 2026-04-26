@@ -7,6 +7,7 @@ from mactech_api.routes.agency_intel import router as agency_intel_router
 from mactech_api.routes.ask import router as ask_router
 from mactech_api.routes.brief import router as brief_router
 from mactech_api.routes.drafts import router as drafts_router
+from mactech_api.routes.events import router as events_router
 from mactech_api.routes.explain import router as explain_router
 from mactech_api.routes.founders import router as founders_router
 from mactech_api.routes.library import router as library_router
@@ -19,6 +20,8 @@ from mactech_api.routes.pursuits import router as pursuits_router
 from mactech_api.routes.search import router as search_router
 from mactech_api.routes.settings import router as settings_router
 from mactech_api.routes.teaming_partners import router as teaming_partners_router
+from mactech_api.routes.web_mentions import router as web_mentions_router
+from mactech_api.routes.webhooks import router as webhooks_router
 from mactech_api.settings import settings
 from mactech_db import async_session_factory
 
@@ -55,6 +58,9 @@ app.include_router(search_router)
 app.include_router(library_import_router)
 app.include_router(onboarding_router)
 app.include_router(founders_router)
+app.include_router(web_mentions_router)
+app.include_router(webhooks_router)
+app.include_router(events_router)
 
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)

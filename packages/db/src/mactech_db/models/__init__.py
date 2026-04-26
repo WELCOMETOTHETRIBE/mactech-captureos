@@ -1,4 +1,5 @@
 from mactech_db.models.agency_intel import AgencyNaicsIntel
+from mactech_db.models.apify import AgencyEvent, ApifyRun
 from mactech_db.models.draft import DRAFT_STATUSES, DRAFT_TYPES, ProposalDraft
 from mactech_db.models.enrichment import AwardHistory, ExclusionsCache, OpportunityEnriched
 from mactech_db.models.founder import Founder, FounderNaicsMatrix
@@ -22,9 +23,12 @@ from mactech_db.models.scoring import CapabilityStatement, OpportunityScore
 from mactech_db.models.tenant import Tenant
 from mactech_db.models.term_explanation import TermExplanation
 from mactech_db.models.user import User
+from mactech_db.models.web_mention import WEB_MENTION_KINDS, WebMentionCache
 
 __all__ = [
+    "AgencyEvent",
     "AgencyNaicsIntel",
+    "ApifyRun",
     "AwardHistory",
     "CapabilityStatement",
     "DRAFT_STATUSES",
@@ -52,4 +56,6 @@ __all__ = [
     "Tenant",
     "TermExplanation",
     "User",
+    "WEB_MENTION_KINDS",
+    "WebMentionCache",
 ]
