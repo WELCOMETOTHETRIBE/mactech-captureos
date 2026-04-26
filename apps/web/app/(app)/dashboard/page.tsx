@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { apiFetch, type DashboardResponse } from "@/lib/api";
+import { apiFetch, type DashboardResponse, type MeResponse } from "@/lib/api";
 import { dismissHowItWorks, showHowItWorks } from "@/lib/preferences";
 import {
   Badge,
@@ -22,12 +22,15 @@ export const dynamic = "force-dynamic";
 const HOW_IT_WORKS_COOKIE = "mactech.dismiss.howitworks";
 
 export default async function DashboardPage() {
-  const [data, ck] = await Promise.all([
+  const [data, me, ck] = await Promise.all([
     apiFetch<DashboardResponse>("/me/dashboard"),
+    apiFetch<MeResponse>("/me"),
     cookies()
   ]);
 
   const howItWorksDismissed = ck.get(HOW_IT_WORKS_COOKIE)?.value === "1";
+  const onboardingIncomplete =
+    me.tenant.onboarding_completed_at === null;
 
   const greeting = data.you
     ? `Good morning, ${data.you.full_name.split(" ")[0]}.`
@@ -59,6 +62,26 @@ export default async function DashboardPage() {
           </LinkButton>
         }
       />
+
+      {onboardingIncomplete && (
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+              Setup incomplete
+            </p>
+            <p className="mt-1 text-sm text-amber-900">
+              Confirm your UEI, CAGE, and set-aside certifications so the
+              proposal drafter can cite them. Two minutes.
+            </p>
+          </div>
+          <Link
+            href="/onboarding"
+            className="rounded-md border border-amber-700 bg-amber-700 px-4 py-2 text-sm font-medium text-white hover:bg-amber-800"
+          >
+            Finish setup →
+          </Link>
+        </section>
+      )}
 
       {/* Action-oriented KPIs — your day at a glance */}
       <section className="grid grid-cols-2 gap-4 md:grid-cols-4">

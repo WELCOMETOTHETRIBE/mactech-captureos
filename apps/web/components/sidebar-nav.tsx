@@ -39,6 +39,12 @@ const NAV = [
     label: "Settings",
     sub: "Tenant & founders",
     match: (p: string) => p.startsWith("/settings")
+  },
+  {
+    href: "/onboarding",
+    label: "Setup",
+    sub: "Tenant identity wizard",
+    match: (p: string) => p.startsWith("/onboarding")
   }
 ];
 

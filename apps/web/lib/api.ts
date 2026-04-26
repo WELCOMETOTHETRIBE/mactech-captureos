@@ -63,6 +63,44 @@ export type TenantHeader = {
   slug: string;
   name: string;
   plan: string;
+  uei: string | null;
+  cage_code: string | null;
+  set_aside_certifications: string[];
+  onboarding_completed_at: string | null;
+};
+
+/* ── /onboarding ─────────────────────────────────────────────────── */
+
+export type SamEntityProfile = {
+  uei: string;
+  cage_code: string | null;
+  legal_business_name: string | null;
+  dba_name: string | null;
+  registration_status: string | null;
+  registration_date: string | null;
+  expiration_date: string | null;
+  physical_address_city: string | null;
+  physical_address_state: string | null;
+  physical_address_country: string | null;
+  primary_naics: string | null;
+  naics_codes: string[];
+  business_types_raw: string[];
+  set_aside_short_codes: string[];
+  pop_email: string | null;
+  pop_first_name: string | null;
+  pop_last_name: string | null;
+  pop_title: string | null;
+};
+
+export type OnboardingTenantHeaderOut = {
+  id: string;
+  slug: string;
+  name: string;
+  plan: string;
+  uei: string | null;
+  cage_code: string | null;
+  set_aside_certifications: string[];
+  onboarding_completed_at: string | null;
 };
 
 export type MeResponse = {

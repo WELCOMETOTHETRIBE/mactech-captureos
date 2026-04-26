@@ -11,6 +11,7 @@ from mactech_api.routes.explain import router as explain_router
 from mactech_api.routes.library import router as library_router
 from mactech_api.routes.library_import import router as library_import_router
 from mactech_api.routes.me import router as me_router
+from mactech_api.routes.onboarding import router as onboarding_router
 from mactech_api.routes.opportunities import router as opportunities_router
 from mactech_api.routes.past_performance import router as past_performance_router
 from mactech_api.routes.pursuits import router as pursuits_router
@@ -51,6 +52,7 @@ app.include_router(brief_router)
 app.include_router(agency_intel_router)
 app.include_router(search_router)
 app.include_router(library_import_router)
+app.include_router(onboarding_router)
 
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)

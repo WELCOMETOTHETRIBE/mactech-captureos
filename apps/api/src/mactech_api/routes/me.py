@@ -45,6 +45,10 @@ class TenantHeader(_Out):
     slug: str
     name: str
     plan: str
+    uei: str | None = None
+    cage_code: str | None = None
+    set_aside_certifications: list[str] = []
+    onboarding_completed_at: str | None = None
 
 
 class MeResponse(_Out):
@@ -127,6 +131,16 @@ async def me(
             slug=ctx.tenant.slug,
             name=ctx.tenant.name,
             plan=ctx.tenant.plan,
+            uei=ctx.tenant.uei,
+            cage_code=ctx.tenant.cage_code,
+            set_aside_certifications=list(
+                ctx.tenant.set_aside_certifications or []
+            ),
+            onboarding_completed_at=(
+                ctx.tenant.onboarding_completed_at.isoformat()
+                if ctx.tenant.onboarding_completed_at
+                else None
+            ),
         ),
     )
 

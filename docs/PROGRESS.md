@@ -995,3 +995,59 @@ User said "sprint 7 execute". Picked the largest blocker on the audit's punch li
 - **Streaming Q&A** on the Ask panel.
 - **OCR for scanned PDFs** — extends the Sprint 6/7 PDF flow.
 - **Inline embedding on capability update** — if the embedding lag matters in practice.
+
+---
+
+## 2026-04-25 — Sprint 8: onboarding flow with SAM Entity API auto-fill
+
+User said "sprint 8 lets go". Picked the productization headline: a tenant-identity wizard that auto-fills firm details from a single UEI lookup against SAM.gov's Entity API. NAICS/founder pickers and first-feed preview defer to Sprint 9.
+
+### Schema — migration 0013
+- **`tenants` extended**: `set_aside_certifications text[]` (SDVOSB, 8(a), HUBZone, WOSB, etc.) and `onboarding_completed_at timestamptz null`. Both `null` by default, both surfaced in `/me` and the new `/me/onboarding/*` endpoints.
+- Onboarding is **opt-in**, not gated — the dashboard surfaces a "Finish setup" amber banner while `onboarding_completed_at` is null, but no route is blocked.
+
+### Integration — SAM.gov Entity API client
+- New module [packages/integrations/src/mactech_integrations/sam_gov/entities.py](packages/integrations/src/mactech_integrations/sam_gov/entities.py) parallel to the existing exclusions client. Hits `GET https://api.sam.gov/entity-information/v4/entities?ueiSAM=...&includeSections=coreData,assertions,pointsOfContact`.
+- `EntityProfile` dataclass flattens the rich SAM response down to the fields the wizard cares about: legal name, DBA, CAGE, registration status + dates, physical address (city/state/country), primary NAICS, full NAICS list, raw business types, and a derived list of `set_aside_short_codes` (SDVOSB / 8(a) / HUBZone / WOSB / etc.).
+- `_short_codes_from_business_types()` reduces SAM's verbose `businessTypeDesc` strings to the short codes the UI checkboxes use. Tolerant of casing/wording variation.
+- Same retry pattern as exclusions: `tenacity` with exponential backoff on transport + 429 + 5xx.
+- Exposes `SamEntityNotFoundError` for the "no SAM entity found for that UEI" case so the API can surface a clean 404.
+
+### API — onboarding endpoints ([routes/onboarding.py](apps/api/src/mactech_api/routes/onboarding.py))
+- `GET /onboarding/sam-entity/{uei}` — server-side proxy to the SAM Entity client. The SAM API key never leaves the API service. Authenticated; preserves tenant context for future per-tenant rate limiting.
+- `POST /me/onboarding/firm-details` — saves UEI / CAGE / legal_name / set_aside_certifications. Idempotent; null inputs preserve existing values; empty arrays are valid (means "no certifications").
+- `POST /me/onboarding/complete` — flips `onboarding_completed_at` to now.
+- `POST /me/onboarding/reset` — nulls it (admin escape hatch).
+- `/me` extended: `TenantHeader` now exposes `uei`, `cage_code`, `set_aside_certifications`, `onboarding_completed_at`. Backward-compatible defaults so old clients don't break.
+
+### Web — onboarding page + dashboard banner + sidebar entry
+- **[/onboarding](apps/web/app/(app)/onboarding/page.tsx)** — single-page wizard:
+  - Step 1: UEI input + "Look up →" button (form action `lookupAndPrefill` calls SAM, then redirects back with prefill query params).
+  - Step 2: confirmation form for legal name + CAGE + set-aside certifications (8 checkboxes: SDVOSB / VOSB / WOSB / EDWOSB / 8(a) / HUBZone / SDB / SB). Submit either keeps the wizard open or flips `onboarding_completed_at` and redirects to /dashboard.
+  - Step 3: "What's next" panel with deep links to capability statement / past performance / teaming partner imports.
+- Lookup error surfaces in an amber notice with the underlying message; user can still type the firm details manually.
+- Successful lookup surfaces an emerald notice + lists the NAICS codes SAM has on file (preview only — NAICS picker ships next sprint).
+- **Server actions** in [lib/onboarding.ts](apps/web/lib/onboarding.ts): `lookupSamEntity`, `lookupAndPrefill` (read UEI from form → call API → redirect with prefill params), `saveFirmDetails`, `resetOnboarding`. The lookup action goes through API which goes through the integration package — SAM key never reaches the browser or the Next.js server-action context.
+- **Dashboard banner** ([dashboard/page.tsx](apps/web/app/(app)/dashboard/page.tsx)) — when `onboarding_completed_at` is null, renders an amber strip directly under the page header with "Finish setup →" CTA. Two minutes.
+- **Sidebar nav** picks up "Setup — Tenant identity wizard" entry under Settings.
+
+### Verification
+- `tsc --noEmit` clean across `apps/web`.
+- `next build` produces all 20 routes (1 new: `/onboarding`).
+- `python3 -m py_compile` clean on the new SAM Entity client, route module, schema module, and migration.
+- Migration 0013 auto-runs on api boot via [entrypoint.sh](apps/api/entrypoint.sh). Both new columns are nullable so existing tenants survive untouched.
+- New SAM Entity client uses the existing `SAM_API_KEY` env var — no new secrets needed.
+
+### Trade-offs called out
+- **Wizard is single-page, not multi-step.** UEI lookup + firm-details confirmation is the *valuable* part. NAICS picker and founder roster needed real schema thought (per-tenant NAICS table? Reuse `founder_naics_matrix`? Stay on `saved_searches`?), so they defer.
+- **First-feed preview deferred.** The agent's original spec had Step 5 = "kick off a one-off SAM ingestion for selected NAICS over the past 14 days, land user on /dashboard with first 3 scored opportunities." For MacTech this is moot (the feed is already populated); for net-new tenants it'd require synchronous worker invocation. Belongs with NAICS picker.
+- **No NAICS persistence yet.** SAM's NAICS list is *displayed* on successful lookup but not saved anywhere — the existing seed config still drives the actual NAICS taxonomy. Sprint 9 wires NAICS into the wizard properly.
+- **MacTech specifically.** MacTech bootstrapped before this sprint, so their `onboarding_completed_at` will be null on first deploy. The banner will show until they click through `/onboarding`. That's a one-time, two-minute confirmation step.
+
+### Sprint 9 candidates left
+- **NAICS picker step** in the wizard, persisting a per-tenant NAICS list separate from the seed config.
+- **Founder roster step** — let net-new tenants add their team without seed config.
+- **First-feed preview** — synchronous one-off SAM ingestion for the wizard's "we found these opps for you" landing.
+- **Streaming Q&A** on the Ask panel.
+- **OCR for scanned PDFs**.
+- **Inline embedding on capability update**.
