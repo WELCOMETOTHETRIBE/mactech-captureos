@@ -36,6 +36,7 @@ class Settings(BaseSettings):
 
     sam_api_key: str = Field(default="")
     apify_api_token: str = Field(default="")
+    apify_webhook_secret: str = Field(default="")
     serpapi_key: str = Field(default="")
     anthropic_api_key: str = Field(default="")
     voyage_api_key: str = Field(default="")

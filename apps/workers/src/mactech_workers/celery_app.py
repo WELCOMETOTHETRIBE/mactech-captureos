@@ -70,6 +70,13 @@ celery_app.conf.update(
             "schedule": crontab(minute=0, hour=6, day_of_week="mon-fri"),
             "options": {"expires": 60 * 60},
         },
+        # Apify industry-day calendar — daily 0500 ET. Apify's webhook
+        # then fires `mactech.apify.ingest_industry_days` on completion.
+        "apify-industry-days-kick": {
+            "task": "mactech.apify.kick_industry_days_run",
+            "schedule": crontab(minute=0, hour=5),
+            "options": {"expires": 60 * 60},
+        },
     },
 )
 
@@ -80,6 +87,7 @@ def health() -> str:
 
 
 # Side-effect imports to register tasks defined in submodules. Keep at end of file.
+import mactech_workers.tasks.apify_industry_days  # noqa: E402, F401
 import mactech_workers.tasks.digest  # noqa: E402, F401
 import mactech_workers.tasks.embed  # noqa: E402, F401
 import mactech_workers.tasks.enrich  # noqa: E402, F401
