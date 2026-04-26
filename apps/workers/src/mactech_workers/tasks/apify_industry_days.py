@@ -35,6 +35,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from mactech_db import unscoped_session
 from mactech_db.models import AgencyEvent, ApifyRun
+from mactech_db.session import get_engine
 from mactech_intelligence import AnthropicLLMClient
 from mactech_integrations.apify import ApifyClient, ApifyError
 from mactech_workers.celery_app import celery_app
@@ -109,6 +110,14 @@ def kick_industry_days_run_task() -> dict[str, Any]:
 
 
 async def _kick_and_ingest() -> dict[str, Any]:
+    # Dispose the lru_cache'd async engine so its asyncpg connection
+    # pool is empty for this task's event loop. Without this, a prior
+    # task's loop could have left connections in the pool whose
+    # internal futures are bound to a closed loop — when this loop
+    # tries to use them we hit "got Future ... attached to a different
+    # loop." Cheap (no connections to close on first call) and safe.
+    await get_engine().dispose()
+
     api_token = os.environ.get("APIFY_API_TOKEN", "")
     if not api_token:
         log.warning(
