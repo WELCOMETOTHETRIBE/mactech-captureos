@@ -1051,3 +1051,58 @@ User said "sprint 8 lets go". Picked the productization headline: a tenant-ident
 - **Streaming Q&A** on the Ask panel.
 - **OCR for scanned PDFs**.
 - **Inline embedding on capability update**.
+
+---
+
+## 2026-04-25 — Sprint 9: NAICS picker + founder CRUD
+
+User said "sprint 9 execute". Closes the two biggest open items in the onboarding flow: the NAICS picker that drives opportunity scoring, and full founder CRUD so net-new tenants can manage their team without touching seed config.
+
+### Schema — migration 0014
+- **`tenants.target_naics text[]`** — NAICS codes the tenant wants opportunities scored against. When null, the scoring engine falls back to the seed-config NAICS list (existing MacTech behaviour). When set, it overrides per-tenant. Wiring scoring to actually consume this column is Sprint 10.
+
+### API — onboarding extensions + founder CRUD
+- **POST /me/onboarding/firm-details** extended to accept `target_naics: string[]`. null leaves unchanged; empty list clears the override; populated list overwrites.
+- **TenantHeaderOut** + `/me` → `tenant.target_naics` exposed.
+- **New [routes/founders.py](apps/api/src/mactech_api/routes/founders.py)** — full CRUD:
+  - `GET /founders` — list (no tenant scoping; founders are global at the schema level — known limitation, tracked).
+  - `GET /founders/{id}` — single record.
+  - `POST /founders` — create. Auto-slugifies the name (e.g., "Patrick Caruso" → "patrick-caruso") and dedupes via -2/-3/etc. suffixes when needed.
+  - `PATCH /founders/{id}` — update with optional `clear_email` flag.
+  - `DELETE /founders/{id}` — 204.
+  - Pillar validated against `{security, infrastructure, quality, governance, other}` set.
+- **`/me/settings`** `FounderOut` extended with `id` field so the UI can route to `/settings/founders/{id}/edit` instead of by-slug.
+
+### Web — onboarding wizard
+- **NAICS picker fieldset** ([app/(app)/onboarding/page.tsx](apps/web/app/(app)/onboarding/page.tsx)):
+  - Suggested codes come from the SAM Entity API result (Sprint 8 lookup) merged with the tenant's existing `target_naics` from the DB. Each renders as a checkbox; checked when in the saved set.
+  - Free-form "Additional NAICS codes" text field accepts comma-separated 6-digit codes for codes not in the suggested set.
+  - The save action (`saveFirmDetails`) collects checked checkboxes + parsed extras, deduplicates, and submits as `target_naics`.
+- **Founder roster preview** in the wizard, pulls live from `/founders`. Shows up to 6 founders with name + title + pillar pip + "Manage in settings →" deep link.
+
+### Web — founder CRUD UI
+- New server actions in [lib/founders.ts](apps/web/lib/founders.ts): `createFounder`, `updateFounder` (bound with id), `deleteFounder`.
+- New shared form in [components/founder-form.tsx](apps/web/components/founder-form.tsx) — fields: full name, title, pillar (5-option select with friendly labels), email, bio, digest_enabled checkbox.
+- New routes:
+  - **[/settings/founders/new](apps/web/app/(app)/settings/founders/new/page.tsx)** — manual add form.
+  - **[/settings/founders/[id]/edit](apps/web/app/(app)/settings/founders/[id]/edit/page.tsx)** — edit form.
+- **/settings page** — founders section header now has "+ Add founder" CTA. Each founder card gets inline Edit / Delete in a footer row, with `Link href="/settings/founders/{id}/edit"` and a `<form action={deleteFounder}>` for the delete.
+
+### Verification
+- `tsc --noEmit` clean across `apps/web`.
+- `next build` produces all 22 routes (2 new: `/settings/founders/new`, `/settings/founders/[id]/edit`).
+- `python3 -m py_compile` clean on the new founders route + extended onboarding/settings routes + tenant model + migration 0014.
+- Migration auto-runs on api boot.
+
+### Known limitations called out
+- **Founders aren't tenant-scoped at the schema level.** No `tenant_id` column on the `founders` table. For MacTech (single tenant) this is fine; for multi-tenancy we'd need a migration adding `tenant_id` + composite unique on `(tenant_id, slug)` + updating every query. Tracked for a future refactor sprint.
+- **target_naics not yet wired into the scoring engine.** The column exists and the wizard writes it, but the scoring intelligence module still reads the seed-config NAICS list. Wiring is one query change in `intelligence/scoring.py` — Sprint 10.
+- **No first-feed preview yet.** The wizard ends with a "Save & finish setup" that flips the flag and lands on the dashboard. Synchronous one-off SAM ingestion for net-new tenants ("here are the first 3 opps we found for you") still pending.
+
+### Sprint 10 candidates left
+- **Wire `target_naics` into the scoring engine** so per-tenant NAICS actually affects opportunity ranking.
+- **Founder tenant-scoping migration** — multi-tenancy fix.
+- **First-feed preview** — synchronous one-off SAM ingestion at wizard completion.
+- **Streaming Q&A** on the Ask panel.
+- **OCR for scanned PDFs**.
+- **Inline embedding on capability update**.

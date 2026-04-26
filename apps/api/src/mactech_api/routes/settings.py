@@ -43,6 +43,7 @@ class NaicsRow(_Out):
 
 
 class FounderOut(_Out):
+    id: str
     slug: str
     full_name: str
     title: str
@@ -137,6 +138,7 @@ async def get_settings(
         ),
         founders=[
             FounderOut(
+                id=str(f.id),
                 slug=f.slug,
                 full_name=f.full_name,
                 title=f.title,

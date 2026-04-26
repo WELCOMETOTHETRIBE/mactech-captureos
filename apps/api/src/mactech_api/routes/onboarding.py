@@ -66,6 +66,9 @@ class FirmDetailsRequest(BaseModel):
     cage_code: str | None = Field(default=None, max_length=8)
     legal_name: str | None = Field(default=None, max_length=255)
     set_aside_certifications: list[str] = Field(default_factory=list)
+    # When provided, overwrites the tenant's target_naics. Empty list clears
+    # the override (falls back to seed-config). null leaves it unchanged.
+    target_naics: list[str] | None = None
 
 
 class TenantHeaderOut(_Out):
@@ -76,6 +79,7 @@ class TenantHeaderOut(_Out):
     uei: str | None
     cage_code: str | None
     set_aside_certifications: list[str]
+    target_naics: list[str]
     onboarding_completed_at: str | None
 
 
@@ -111,6 +115,7 @@ def _tenant_to_out(t) -> TenantHeaderOut:
         uei=t.uei,
         cage_code=t.cage_code,
         set_aside_certifications=list(t.set_aside_certifications or []),
+        target_naics=list(t.target_naics or []),
         onboarding_completed_at=(
             t.onboarding_completed_at.isoformat()
             if t.onboarding_completed_at
@@ -198,6 +203,11 @@ async def save_firm_details(
     # Always overwrite the certifications list — empty list means "I
     # don't have any" which is a real state.
     tenant.set_aside_certifications = body.set_aside_certifications or None
+
+    # target_naics: null leaves unchanged, empty list clears, populated list
+    # overwrites. The wizard sends explicit lists when the picker is touched.
+    if body.target_naics is not None:
+        tenant.target_naics = body.target_naics or None
 
     await ctx.session.flush()
     return _tenant_to_out(tenant)

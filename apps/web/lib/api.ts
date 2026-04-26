@@ -66,7 +66,27 @@ export type TenantHeader = {
   uei: string | null;
   cage_code: string | null;
   set_aside_certifications: string[];
+  target_naics: string[];
   onboarding_completed_at: string | null;
+};
+
+/* ── /founders ───────────────────────────────────────────────────── */
+
+export type FounderRecord = {
+  id: string;
+  slug: string;
+  full_name: string;
+  title: string;
+  pillar: string;
+  bio: string | null;
+  email: string | null;
+  digest_enabled: boolean;
+  created_at: string;
+};
+
+export type FoundersListResponse = {
+  total: number;
+  items: FounderRecord[];
 };
 
 /* ── /onboarding ─────────────────────────────────────────────────── */
@@ -100,6 +120,7 @@ export type OnboardingTenantHeaderOut = {
   uei: string | null;
   cage_code: string | null;
   set_aside_certifications: string[];
+  target_naics: string[];
   onboarding_completed_at: string | null;
 };
 
@@ -295,6 +316,7 @@ export type TenantOut = {
 };
 
 export type FounderOut = {
+  id: string;
   slug: string;
   full_name: string;
   title: string;

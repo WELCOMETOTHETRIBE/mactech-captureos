@@ -1,7 +1,11 @@
 import Link from "next/link";
-import { apiFetch, type MeResponse } from "@/lib/api";
+import {
+  apiFetch,
+  type FoundersListResponse,
+  type MeResponse
+} from "@/lib/api";
 import { lookupAndPrefill, saveFirmDetails } from "@/lib/onboarding";
-import { Badge, PageHeader } from "@/components/ui";
+import { Badge, NaicsBadge, PageHeader, Pillar } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +41,12 @@ export default async function OnboardingPage({
   }>;
 }) {
   const sp = await searchParams;
-  const me = await apiFetch<MeResponse>("/me");
+  const [me, foundersList] = await Promise.all([
+    apiFetch<MeResponse>("/me"),
+    apiFetch<FoundersListResponse>("/founders").catch(
+      () => ({ total: 0, items: [] }) as FoundersListResponse
+    )
+  ]);
 
   const lookupError = sp.error ?? null;
   const prefillUei = sp.uei ?? me.tenant.uei ?? "";
@@ -48,11 +57,19 @@ export default async function OnboardingPage({
       ?.split(",")
       .map((s) => s.trim())
       .filter((s) => s.length > 0) ?? me.tenant.set_aside_certifications ?? [];
-  const prefillNaics =
+
+  // NAICS suggested by SAM (from query params after lookup) and the codes
+  // the tenant has already saved as targets. Union them so the checkbox
+  // grid shows the merged set with appropriate `checked` state.
+  const naicsFromSam =
     sp.naics
       ?.split(",")
       .map((s) => s.trim())
-      .filter((s) => s.length > 0) ?? [];
+      .filter((s) => /^\d{2,8}$/.test(s)) ?? [];
+  const tenantTargetNaics = me.tenant.target_naics ?? [];
+  const naicsAllSuggested = Array.from(
+    new Set([...tenantTargetNaics, ...naicsFromSam])
+  );
   const fromLookup = sp.uei !== undefined && !lookupError;
 
   const isComplete = me.tenant.onboarding_completed_at !== null;
@@ -127,10 +144,11 @@ export default async function OnboardingPage({
           <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
             <span className="font-medium">Pulled from SAM.gov.</span> Review and
             edit below before saving.
-            {prefillNaics.length > 0 && (
+            {naicsFromSam.length > 0 && (
               <p className="mt-1 text-xs">
-                NAICS on file: {prefillNaics.slice(0, 6).join(", ")}
-                {prefillNaics.length > 6 && ` (+${prefillNaics.length - 6} more)`}
+                NAICS on file ({naicsFromSam.length}):{" "}
+                {naicsFromSam.slice(0, 6).join(", ")}
+                {naicsFromSam.length > 6 && ` (+${naicsFromSam.length - 6} more)`}
               </p>
             )}
           </div>
@@ -211,6 +229,105 @@ export default async function OnboardingPage({
               })}
             </div>
           </fieldset>
+
+          {/* NAICS targets */}
+          <fieldset>
+            <legend className="text-[11px] uppercase tracking-wide text-neutral-500">
+              NAICS targets
+            </legend>
+            <p className="mt-1 text-xs text-neutral-500">
+              The opportunity-scoring engine ranks every SAM.gov notice
+              against your NAICS list. Suggested codes come from your SAM
+              registration; check the ones you actually want to pursue.
+            </p>
+            {naicsAllSuggested.length === 0 ? (
+              <p className="mt-3 rounded-md border border-dashed border-neutral-300 bg-neutral-50 p-3 text-xs text-neutral-600">
+                Look up your UEI above to populate suggested NAICS, or type
+                codes manually below.
+              </p>
+            ) : (
+              <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
+                {naicsAllSuggested.map((code) => {
+                  const checked = tenantTargetNaics.includes(code);
+                  return (
+                    <label
+                      key={code}
+                      className={`flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm transition-colors ${
+                        checked
+                          ? "border-brand-500 bg-brand-50 text-brand-900"
+                          : "border-neutral-200 hover:border-neutral-400"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        name="target_naics"
+                        value={code}
+                        defaultChecked={checked}
+                        className="rounded border-neutral-400"
+                      />
+                      <span className="font-mono text-xs">{code}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+            <label className="mt-3 block">
+              <span className="text-[11px] text-neutral-500">
+                Additional NAICS codes (comma-separated 6-digit codes)
+              </span>
+              <input
+                name="target_naics_extra"
+                placeholder="e.g. 541512, 541519, 541330"
+                className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 font-mono text-xs shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </label>
+          </fieldset>
+
+          {/* Founder roster preview */}
+          <div className="rounded-md border border-neutral-100 bg-neutral-50 p-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <p className="text-[11px] uppercase tracking-wide text-neutral-500">
+                Founder roster
+                <span className="ml-2 font-normal lowercase text-neutral-400">
+                  ({foundersList.total} on file)
+                </span>
+              </p>
+              <Link
+                href="/settings#founders"
+                className="text-xs font-medium text-brand-700 hover:underline"
+              >
+                Manage in settings →
+              </Link>
+            </div>
+            {foundersList.items.length > 0 ? (
+              <ul className="mt-2 space-y-1 text-sm">
+                {foundersList.items.slice(0, 6).map((f) => (
+                  <li
+                    key={f.id}
+                    className="flex flex-wrap items-baseline justify-between gap-2"
+                  >
+                    <span className="text-neutral-800">
+                      {f.full_name}{" "}
+                      <span className="text-xs text-neutral-500">
+                        — {f.title}
+                      </span>
+                    </span>
+                    <Pillar pillar={f.pillar} />
+                  </li>
+                ))}
+                {foundersList.items.length > 6 && (
+                  <li className="text-xs text-neutral-500">
+                    + {foundersList.items.length - 6} more
+                  </li>
+                )}
+              </ul>
+            ) : (
+              <p className="mt-2 text-xs text-neutral-500">
+                No founders on file. Add a few in Settings so the proposal
+                drafter can name your key personnel.
+              </p>
+            )}
+          </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2 border-t border-neutral-200 pt-4">
             <button

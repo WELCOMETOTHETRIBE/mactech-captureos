@@ -27,6 +27,13 @@ class Tenant(Base):
     set_aside_certifications: Mapped[list[str] | None] = mapped_column(
         ARRAY(String), nullable=True
     )
+    # NAICS codes the tenant wants opportunities scored against. Set by the
+    # onboarding wizard (NAICS picker, defaulted from SAM Entity API result).
+    # When null, the scoring engine falls back to the seed-config NAICS list.
+    # When set, it overrides the seed config for that tenant.
+    target_naics: Mapped[list[str] | None] = mapped_column(
+        ARRAY(String), nullable=True
+    )
     # When the tenant finished onboarding. NULL means the wizard hasn't run
     # yet (or was reset); the dashboard surfaces a "Finish setup" banner
     # while this is null. We don't gate routes on it — onboarding is a

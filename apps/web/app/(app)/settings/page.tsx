@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { apiFetch, type SettingsResponse } from "@/lib/api";
+import { deleteFounder } from "@/lib/founders";
 import { Badge, Card, PageHeader, Pillar, fmtDate } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -41,10 +43,18 @@ export default async function SettingsPage() {
       </Card>
 
       {/* Founders */}
-      <section>
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-neutral-700">
-          Founders ({data.founders.length})
-        </h2>
+      <section id="founders">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-neutral-700">
+            Founders ({data.founders.length})
+          </h2>
+          <Link
+            href="/settings/founders/new"
+            className="rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800"
+          >
+            + Add founder
+          </Link>
+        </div>
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
           {data.founders.map((f) => (
             <Card key={f.slug}>
@@ -74,6 +84,27 @@ export default async function SettingsPage() {
                   )}
                 </Row>
               </dl>
+              <div className="mt-3 flex items-center justify-between border-t border-neutral-100 pt-2 text-[11px]">
+                <span className="text-neutral-400">@{f.slug}</span>
+                <div className="flex items-center gap-3">
+                  <Link
+                    href={`/settings/founders/${f.id}/edit`}
+                    className="text-blue-700 hover:underline"
+                  >
+                    Edit
+                  </Link>
+                  <form action={deleteFounder}>
+                    <input type="hidden" name="id" value={f.id} />
+                    <button
+                      type="submit"
+                      className="text-neutral-500 hover:text-red-700"
+                      title="Permanently remove this founder"
+                    >
+                      Delete
+                    </button>
+                  </form>
+                </div>
+              </div>
             </Card>
           ))}
         </div>

@@ -41,12 +41,32 @@ export async function saveFirmDetails(formData: FormData): Promise<void> {
     .map((v) => String(v).trim())
     .filter((v) => v.length > 0);
 
-  const body = {
+  // target_naics arrives via two channels: explicit checkboxes
+  // (multi-checkbox value="<code>") + an optional "extra naics" text field
+  // for codes not in the suggested set.
+  const naicsCheckboxes = formData
+    .getAll("target_naics")
+    .map((v) => String(v).trim())
+    .filter((v) => /^\d{2,8}$/.test(v));
+  const naicsExtra = String(formData.get("target_naics_extra") ?? "")
+    .split(",")
+    .map((v) => v.trim())
+    .filter((v) => /^\d{2,8}$/.test(v));
+  const naicsAll = Array.from(new Set([...naicsCheckboxes, ...naicsExtra]));
+  // The form always submits naics inputs; we treat any submission as an
+  // explicit set. To clear the override, the user submits with no checkboxes
+  // checked AND an empty extra field — that produces an empty array which
+  // the API treats as "clear".
+  const wantsNaicsUpdate =
+    formData.has("target_naics") || formData.has("target_naics_extra");
+
+  const body: Record<string, unknown> = {
     uei: (String(formData.get("uei") ?? "").trim() || null),
     cage_code: (String(formData.get("cage_code") ?? "").trim() || null),
     legal_name: (String(formData.get("legal_name") ?? "").trim() || null),
     set_aside_certifications: certs
   };
+  if (wantsNaicsUpdate) body.target_naics = naicsAll;
 
   await apiFetch<OnboardingTenantHeaderOut>(
     "/me/onboarding/firm-details",
