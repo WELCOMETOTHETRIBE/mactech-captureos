@@ -85,8 +85,13 @@ export default function Page() {
         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,.025)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.025)_1px,transparent_1px)] bg-[size:48px_48px]" />
         <div className="relative z-10 flex flex-col justify-between px-12 xl:px-16 py-16 w-full">
           <div>
+            <img
+              src="/mactech.png"
+              alt="MacTech Solutions"
+              className="h-12 xl:h-14 w-auto object-contain object-left mb-8 invert"
+            />
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#7bcdc7] mb-3">
-              MacTech Solutions · CaptureOS
+              CaptureOS
             </p>
             <h1 className="text-4xl xl:text-5xl font-bold tracking-tight text-white leading-tight">
               The operating system
