@@ -10,10 +10,14 @@ Week 3 will add enrichment beats; Week 4 will add the morning digest.
 
 from __future__ import annotations
 
+import logging
 import os
 
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import task_prerun
+
+log = logging.getLogger(__name__)
 
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
@@ -84,6 +88,29 @@ celery_app.conf.update(
 @celery_app.task(name="mactech.health")
 def health() -> str:
     return "ok"
+
+
+@task_prerun.connect
+def _reset_db_engine_per_task(*args: object, **kwargs: object) -> None:
+    """Drop the lru_cache'd async engine + session factory before every
+    task. Each task wraps its async work in asyncio.run() which creates
+    a fresh event loop, but the engine's asyncpg connection pool binds
+    its connections to whichever loop first used them. Reusing the
+    cached engine across tasks → "got Future ... attached to a different
+    loop" errors. Clearing the cache forces the next get_engine() call
+    to build a fresh engine on the current task's loop.
+
+    The orphaned engine + connections leak until process GC, but
+    worker_max_tasks_per_child=200 recycles the process before that
+    matters in practice.
+    """
+    try:
+        from mactech_db.session import async_session_factory, get_engine
+
+        get_engine.cache_clear()
+        async_session_factory.cache_clear()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("task_prerun engine reset failed: %s", exc)
 
 
 # Side-effect imports to register tasks defined in submodules. Keep at end of file.
