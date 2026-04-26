@@ -7,11 +7,12 @@ context is opp + firm capabilities + past performance + score block.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from mactech_intelligence.llm import AnthropicLLMClient, LLMResponse
+from mactech_intelligence.llm import AnthropicLLMClient, LLMResponse, StreamChunk
 
 PROMPT_PATH = Path(__file__).parent / "prompts" / "ask_about_opp.md"
 PROMPT_VERSION = "v1"
@@ -156,3 +157,28 @@ async def ask_about_opportunity(
         max_tokens=max_tokens,
         purpose=f"ask_about_opp:{PROMPT_VERSION}",
     )
+
+
+async def stream_ask_about_opportunity(
+    client: AnthropicLLMClient,
+    inp: AskInput,
+    *,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+) -> AsyncIterator[StreamChunk]:
+    """Streaming variant of `ask_about_opportunity`.
+
+    Yields `StreamChunk(kind="delta", text=...)` events as the model
+    composes, then a final `StreamChunk(kind="final", ...)` carrying
+    the assembled answer + token usage. Same prompt + context path as
+    the non-streaming version so cached prompts cost the same.
+    """
+    system_prompt = PROMPT_PATH.read_text().strip()
+    user_message = build_user_message(inp)
+    async for chunk in client.complete_stream(
+        system=system_prompt,
+        user=user_message,
+        complexity="smart",
+        max_tokens=max_tokens,
+        purpose=f"ask_about_opp:{PROMPT_VERSION}",
+    ):
+        yield chunk

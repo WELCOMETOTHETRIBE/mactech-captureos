@@ -18,7 +18,11 @@ from datetime import date, datetime, timezone
 from typing import Annotated, Any
 from uuid import UUID
 
+import json
+from collections.abc import AsyncIterator
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import desc, select
 
@@ -40,6 +44,7 @@ from mactech_intelligence import (
     AskInput,
     AskOpportunityContext,
     ask_about_opportunity,
+    stream_ask_about_opportunity,
 )
 from mactech_intelligence.ask_about_opportunity import PROMPT_VERSION
 
@@ -331,6 +336,156 @@ async def delete_question(
         raise HTTPException(status_code=404, detail="question not found")
     await ctx.session.delete(q)
     await ctx.session.flush()
+
+
+@router.post(
+    "/opportunities/{opportunity_id}/ask/stream",
+    responses={
+        200: {
+            "content": {"text/event-stream": {}},
+            "description": "SSE stream of {type:'delta',text:...} + final {type:'complete',question_id,...}",
+        }
+    },
+)
+async def ask_question_stream(
+    opportunity_id: UUID,
+    body: AskRequest,
+    ctx: Annotated[RequestContext, Depends(get_request_context)],
+) -> StreamingResponse:
+    """Streaming variant of POST /opportunities/{id}/ask.
+
+    Emits SSE events of the form `data: {"type":"delta","text":"..."}\\n\\n`
+    as Claude composes, then a final `data: {"type":"complete",...}\\n\\n`
+    with the persisted question_id, model, and token counts.
+
+    On error during streaming, emits a `data: {"type":"error","message":"..."}\\n\\n`
+    event and ends the stream cleanly. The HTTP status is always 200 once
+    streaming has begun — caller checks the final event type.
+    """
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="ANTHROPIC_API_KEY not configured on the API service.",
+        )
+
+    opp = (
+        await ctx.session.execute(
+            select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id)
+        )
+    ).scalar_one_or_none()
+    if opp is None:
+        raise HTTPException(status_code=404, detail="opportunity not found")
+
+    enr = (
+        await ctx.session.execute(
+            select(OpportunityEnriched).where(
+                OpportunityEnriched.opportunity_id == opportunity_id
+            )
+        )
+    ).scalar_one_or_none()
+    score = (
+        await ctx.session.execute(
+            select(OpportunityScore).where(
+                OpportunityScore.tenant_id == ctx.tenant.id,
+                OpportunityScore.opportunity_id == opportunity_id,
+            )
+        )
+    ).scalar_one_or_none()
+
+    inp = await _build_ask_input(
+        ctx, opp, enr, score, body.question, body.starter_kind
+    )
+    persisted_question = inp.question
+    starter_kind = (
+        body.starter_kind if body.starter_kind in ASK_STARTERS else None
+    )
+    asked_by_id = ctx.founder.id if ctx.founder else None
+    tenant_id = ctx.tenant.id
+    # Capture session-bound state by value before entering the streaming
+    # generator — the request context's session is closed once this handler
+    # returns the StreamingResponse.
+
+    async def stream() -> AsyncIterator[bytes]:
+        client = AnthropicLLMClient(api_key=api_key)
+        accumulated: list[str] = []
+        final_model: str | None = None
+        final_input_tokens: int | None = None
+        final_output_tokens: int | None = None
+        try:
+            async for chunk in stream_ask_about_opportunity(client, inp):
+                if chunk.kind == "delta":
+                    accumulated.append(chunk.text)
+                    payload = {"type": "delta", "text": chunk.text}
+                    yield f"data: {json.dumps(payload)}\n\n".encode()
+                elif chunk.kind == "final":
+                    final_model = chunk.model
+                    final_input_tokens = chunk.input_tokens
+                    final_output_tokens = chunk.output_tokens
+        except Exception as exc:
+            log.exception("ask streaming failed: %s", exc)
+            err = {
+                "type": "error",
+                "message": f"{exc.__class__.__name__}: {exc}"[:200],
+            }
+            yield f"data: {json.dumps(err)}\n\n".encode()
+            return
+
+        answer_text = "".join(accumulated).strip()
+        if not answer_text:
+            yield (
+                b'data: {"type":"error","message":"empty model response"}\n\n'
+            )
+            return
+
+        # Persist on stream completion. Use a fresh session because the
+        # original ctx.session is tied to the request lifecycle.
+        from mactech_db import scoped_session
+
+        try:
+            async with scoped_session(tenant_id) as persist_session:
+                q = OpportunityQuestion(
+                    tenant_id=tenant_id,
+                    opportunity_id=opportunity_id,
+                    asked_by_founder_id=asked_by_id,
+                    question=persisted_question,
+                    answer=answer_text,
+                    starter_kind=starter_kind,
+                    model=final_model,
+                    input_tokens=final_input_tokens,
+                    output_tokens=final_output_tokens,
+                    prompt_version=PROMPT_VERSION,
+                )
+                persist_session.add(q)
+                await persist_session.flush()
+                question_id = str(q.id)
+        except Exception as exc:  # noqa: BLE001
+            log.exception("ask persistence failed: %s", exc)
+            payload = {
+                "type": "error",
+                "message": f"answer streamed but persistence failed: {exc.__class__.__name__}",
+            }
+            yield f"data: {json.dumps(payload)}\n\n".encode()
+            return
+
+        complete = {
+            "type": "complete",
+            "question_id": question_id,
+            "model": final_model,
+            "input_tokens": final_input_tokens,
+            "output_tokens": final_output_tokens,
+        }
+        yield f"data: {json.dumps(complete)}\n\n".encode()
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 # Suppress unused-import false positive — reserved for future date-typed

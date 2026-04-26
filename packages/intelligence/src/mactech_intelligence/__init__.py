@@ -12,6 +12,7 @@ from mactech_intelligence.ask_about_opportunity import (
     AskInput,
     AskOpportunityContext,
     ask_about_opportunity,
+    stream_ask_about_opportunity,
 )
 from mactech_intelligence.explain_term import (
     TermExplanation as TermExplanationOut,
@@ -34,7 +35,7 @@ from mactech_intelligence.extract_past_performance import (
     PastPerformanceExtractionError,
     extract_past_performance,
 )
-from mactech_intelligence.llm import AnthropicLLMClient, LLMResponse
+from mactech_intelligence.llm import AnthropicLLMClient, LLMResponse, StreamChunk
 from mactech_intelligence.scoring import (
     OpportunityFacts,
     ScoringContext,
@@ -75,6 +76,7 @@ __all__ = [
     "ScoringContext",
     "ScoringResult",
     "SourcesSoughtInput",
+    "StreamChunk",
     "StructuredBrief",
     "TeamingPartnerContext",
     "TenantIdentity",
@@ -89,4 +91,5 @@ __all__ = [
     "generate_why_it_matters",
     "parse_explain_slug",
     "score_opportunity",
+    "stream_ask_about_opportunity",
 ]

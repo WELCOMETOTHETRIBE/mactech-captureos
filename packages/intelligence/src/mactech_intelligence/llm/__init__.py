@@ -1,3 +1,7 @@
-from mactech_intelligence.llm.client import AnthropicLLMClient, LLMResponse
+from mactech_intelligence.llm.client import (
+    AnthropicLLMClient,
+    LLMResponse,
+    StreamChunk,
+)
 
-__all__ = ["AnthropicLLMClient", "LLMResponse"]
+__all__ = ["AnthropicLLMClient", "LLMResponse", "StreamChunk"]

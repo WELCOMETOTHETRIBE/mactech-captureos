@@ -1242,3 +1242,46 @@ Sprint 11 made founders tenant-scoped at the schema level but left the digest wo
 - **First-feed preview** — synchronous one-off SAM ingestion at wizard completion for net-new tenants.
 - **Streaming Q&A** on the Ask panel — convert the existing endpoint to SSE so the answer composes live instead of arriving all at once after 10s.
 - **Async OCR worker task** — move the OCR fall-through to a background job so import requests stay fast.
+
+---
+
+## 2026-04-25 — Sprint 13: streaming Q&A
+
+User said "execute sprint 13". Picked the highest-perceived-impact item: streaming the Q&A answer live instead of waiting 10s for it to arrive all at once. UX shifts from "click → wait → read" to "click → read as it composes."
+
+### Intelligence — streaming primitive
+- **[llm/client.py](packages/intelligence/src/mactech_intelligence/llm/client.py)** — `AnthropicLLMClient.complete_stream()` async generator wraps Anthropic SDK's `messages.stream()`. Yields `StreamChunk(kind="delta", text=...)` events as the model composes, then exactly one `StreamChunk(kind="final", ...)` carrying the assembled text + token usage.
+- **[ask_about_opportunity.py](packages/intelligence/src/mactech_intelligence/ask_about_opportunity.py)** — new `stream_ask_about_opportunity()` mirrors the non-streaming version (same prompt + context path) but yields chunks. Same `complexity="smart"` → Claude Sonnet routing.
+
+### API — SSE endpoint
+- **`POST /opportunities/{id}/ask/stream`** ([routes/ask.py](apps/api/src/mactech_api/routes/ask.py)) returns `text/event-stream`. Each delta becomes `data: {"type":"delta","text":"..."}\n\n`. Final event: `data: {"type":"complete","question_id":"...","model":"...","input_tokens":N,"output_tokens":N}\n\n`. Errors mid-stream emit `data: {"type":"error",...}` and end cleanly — HTTP status stays 200 once streaming has begun.
+- **Persistence on completion**: opens a fresh `scoped_session(tenant_id)` after the stream completes and writes the full answer + question metadata to `opportunity_questions`. Dependent state (tenant_id, opportunity_id, founder_id, starter_kind, persisted_question) captured by value before entering the streaming generator so it survives the original session lifecycle.
+- Headers: `Cache-Control: no-cache, no-transform`, `X-Accel-Buffering: no`, `Connection: keep-alive` so Railway / nginx-style proxies don't buffer chunks.
+
+### Web — Next.js route handler proxy
+- **[/opportunities/[id]/ask-stream/route.ts](apps/web/app/opportunities/[id]/ask-stream/route.ts)** POST handler attaches Clerk JWT, forwards JSON body to API, pipes the upstream `text/event-stream` body straight back. Lives outside the `(app)` route group so the layout shell doesn't try to wrap a streaming response. Same pattern as the DOCX export route from Sprint 6.
+
+### Web — client component
+- **[components/ask-streaming.tsx](apps/web/components/ask-streaming.tsx)** `<AskStreamingPanel>` — single client island. Same starter buttons + freeform input as before. On submit: opens `fetch()` POST, reads `response.body` as `ReadableStream`, decodes UTF-8, splits on `\n\n`, parses each `data:` line. Renders text incrementally with an animated caret. On `complete`: `router.refresh()` so the persisted question appears in the server-rendered history list. On `error`: red panel with retry. Unmount aborts via `AbortController`.
+- The opp detail page's `AskPanel` server component now embeds `<AskStreamingPanel>` instead of the static form. History list still renders server-side from `/questions`. The non-streaming `askOpportunityQuestion` server action is preserved (callable from elsewhere) but no longer wired in the UI.
+
+### Verification
+- `tsc --noEmit` clean across `apps/web`.
+- `next build` produces all 23 routes (1 new: `/opportunities/[id]/ask-stream`).
+- `python3 -m py_compile` clean on streaming client + extended ask route + ask intelligence module.
+
+### What this changes for users
+- **Before**: tap starter → 10-second blank wait → answer arrives all at once.
+- **After**: tap → ~1-second wait for first token → answer streams over ~5–8 seconds → on completion, history list refreshes inline.
+- Same total cost (Sonnet streaming is priced like non-streaming). Time-to-first-token is dramatically lower than time-to-full-answer.
+
+### Trade-offs called out
+- **Persistence happens at the end, not during.** Connection drop mid-stream → Q&A is lost. User gets a clear error and can retry.
+- **Abort discards the partial answer.** Navigating away mid-stream aborts and skips the DB write.
+- **The non-streaming endpoint stays.** Old callers still work; we can rip it out once telemetry confirms streaming is reliable.
+
+### Sprint 14 candidates left
+- **First-feed preview** — synchronous one-off SAM ingestion at wizard completion.
+- **Async OCR worker task** — move OCR to a Celery job.
+- **Streaming for the Sources Sought drafter** — same SSE pattern for the proposal drafter so the user sees the draft compose live.
+- **Drop the non-streaming `/ask` endpoint** once telemetry confirms reliability.
