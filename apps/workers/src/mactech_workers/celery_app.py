@@ -89,6 +89,13 @@ celery_app.conf.update(
             "schedule": crontab(minute=15, hour=5),
             "options": {"expires": 30 * 60},
         },
+        # DOE OSBP forecast XLSX — daily 0520 ET. ~880 rows with
+        # incumbent + NAICS + value, fuels the recompete watchlist.
+        "doe-forecast-ingest": {
+            "task": "mactech.doe.ingest_forecast",
+            "schedule": crontab(minute=20, hour=5),
+            "options": {"expires": 30 * 60},
+        },
         # Apify forecast sweep — daily 0545 ET (after industry-days at
         # 0500 finishes). Catches GSA, VA, USACE, AFBES, HHS hubs that
         # don't expose a public JSON API. DHS is handled by dhs-apfs.
@@ -133,6 +140,7 @@ def _reset_db_engine_per_task(*args: object, **kwargs: object) -> None:
 import mactech_workers.tasks.apify_forecasts  # noqa: E402, F401
 import mactech_workers.tasks.apify_industry_days  # noqa: E402, F401
 import mactech_workers.tasks.dhs_apfs_ingest  # noqa: E402, F401
+import mactech_workers.tasks.doe_forecast_ingest  # noqa: E402, F401
 import mactech_workers.tasks.digest  # noqa: E402, F401
 import mactech_workers.tasks.embed  # noqa: E402, F401
 import mactech_workers.tasks.enrich  # noqa: E402, F401
