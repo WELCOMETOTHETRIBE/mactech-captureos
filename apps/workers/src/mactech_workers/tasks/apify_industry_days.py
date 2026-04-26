@@ -475,7 +475,10 @@ async def _extract_events(
     the page has none. We cap text at ~12k chars — the model's job is
     to find dates and titles, not to read a novel."""
     excerpt = text[:12_000]
+    today = datetime.now(UTC).date().isoformat()
     user_prompt = (
+        f"Today's date: {today}.\n"
+        f"Skip any event whose end date is before today.\n\n"
         f"Source URL: {url}\n\nPage text:\n\n{excerpt}\n\n"
         "Return the JSON object now."
     )
