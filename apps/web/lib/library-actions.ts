@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import {
   apiFetch,
+  type CapabilityStatementOut,
   type PastPerformanceOut,
   type PastPerformanceRole,
   type TeamingPartnerOut,
@@ -184,5 +185,55 @@ export async function toggleTeamingPartnerStatus(
     method: "PATCH",
     body: JSON.stringify({ status: next })
   });
+  revalidatePath("/library");
+}
+
+/* ── capability statements ───────────────────────────────────────── */
+
+export async function createCapabilityStatement(formData: FormData): Promise<void> {
+  const body = {
+    title: String(formData.get("title") ?? "").trim(),
+    summary: String(formData.get("summary") ?? "").trim(),
+    keywords: readArray(formData, "keywords"),
+    related_naics: readArray(formData, "related_naics"),
+    related_founder_slugs: readArray(formData, "related_founder_slugs")
+  };
+  if (!body.title || !body.summary) {
+    throw new Error("Title and summary are required.");
+  }
+  await apiFetch<CapabilityStatementOut>("/capability-statements", {
+    method: "POST",
+    body: JSON.stringify(body)
+  });
+  revalidatePath("/library");
+  redirect("/library");
+}
+
+export async function updateCapabilityStatement(
+  csId: string,
+  formData: FormData
+): Promise<void> {
+  const body = {
+    title: String(formData.get("title") ?? "").trim(),
+    summary: String(formData.get("summary") ?? "").trim(),
+    keywords: readArray(formData, "keywords"),
+    related_naics: readArray(formData, "related_naics"),
+    related_founder_slugs: readArray(formData, "related_founder_slugs")
+  };
+  await apiFetch<CapabilityStatementOut>(
+    `/capability-statements/${csId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(body)
+    }
+  );
+  revalidatePath("/library");
+  redirect("/library");
+}
+
+export async function deleteCapabilityStatement(formData: FormData): Promise<void> {
+  const id = String(formData.get("id") ?? "");
+  if (!id) throw new Error("missing id");
+  await apiFetch<void>(`/capability-statements/${id}`, { method: "DELETE" });
   revalidatePath("/library");
 }

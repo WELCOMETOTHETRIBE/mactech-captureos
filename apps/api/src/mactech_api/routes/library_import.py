@@ -29,10 +29,12 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.exc import IntegrityError
 
 from mactech_api.auth import RequestContext, get_request_context
-from mactech_db.models import PastPerformance
+from mactech_db.models import CapabilityStatement, PastPerformance
 from mactech_intelligence import (
     AnthropicLLMClient,
+    CapabilityExtractionError,
     PastPerformanceExtractionError,
+    extract_capability_statement,
     extract_past_performance,
 )
 
@@ -206,5 +208,122 @@ async def import_past_performance_pdf(
         title=pp.title,
         extracted_text_chars=ext.text_chars,
         edit_url=f"/library/past-performance/{pp.id}/edit",
+        notes=notes,
+    )
+
+
+# ── Capability statements ─────────────────────────────────────────────
+
+
+class ImportedCapabilityStatementOut(_Out):
+    id: str
+    title: str
+    extracted_text_chars: int
+    edit_url: str
+    notes: list[str]
+
+
+@router.post(
+    "/library/import/capability-statements/from-pdf",
+    response_model=ImportedCapabilityStatementOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def import_capability_statement_pdf(
+    ctx: Annotated[RequestContext, Depends(get_request_context)],
+    file: Annotated[UploadFile, File(description="PDF file to parse")],
+) -> ImportedCapabilityStatementOut:
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="ANTHROPIC_API_KEY not configured on the API service.",
+        )
+    if file.content_type and file.content_type != "application/pdf":
+        raise HTTPException(
+            status_code=400,
+            detail=f"expected application/pdf, got {file.content_type}.",
+        )
+
+    blob = await file.read()
+    if not blob:
+        raise HTTPException(status_code=400, detail="empty file")
+    if len(blob) > MAX_PDF_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"PDF too large ({len(blob):,} bytes). "
+            f"Limit is {MAX_PDF_BYTES:,} bytes.",
+        )
+
+    text = _pdf_to_text(blob)
+    if len(text) < 30:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "PyMuPDF extracted almost no text from this PDF — it may be a "
+                "scanned image. OCR isn't supported yet; try a text-based "
+                "PDF or paste the content into the manual form."
+            ),
+        )
+
+    notes: list[str] = []
+    if len(text) > MAX_TEXT_CHARS:
+        notes.append(
+            f"Document has {len(text):,} characters; only the first "
+            f"{MAX_TEXT_CHARS:,} were sent to the model."
+        )
+
+    client = AnthropicLLMClient(api_key=api_key)
+    try:
+        ext = await extract_capability_statement(client, text)
+    except CapabilityExtractionError as exc:
+        log.warning("capability pdf import got bad extraction: %s", exc)
+        raise HTTPException(
+            status_code=502, detail=f"extraction failed: {exc}"
+        ) from exc
+    except Exception as exc:
+        log.exception("capability pdf import unexpected: %s", exc)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Anthropic call failed: {exc.__class__.__name__}",
+        ) from exc
+
+    related_founders_payload: list[dict[str, str]] | None = None
+    if ext.related_founder_slugs:
+        related_founders_payload = [{"slug": s} for s in ext.related_founder_slugs]
+
+    cs = CapabilityStatement(
+        tenant_id=ctx.tenant.id,
+        title=ext.title,
+        summary=ext.summary,
+        keywords=ext.keywords or None,
+        related_naics=ext.related_naics or None,
+        related_founders=related_founders_payload,
+    )
+    ctx.session.add(cs)
+    try:
+        await ctx.session.flush()
+    except IntegrityError:
+        await ctx.session.rollback()
+        # Title collision — append a date suffix and try again.
+        cs = CapabilityStatement(
+            tenant_id=ctx.tenant.id,
+            title=f"{ext.title} (imported {date.today().isoformat()})"[:255],
+            summary=ext.summary,
+            keywords=ext.keywords or None,
+            related_naics=ext.related_naics or None,
+            related_founders=related_founders_payload,
+        )
+        ctx.session.add(cs)
+        await ctx.session.flush()
+        notes.append(
+            "A capability statement with the same title already existed. "
+            "The new record got a date suffix; rename it in the edit form."
+        )
+
+    return ImportedCapabilityStatementOut(
+        id=str(cs.id),
+        title=cs.title,
+        extracted_text_chars=ext.text_chars,
+        edit_url=f"/library/capability-statements/{cs.id}/edit",
         notes=notes,
     )

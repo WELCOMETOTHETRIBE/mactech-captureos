@@ -12,9 +12,10 @@ from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel, ConfigDict
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from mactech_api.auth import RequestContext, get_request_context
 from mactech_db.models import CapabilityStatement, Founder
@@ -36,6 +37,7 @@ class CapabilityStatementOut(_Out):
     id: str
     title: str
     summary: str
+    keywords: list[str]
     related_naics: list[str]
     related_founders: list[CapabilityFounderRef]
     has_embedding: bool
@@ -110,6 +112,7 @@ async def list_capability_statements(
                 id=str(r.id),
                 title=r.title,
                 summary=r.summary,
+                keywords=list(r.keywords or []),
                 related_naics=list(r.related_naics or []),
                 related_founders=related,
                 has_embedding=str(r.id) in embedded_ids,
@@ -119,3 +122,226 @@ async def list_capability_statements(
         )
 
     return CapabilityStatementsResponse(total=len(items), items=items)
+
+
+# ── CRUD on capability statements ─────────────────────────────────────
+
+
+class CreateCapabilityStatementRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    summary: str = Field(min_length=1)
+    keywords: list[str] = Field(default_factory=list)
+    related_naics: list[str] = Field(default_factory=list)
+    related_founder_slugs: list[str] = Field(default_factory=list)
+
+
+class UpdateCapabilityStatementRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    summary: str | None = Field(default=None, min_length=1)
+    keywords: list[str] | None = None
+    related_naics: list[str] | None = None
+    related_founder_slugs: list[str] | None = None
+
+
+async def _resolve_founder_refs(
+    session: Any, slugs: list[str]
+) -> list[CapabilityFounderRef]:
+    if not slugs:
+        return []
+    founders = (
+        await session.execute(select(Founder).where(Founder.slug.in_(slugs)))
+    ).scalars().all()
+    by_slug = {f.slug: f for f in founders}
+    out: list[CapabilityFounderRef] = []
+    for slug in slugs:
+        f = by_slug.get(slug)
+        if f is not None:
+            out.append(
+                CapabilityFounderRef(
+                    slug=f.slug, full_name=f.full_name, pillar=f.pillar
+                )
+            )
+    return out
+
+
+def _related_founders_payload(slugs: list[str]) -> list[dict[str, str]]:
+    """Persist as the same JSONB shape the seed config writes:
+    [{"slug": "patrick-caruso"}, ...].
+    """
+    return [{"slug": s} for s in slugs if s]
+
+
+async def _to_out(
+    cs: CapabilityStatement,
+    session: Any,
+    *,
+    has_embedding: bool | None = None,
+) -> CapabilityStatementOut:
+    if has_embedding is None:
+        from sqlalchemy import text as _text
+
+        embed_check = (
+            await session.execute(
+                _text(
+                    "select 1 from capability_statements "
+                    "where id = :id and embedding is not null"
+                ),
+                {"id": str(cs.id)},
+            )
+        ).scalar_one_or_none()
+        has_embedding = embed_check is not None
+    slugs: list[str] = []
+    for entry in cs.related_founders or []:
+        if isinstance(entry, dict):
+            slug = entry.get("slug")
+            if isinstance(slug, str):
+                slugs.append(slug)
+        elif isinstance(entry, str):
+            slugs.append(entry)
+    related = await _resolve_founder_refs(session, slugs)
+    return CapabilityStatementOut(
+        id=str(cs.id),
+        title=cs.title,
+        summary=cs.summary,
+        keywords=list(cs.keywords or []),
+        related_naics=list(cs.related_naics or []),
+        related_founders=related,
+        has_embedding=bool(has_embedding),
+        created_at=cs.created_at.isoformat(),
+        updated_at=cs.updated_at.isoformat(),
+    )
+
+
+@router.get("/capability-statements/{cs_id}", response_model=CapabilityStatementOut)
+async def get_capability_statement(
+    cs_id: UUID,
+    ctx: Annotated[RequestContext, Depends(get_request_context)],
+) -> CapabilityStatementOut:
+    cs = (
+        await ctx.session.execute(
+            select(CapabilityStatement).where(
+                CapabilityStatement.id == cs_id,
+                CapabilityStatement.tenant_id == ctx.tenant.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if cs is None:
+        raise HTTPException(status_code=404, detail="capability statement not found")
+    return await _to_out(cs, ctx.session)
+
+
+@router.post(
+    "/capability-statements",
+    response_model=CapabilityStatementOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_capability_statement(
+    body: CreateCapabilityStatementRequest,
+    ctx: Annotated[RequestContext, Depends(get_request_context)],
+) -> CapabilityStatementOut:
+    cs = CapabilityStatement(
+        tenant_id=ctx.tenant.id,
+        title=body.title.strip(),
+        summary=body.summary.strip(),
+        keywords=body.keywords or None,
+        related_naics=body.related_naics or None,
+        related_founders=_related_founders_payload(body.related_founder_slugs)
+        if body.related_founder_slugs
+        else None,
+    )
+    ctx.session.add(cs)
+    try:
+        await ctx.session.flush()
+    except IntegrityError:
+        await ctx.session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"a capability statement titled '{body.title}' already exists "
+                "in this tenant. Pick a unique title."
+            ),
+        ) from None
+    # Fresh insert: no embedding yet (worker picks it up next 15-min tick).
+    return await _to_out(cs, ctx.session, has_embedding=False)
+
+
+@router.patch(
+    "/capability-statements/{cs_id}", response_model=CapabilityStatementOut
+)
+async def update_capability_statement(
+    cs_id: UUID,
+    body: UpdateCapabilityStatementRequest,
+    ctx: Annotated[RequestContext, Depends(get_request_context)],
+) -> CapabilityStatementOut:
+    cs = (
+        await ctx.session.execute(
+            select(CapabilityStatement).where(
+                CapabilityStatement.id == cs_id,
+                CapabilityStatement.tenant_id == ctx.tenant.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if cs is None:
+        raise HTTPException(status_code=404, detail="capability statement not found")
+
+    summary_changed = False
+    if body.title is not None:
+        cs.title = body.title.strip()
+    if body.summary is not None:
+        cs.summary = body.summary.strip()
+        summary_changed = True
+    if body.keywords is not None:
+        cs.keywords = body.keywords or None
+    if body.related_naics is not None:
+        cs.related_naics = body.related_naics or None
+    if body.related_founder_slugs is not None:
+        cs.related_founders = (
+            _related_founders_payload(body.related_founder_slugs)
+            if body.related_founder_slugs
+            else None
+        )
+
+    # If the summary text changed, the existing embedding is stale. The embed
+    # worker re-checks on its 15-minute cadence; for now, just clear the
+    # embedding column so the worker picks it up sooner.
+    if summary_changed:
+        from sqlalchemy import text as _text
+
+        await ctx.session.execute(
+            _text(
+                "update capability_statements set embedding = null "
+                "where id = :id"
+            ),
+            {"id": str(cs.id)},
+        )
+
+    try:
+        await ctx.session.flush()
+    except IntegrityError:
+        await ctx.session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="another capability statement with that title already exists",
+        ) from None
+    return await _to_out(cs, ctx.session)
+
+
+@router.delete(
+    "/capability-statements/{cs_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def delete_capability_statement(
+    cs_id: UUID,
+    ctx: Annotated[RequestContext, Depends(get_request_context)],
+) -> None:
+    cs = (
+        await ctx.session.execute(
+            select(CapabilityStatement).where(
+                CapabilityStatement.id == cs_id,
+                CapabilityStatement.tenant_id == ctx.tenant.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if cs is None:
+        raise HTTPException(status_code=404, detail="capability statement not found")
+    await ctx.session.delete(cs)
+    await ctx.session.flush()

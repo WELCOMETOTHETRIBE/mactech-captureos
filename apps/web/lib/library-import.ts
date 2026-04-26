@@ -11,7 +11,7 @@ const CLERK_JWT_TEMPLATE =
 
 const IMPORT_TIMEOUT_MS = 90_000;
 
-type ImportedPastPerformance = {
+type ImportedRecord = {
   id: string;
   title: string;
   extracted_text_chars: number;
@@ -19,19 +19,10 @@ type ImportedPastPerformance = {
   notes: string[];
 };
 
-/**
- * Server action: receives a PDF file from the browser, uploads it to the
- * API as multipart/form-data with the Clerk session attached, then
- * redirects to the edit page for the freshly-extracted past-performance
- * record.
- *
- * Lives in lib/ instead of co-located with the form so the action stays
- * importable from any future entry point (drag-drop on the library
- * landing page, dedicated import wizard, etc.).
- */
-export async function importPastPerformanceFromPdf(
-  formData: FormData
-): Promise<void> {
+async function _importViaPdf(
+  formData: FormData,
+  apiPath: string
+): Promise<ImportedRecord> {
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
     throw new Error("Pick a PDF before clicking Import.");
@@ -43,7 +34,6 @@ export async function importPastPerformanceFromPdf(
     throw new Error("Not signed in.");
   }
 
-  // Multipart body — let fetch set the Content-Type boundary itself.
   const upload = new FormData();
   upload.append("file", file, file.name);
 
@@ -51,16 +41,13 @@ export async function importPastPerformanceFromPdf(
   const timer = setTimeout(() => controller.abort(), IMPORT_TIMEOUT_MS);
   let res: Response;
   try {
-    res = await fetch(
-      `${API_BASE_URL}/library/import/past-performance/from-pdf`,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: upload,
-        cache: "no-store",
-        signal: controller.signal
-      }
-    );
+    res = await fetch(`${API_BASE_URL}${apiPath}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: upload,
+      cache: "no-store",
+      signal: controller.signal
+    });
   } finally {
     clearTimeout(timer);
   }
@@ -75,8 +62,31 @@ export async function importPastPerformanceFromPdf(
     }
     throw new Error(detail);
   }
+  return (await res.json()) as ImportedRecord;
+}
 
-  const result = (await res.json()) as ImportedPastPerformance;
+/**
+ * Server action: receives a PDF file from the browser, uploads to the
+ * API, redirects to the edit page for the freshly-extracted record.
+ */
+export async function importPastPerformanceFromPdf(
+  formData: FormData
+): Promise<void> {
+  const result = await _importViaPdf(
+    formData,
+    "/library/import/past-performance/from-pdf"
+  );
+  revalidatePath("/library");
+  redirect(result.edit_url);
+}
+
+export async function importCapabilityStatementFromPdf(
+  formData: FormData
+): Promise<void> {
+  const result = await _importViaPdf(
+    formData,
+    "/library/import/capability-statements/from-pdf"
+  );
   revalidatePath("/library");
   redirect(result.edit_url);
 }

@@ -24,6 +24,11 @@ from mactech_intelligence.extract_brief import (
     StructuredBrief,
     extract_structured_brief,
 )
+from mactech_intelligence.extract_capability_statement import (
+    CapabilityExtractionError,
+    ExtractedCapabilityStatement,
+    extract_capability_statement,
+)
 from mactech_intelligence.extract_past_performance import (
     ExtractedPastPerformance,
     PastPerformanceExtractionError,
@@ -57,7 +62,9 @@ __all__ = [
     "AskOpportunityContext",
     "BriefExtractionError",
     "CapabilityContext",
+    "CapabilityExtractionError",
     "ExtractBriefInput",
+    "ExtractedCapabilityStatement",
     "ExtractedPastPerformance",
     "FounderContext",
     "LLMResponse",
@@ -75,6 +82,7 @@ __all__ = [
     "ask_about_opportunity",
     "context_hash",
     "explain_term",
+    "extract_capability_statement",
     "extract_past_performance",
     "extract_structured_brief",
     "generate_sources_sought_draft",

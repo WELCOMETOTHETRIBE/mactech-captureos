@@ -945,3 +945,53 @@ Founders can now drop a prior-engagement PDF on /library and have Claude extract
 - **Capability statement CRUD UI + PDF upload** — finishes the parallel to past performance.
 - **Streaming Q&A** — replace the synchronous `ask_about_opportunity` with native Next.js streaming server components so the answer composes live.
 - **OCR for scanned PDFs** — extends the Sprint 6 PDF flow to handle image-based documents.
+
+---
+
+## 2026-04-25 — Sprint 7: capability statement CRUD UI + PDF upload
+
+User said "sprint 7 execute". Picked the largest blocker on the audit's punch list: capability statements were seed-config-only since Phase 1, blocking any net-new tenant from self-serving the catalogue. Now they're full first-class records with the same Add / Import / Edit / Delete pattern past performance got in Sprint 6.
+
+### API — capability statement CRUD ([routes/library.py](apps/api/src/mactech_api/routes/library.py))
+- `GET /capability-statements/{id}` — single record (was list-only).
+- `POST /capability-statements` — create. 409 on title collision.
+- `PATCH /capability-statements/{id}` — update title/summary/keywords/related_naics/related_founder_slugs. **If summary text changes, the route nulls the embedding column** so the embed worker re-embeds on its next 15-min tick instead of leaving a stale vector live.
+- `DELETE /capability-statements/{id}` — 204.
+- Read shape extended with `keywords` field (was buried only in writes).
+
+### Intelligence — capability statement extraction
+- New module [extract_capability_statement.py](packages/intelligence/src/mactech_intelligence/extract_capability_statement.py) + [prompts/extract_capability_statement.md](packages/intelligence/src/mactech_intelligence/prompts/extract_capability_statement.md).
+- Claude Sonnet, JSON-only output, strict schema. Prompt tuned for one-pager / capability-deck PDFs: title (noun-first, ≤80 chars), 3–5 sentence summary with specific frameworks named, ≤10 keywords, ≤6 NAICS, ≤4 owner founder slugs.
+- Hard guardrails: no invention of NAICS or founder names; empty arrays over fabrication. Banned marketing words enforced in the prompt.
+- 25k char truncation, 1500-token cap.
+
+### API — PDF import for capability statements ([routes/library_import.py](apps/api/src/mactech_api/routes/library_import.py))
+- New endpoint `POST /library/import/capability-statements/from-pdf`.
+- Same pattern as past-performance import: PyMuPDF extract → Claude → upsert into `capability_statements`. Title-collision fallback appends a date suffix.
+- Existing past-performance import refactored to share `_importViaPdf()` helper in [lib/library-import.ts](apps/web/lib/library-import.ts) — 50 lines of dedup.
+
+### Web — three new routes
+- **[/library/capability-statements/new](apps/web/app/(app)/library/capability-statements/new/page.tsx)** — manual form.
+- **[/library/capability-statements/[id]/edit](apps/web/app/(app)/library/capability-statements/[id]/edit/page.tsx)** — edit form. Header surfaces "no embedding yet — worker picks it up next 15-min tick" amber chip when the embedding hasn't materialized yet.
+- **[/library/capability-statements/import](apps/web/app/(app)/library/capability-statements/import/page.tsx)** — drop zone with expandable "What works best?" tips.
+- Shared form: new `<CapabilityStatementForm>` in [components/library-forms.tsx](apps/web/components/library-forms.tsx) — same pattern as PastPerformanceForm/TeamingPartnerForm.
+
+### Web — server actions + library wiring
+- New actions in [lib/library-actions.ts](apps/web/lib/library-actions.ts): `createCapabilityStatement`, `updateCapabilityStatement`, `deleteCapabilityStatement`. `update*` is `bind(null, id)`'d on the edit page so forms don't need hidden id inputs.
+- New action `importCapabilityStatementFromPdf` in [lib/library-import.ts](apps/web/lib/library-import.ts).
+- [Library page](apps/web/app/(app)/library/page.tsx) capability section header now mirrors past performance: "⬆ Import PDF" + "+ Add cluster" buttons. Each capability card now has inline Edit / Delete actions in a footer row. Old "seeded from yaml — UI editing ships in a later sprint" subtitle replaced with the engine-relevant explainer.
+
+### Verification
+- `tsc --noEmit` clean across `apps/web`.
+- `next build` produces all 19 routes (3 new: `/library/capability-statements/new`, `/[id]/edit`, `/import`).
+- `python3 -m py_compile` clean on the new intel module + extended library.py + extended library_import.py.
+
+### Trade-offs called out
+- **Embedding lag on update.** Updating a capability summary nulls the embedding column; the embed worker fixes it on its next 15-minute tick. During that window, opportunity scoring uses the *non-embedded* path for that capability (no vector match contribution). Acceptable for a 4-person tenant; if we wanted instant re-embedding we'd fire a Celery task inline. Deferred.
+- **Founder slug FK is soft.** The model stores `related_founders` as JSONB `[{"slug": "..."}]`. If a founder is renamed or deleted, capability statements pointing at the old slug just render with no name on read. Same behavior as before; no regression.
+
+### Sprint 8 candidates left
+- **Onboarding flow** with SAM Entity API UEI auto-fill, NAICS picker, founder add, first-feed preview. The biggest piece remaining; should be its own session.
+- **Streaming Q&A** on the Ask panel.
+- **OCR for scanned PDFs** — extends the Sprint 6/7 PDF flow.
+- **Inline embedding on capability update** — if the embedding lag matters in practice.

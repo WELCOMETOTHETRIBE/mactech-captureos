@@ -6,6 +6,7 @@ import {
   type TeamingPartnerList
 } from "@/lib/api";
 import {
+  deleteCapabilityStatement,
   deletePastPerformance,
   deleteTeamingPartner,
   toggleTeamingPartnerStatus
@@ -82,12 +83,45 @@ export default async function LibraryPage() {
         <SectionHeader
           title="Capability statements"
           count={caps.total}
-          subtitle="Seeded from config/mactech_tenant_defaults.yml. Edited via the seed config today; UI editing ships in a later sprint."
+          subtitle="Capability clusters MacTech can deliver. The opportunity-scoring engine ranks each new SAM notice against these via pgvector cosine similarity."
+          action={
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/library/capability-statements/import"
+                className="rounded-md border border-brand-300 bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-800 hover:border-brand-500"
+                title="Drop a capability deck PDF and Claude extracts the fields"
+              >
+                ⬆ Import PDF
+              </Link>
+              <Link
+                href="/library/capability-statements/new"
+                className="rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800"
+              >
+                + Add cluster
+              </Link>
+            </div>
+          }
         />
         {caps.items.length === 0 ? (
           <EmptyState
-            title="No capability statements seeded."
-            body="Run the seed script — config/mactech_tenant_defaults.yml controls this list."
+            title="No capability statements yet."
+            body="Capability clusters drive the opportunity-scoring engine. Add at least one before you'll see meaningful capability matches on opportunity detail pages."
+            action={
+              <div className="flex justify-center gap-2">
+                <Link
+                  href="/library/capability-statements/import"
+                  className="rounded-md border border-brand-300 bg-brand-50 px-3 py-2 text-sm font-medium text-brand-800 hover:border-brand-500"
+                >
+                  ⬆ Import from PDF
+                </Link>
+                <Link
+                  href="/library/capability-statements/new"
+                  className="rounded-md border border-neutral-900 bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+                >
+                  + Add manually
+                </Link>
+              </div>
+            }
           />
         ) : (
           <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -130,9 +164,29 @@ export default async function LibraryPage() {
                       ))}
                     </div>
                   )}
-                  <p className="mt-3 text-[11px] text-neutral-400">
-                    Updated {fmtDate(c.updated_at)}
-                  </p>
+                  <div className="mt-3 flex items-center justify-between border-t border-neutral-100 pt-2 text-[11px]">
+                    <span className="text-neutral-400">
+                      Updated {fmtDate(c.updated_at)}
+                    </span>
+                    <div className="flex items-center gap-3">
+                      <Link
+                        href={`/library/capability-statements/${c.id}/edit`}
+                        className="text-blue-700 hover:underline"
+                      >
+                        Edit
+                      </Link>
+                      <form action={deleteCapabilityStatement}>
+                        <input type="hidden" name="id" value={c.id} />
+                        <button
+                          type="submit"
+                          className="text-neutral-500 hover:text-red-700"
+                          title="Permanently delete this capability cluster"
+                        >
+                          Delete
+                        </button>
+                      </form>
+                    </div>
+                  </div>
                 </Card>
               </li>
             ))}

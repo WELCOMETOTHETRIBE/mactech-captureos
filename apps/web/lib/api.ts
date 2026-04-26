@@ -231,6 +231,7 @@ export type CapabilityStatementOut = {
   slug: string;
   title: string;
   summary: string;
+  keywords: string[];
   related_naics: string[];
   related_founders: CapabilityFounderRef[];
   has_embedding: boolean;

@@ -1,5 +1,9 @@
 import type { ReactNode } from "react";
-import type { PastPerformanceOut, TeamingPartnerOut } from "@/lib/api";
+import type {
+  CapabilityStatementOut,
+  PastPerformanceOut,
+  TeamingPartnerOut
+} from "@/lib/api";
 
 const ROLE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "prime", label: "Prime contractor" },
@@ -333,6 +337,90 @@ function FormField({
       )}
       <div className={hint ? "mt-1" : "mt-1.5"}>{children}</div>
     </label>
+  );
+}
+
+export function CapabilityStatementForm({
+  action,
+  initial,
+  submitLabel
+}: {
+  action: (formData: FormData) => Promise<void>;
+  initial?: CapabilityStatementOut;
+  submitLabel: string;
+}) {
+  const initialFounderSlugs = (initial?.related_founders ?? []).map(
+    (f) => f.slug
+  );
+  return (
+    <form action={action} className="space-y-5">
+      <FormField
+        label="Capability cluster title"
+        hint="Noun-first, ≤80 chars. Examples: 'RMF Authorization Support', 'FedRAMP Moderate Cloud Migration'."
+      >
+        <input
+          name="title"
+          required
+          maxLength={255}
+          defaultValue={initial?.title ?? ""}
+          placeholder="e.g. RMF Authorization Support"
+          className={inputCls}
+        />
+      </FormField>
+
+      <FormField
+        label="Summary"
+        hint="3–5 sentences the proposal drafter will paste into capability responses. Lead with what the firm does, name specific frameworks/tools, end with concrete outcomes."
+      >
+        <textarea
+          name="summary"
+          required
+          rows={6}
+          defaultValue={initial?.summary ?? ""}
+          placeholder="MacTech provides end-to-end RMF authorization support for federal systems handling CUI..."
+          className={`${inputCls} font-sans leading-relaxed`}
+        />
+      </FormField>
+
+      <FormField
+        label="Keywords"
+        hint="Comma-separated. Drives the matching engine when scoring opportunities against this capability."
+      >
+        <input
+          name="keywords"
+          defaultValue={(initial?.keywords ?? []).join(", ")}
+          placeholder="ATO, RMF, ConMon, NIST 800-53, eMASS"
+          className={inputCls}
+        />
+      </FormField>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <FormField
+          label="Related NAICS codes"
+          hint="Comma-separated 6-digit codes."
+        >
+          <input
+            name="related_naics"
+            defaultValue={(initial?.related_naics ?? []).join(", ")}
+            placeholder="541512, 541519"
+            className={`${inputCls} font-mono text-xs`}
+          />
+        </FormField>
+        <FormField
+          label="Owner founder slugs"
+          hint="Comma-separated. Which founders own this capability?"
+        >
+          <input
+            name="related_founder_slugs"
+            defaultValue={initialFounderSlugs.join(", ")}
+            placeholder="patrick-caruso, james-adams"
+            className={`${inputCls} font-mono text-xs`}
+          />
+        </FormField>
+      </div>
+
+      <FormActions submitLabel={submitLabel} />
+    </form>
   );
 }
 
