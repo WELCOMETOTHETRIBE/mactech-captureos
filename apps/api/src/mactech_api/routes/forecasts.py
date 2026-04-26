@@ -12,7 +12,7 @@ sees the same ranking semantics in both feeds.
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -148,16 +148,36 @@ def _forecast_to_facts(fc: ForecastRaw) -> OpportunityFacts:
     incumbent UEI, no exclusion check) — the scorer handles None cleanly.
     """
     set_aside = fc.set_aside
-    # DOE uses verbose strings; SAM/SCORER expects codes. Map a few
-    # common DOE/APFS forms back to codes the scorer recognizes.
+    # DOE uses verbose strings ("Service Disabled Veteran Owned Small
+    # Business Set-Aside"); APFS uses short forms ("True", "SB",
+    # "SDVOSB"). Both feed into a scorer that expects SAM-style codes.
+    # Order matters: the SDVOSB check must precede the small-business
+    # check because the verbose SDVOSB string contains "small business".
     if set_aside:
         sl = set_aside.lower()
-        if "sdvosb" in sl:
+        if (
+            "sdvosb" in sl
+            or "service disabled veteran" in sl
+            or "service-disabled veteran" in sl
+        ):
             set_aside = "SDVOSBC"
-        elif sl == "true" or "small business" in sl:
+        elif "vosb" in sl or "veteran owned" in sl or "veteran-owned" in sl:
+            # Non-SDVOSB veteran-owned still gets the small-biz code so
+            # the scorer recognizes it as a meaningful set-aside.
+            set_aside = "VSA"
+        elif (
+            sl == "true"
+            or sl == "sb"
+            or "small business set-aside" in sl
+            or "total small business" in sl
+            or sl == "small business"
+        ):
             set_aside = "SBA"
-        elif sl == "sb":
-            set_aside = "SBA"
+        elif "8(a)" in sl or sl == "8a" or "hubzone" in sl or "wosb" in sl:
+            # MacTech is SDVOSB, not 8(a)/HUBZone/WOSB-eligible — drop
+            # the set_aside so we don't incorrectly score these as
+            # "fit" small-biz set-asides.
+            set_aside = None
 
     return OpportunityFacts(
         naics_code=fc.naics_code,
@@ -178,6 +198,57 @@ def _forecast_to_facts(fc: ForecastRaw) -> OpportunityFacts:
     )
 
 
+def _forecast_specific_boost(fc: ForecastRaw) -> tuple[int, dict[str, int]]:
+    """Forecasts have signal SAM opportunities don't: an expected
+    solicitation date and a current contract POP-end date. Both inform
+    "how urgent is this." Boost up to +20 points beyond the base
+    OpportunityFacts score so the watchlist surfaces near-term work.
+
+    Components (additive, capped at 20):
+      - recompete_urgency: POP_end ≤ 6mo → +10, ≤ 12mo → +7, ≤ 24mo → +3
+      - solicitation_imminent: RFP expected ≤ 3mo → +6, ≤ 6mo → +4
+      - high_value_in_sweet_spot: value_high ≥ $5M (in sweet spot) → +4
+    """
+    today = date.today()
+    breakdown: dict[str, int] = {}
+
+    if fc.period_of_performance_end:
+        days = (fc.period_of_performance_end - today).days
+        if 0 <= days <= 180:
+            breakdown["recompete_urgency"] = 10
+        elif 180 < days <= 365:
+            breakdown["recompete_urgency"] = 7
+        elif 365 < days <= 730:
+            breakdown["recompete_urgency"] = 3
+        else:
+            breakdown["recompete_urgency"] = 0
+    else:
+        breakdown["recompete_urgency"] = 0
+
+    if fc.expected_solicitation_date:
+        days = (fc.expected_solicitation_date - today).days
+        if 0 <= days <= 90:
+            breakdown["solicitation_imminent"] = 6
+        elif 90 < days <= 180:
+            breakdown["solicitation_imminent"] = 4
+        else:
+            breakdown["solicitation_imminent"] = 0
+    else:
+        breakdown["solicitation_imminent"] = 0
+
+    if (
+        fc.estimated_value_high is not None
+        and fc.estimated_value_high >= 5_000_000
+        and fc.estimated_value_high <= 50_000_000
+    ):
+        breakdown["high_value_in_sweet_spot"] = 4
+    else:
+        breakdown["high_value_in_sweet_spot"] = 0
+
+    total = min(20, sum(breakdown.values()))
+    return total, breakdown
+
+
 def _to_out(
     fc: ForecastRaw, *, target_set: set[str], scoring_ctx: ScoringContext
 ) -> ForecastOut:
@@ -187,7 +258,14 @@ def _to_out(
     matches = bool(target_set) and bool(naics_set & target_set)
 
     facts = _forecast_to_facts(fc)
-    result = score_opportunity(facts, scoring_ctx)
+    base = score_opportunity(facts, scoring_ctx)
+    boost, boost_breakdown = _forecast_specific_boost(fc)
+    final_score = min(100, base.score + boost)
+    breakdown = {**dict(base.breakdown), **boost_breakdown}
+    # Replace base reference with adjusted result for the rest of the
+    # function — keeps the existing _to_out body unchanged.
+    from dataclasses import replace
+    result = replace(base, score=final_score, breakdown=breakdown)
 
     return ForecastOut(
         id=str(fc.id),
