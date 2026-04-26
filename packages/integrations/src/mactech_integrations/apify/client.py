@@ -159,11 +159,29 @@ class ApifyClient:
         run_input: dict[str, Any],
         *,
         wait_for_finish_secs: int = DEFAULT_RUN_TIMEOUT_SECS,
+        poll_interval_secs: int = 15,
     ) -> ApifyRunInfo:
-        """Start a run and block until it finishes (or wait deadline)."""
-        return await self.run_actor(
-            actor_id, run_input, wait_for_finish_secs=wait_for_finish_secs
-        )
+        """Start a run and block until it terminates or our deadline expires.
+
+        Apify's per-call `waitForFinish` query parameter caps at 60s. To
+        wait longer, we kick the run and poll `get_run()` until the
+        status is one of SUCCEEDED / FAILED / ABORTED / TIMED_OUT, or
+        until our `wait_for_finish_secs` deadline elapses (in which
+        case we return whatever the latest run state is — usually
+        RUNNING — and the caller decides what to do).
+        """
+        import asyncio
+        import time
+
+        run = await self.run_actor(actor_id, run_input)
+        deadline = time.monotonic() + max(0, wait_for_finish_secs)
+        terminal = {"SUCCEEDED", "FAILED", "ABORTED", "TIMED_OUT"}
+        while run.status not in terminal:
+            if time.monotonic() >= deadline:
+                return run
+            await asyncio.sleep(poll_interval_secs)
+            run = await self.get_run(run.id)
+        return run
 
     async def get_run(self, run_id: str) -> ApifyRunInfo:
         payload = await self._request("GET", f"/actor-runs/{run_id}")
