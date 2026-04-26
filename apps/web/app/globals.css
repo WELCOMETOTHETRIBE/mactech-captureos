@@ -34,19 +34,8 @@ input:-webkit-autofill:active {
   caret-color: #f3f4f6 !important;
   transition: background-color 9999s ease-in-out 0s !important;
 }
-/* Hide Clerk's "Secured by Clerk" branding everywhere we can target it.
-   The orange dev-mode banner is enforced by Clerk in dev instances and
-   only goes away when we promote to a Clerk Production instance. */
-.cl-poweredBy,
-.cl-badge,
-.cl-footer,
-.cl-cardFooter,
-.cl-internal-1dauvpw,
-.cl-internal-b3fm6y,
-[data-localization-key="badge__poweredBy"],
-[class*="cl-internal-"] a[href*="clerk.com"] {
-  display: none !important;
-}
+/* "Secured by Clerk" branding is hidden via the dashboard toggle (Settings
+   → Branding → Remove Secured by Clerk branding). No CSS hack needed. */
 /* Force Clerk's inner .cl-card / .cl-main to be transparent so our cardBox
    owns the visual frame — prevents a double-border in newer SDK versions. */
 .cl-card,
