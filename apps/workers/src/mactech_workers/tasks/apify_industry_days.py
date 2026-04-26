@@ -408,7 +408,7 @@ async def _extract_events(
     resp = await llm.complete(
         system=EXTRACTOR_SYSTEM,
         user=user_prompt,
-        complexity="haiku",
+        complexity="fast",
         max_tokens=2000,
     )
     text_out = (resp.text or "").strip()
