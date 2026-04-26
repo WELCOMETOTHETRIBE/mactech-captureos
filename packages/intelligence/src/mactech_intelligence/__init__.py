@@ -24,6 +24,11 @@ from mactech_intelligence.extract_brief import (
     StructuredBrief,
     extract_structured_brief,
 )
+from mactech_intelligence.extract_past_performance import (
+    ExtractedPastPerformance,
+    PastPerformanceExtractionError,
+    extract_past_performance,
+)
 from mactech_intelligence.llm import AnthropicLLMClient, LLMResponse
 from mactech_intelligence.scoring import (
     OpportunityFacts,
@@ -53,11 +58,13 @@ __all__ = [
     "BriefExtractionError",
     "CapabilityContext",
     "ExtractBriefInput",
+    "ExtractedPastPerformance",
     "FounderContext",
     "LLMResponse",
     "OpportunityContext",
     "OpportunityFacts",
     "PastPerformanceContext",
+    "PastPerformanceExtractionError",
     "ScoringContext",
     "ScoringResult",
     "SourcesSoughtInput",
@@ -68,6 +75,7 @@ __all__ = [
     "ask_about_opportunity",
     "context_hash",
     "explain_term",
+    "extract_past_performance",
     "extract_structured_brief",
     "generate_sources_sought_draft",
     "generate_why_it_matters",

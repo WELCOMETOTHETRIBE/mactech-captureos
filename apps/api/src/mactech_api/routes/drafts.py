@@ -23,10 +23,12 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import desc, select
 
 from mactech_api.auth import RequestContext, get_request_context
+from mactech_api.docx_export import DocxMetadata, markdown_to_docx_bytes
 from mactech_db.models import (
     CapabilityStatement,
     Founder,
@@ -545,6 +547,67 @@ async def list_drafts_for_opportunity(
     ctx: Annotated[RequestContext, Depends(get_request_context)],
 ) -> DraftListResponse:
     return await list_drafts(ctx, opportunity_id=opportunity_id)
+
+
+def _safe_filename(s: str) -> str:
+    """Slugify a draft title for the Content-Disposition filename."""
+    cleaned = "".join(c if c.isalnum() or c in "-_." else "-" for c in s)
+    cleaned = cleaned.strip("-").lower()[:100]
+    return cleaned or "draft"
+
+
+@router.get(
+    "/drafts/{draft_id}/export.docx",
+    responses={
+        200: {
+            "content": {
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {}
+            },
+            "description": "Generated DOCX file.",
+        }
+    },
+)
+async def export_draft_docx(
+    draft_id: UUID,
+    ctx: Annotated[RequestContext, Depends(get_request_context)],
+) -> Response:
+    """Render the draft's markdown content as a DOCX binary download."""
+    row = (
+        await ctx.session.execute(
+            select(ProposalDraft, OpportunityRaw, Founder)
+            .join(OpportunityRaw, OpportunityRaw.id == ProposalDraft.opportunity_id)
+            .outerjoin(Founder, Founder.id == ProposalDraft.created_by_founder_id)
+            .where(
+                ProposalDraft.id == draft_id,
+                ProposalDraft.tenant_id == ctx.tenant.id,
+            )
+        )
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="draft not found")
+    draft, opp, founder = row
+
+    blob = markdown_to_docx_bytes(
+        draft.content,
+        metadata=DocxMetadata(
+            title=draft.title,
+            subject=f"Response to SAM.gov notice {opp.source_id}",
+            author=founder.full_name if founder else ctx.tenant.name,
+        ),
+    )
+
+    filename = f"{_safe_filename(draft.title)}-v{draft.version}.docx"
+    return Response(
+        content=blob,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument."
+            "wordprocessingml.document"
+        ),
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 # Suppress unused-import false positive (F401) — _date_t may be referenced

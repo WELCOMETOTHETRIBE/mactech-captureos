@@ -147,12 +147,21 @@ export default async function LibraryPage() {
           count={pastPerf.total}
           subtitle="Prior contract narratives the firm cites in capability responses. The Phase 3 proposal drafter will pull from here."
           action={
-            <Link
-              href="/library/past-performance/new"
-              className="rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800"
-            >
-              + Add record
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/library/past-performance/import"
+                className="rounded-md border border-brand-300 bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-800 hover:border-brand-500"
+                title="Drop a prior-engagement PDF and Claude extracts the fields"
+              >
+                ⬆ Import PDF
+              </Link>
+              <Link
+                href="/library/past-performance/new"
+                className="rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800"
+              >
+                + Add record
+              </Link>
+            </div>
           }
         />
         {pastPerf.items.length === 0 ? (
@@ -160,12 +169,20 @@ export default async function LibraryPage() {
             title="No past-performance records yet."
             body="Add the prior engagements you'd cite in a capability response. Each row becomes a citation the proposal drafter can pull from."
             action={
-              <Link
-                href="/library/past-performance/new"
-                className="rounded-md border border-neutral-900 bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-800"
-              >
-                + Add the first record
-              </Link>
+              <div className="flex justify-center gap-2">
+                <Link
+                  href="/library/past-performance/import"
+                  className="rounded-md border border-brand-300 bg-brand-50 px-3 py-2 text-sm font-medium text-brand-800 hover:border-brand-500"
+                >
+                  ⬆ Import from PDF
+                </Link>
+                <Link
+                  href="/library/past-performance/new"
+                  className="rounded-md border border-neutral-900 bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+                >
+                  + Add manually
+                </Link>
+              </div>
             }
           />
         ) : (

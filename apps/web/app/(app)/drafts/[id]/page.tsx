@@ -91,6 +91,13 @@ export default async function DraftDetailPage({
         }
         trailing={
           <div className="flex flex-wrap items-center gap-2">
+            <a
+              href={`/drafts/${draft.id}/export.docx`}
+              className="rounded-md border border-brand-700 bg-brand-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-800"
+              title="Download this draft as a Microsoft Word document"
+            >
+              ⬇ Export DOCX
+            </a>
             {allowedStatuses.map((s) => (
               <form key={s} action={setDraftStatus}>
                 <input type="hidden" name="id" value={draft.id} />

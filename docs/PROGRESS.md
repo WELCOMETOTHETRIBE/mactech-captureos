@@ -900,3 +900,48 @@ User said "sprint 5 lets go!" Three high-impact pieces shipped; onboarding flow 
 - **PDF upload** on /library — drag-drop a capability-statement PDF or past-performance write-up; PyMuPDF parse → Claude extract → preview-and-confirm flow.
 - **Streaming Q&A** — replace the synchronous `ask_about_opportunity` with native Next.js streaming server components so the answer composes live.
 - **DOCX export** for proposal drafts — server-side markdown → docx via python-docx.
+
+---
+
+## 2026-04-25 — Sprint 6: DOCX export + PDF import for past performance
+
+User said proceed with Sprint 6 if previous sprints are done — they were (clerk_org_id incident fixed live + durably). Two of four Sprint 6 candidates landed; onboarding flow and streaming Q&A defer to Sprint 7.
+
+### Sprint 6A — DOCX export for proposal drafts
+
+The drafter has been emitting markdown since [Phase 3 Week 9](#); this closes the loop so a CO can actually receive the response in standard Word format.
+
+- **API deps**: added `python-docx>=1.1` to `apps/api/pyproject.toml`.
+- **[apps/api/src/mactech_api/docx_export.py](apps/api/src/mactech_api/docx_export.py)** — small custom markdown→DOCX converter for the subset the drafter actually emits (H1/H2/H3, plain paragraphs, single-level bullets, `**bold**` / `*italic*` runs). No heavy markdown lib; ~150 lines. Document properties (title / subject / author) populated from the draft + opportunity. Times New Roman 11pt body, footer attribution.
+- **API endpoint** added to [routes/drafts.py](apps/api/src/mactech_api/routes/drafts.py):
+  - `GET /drafts/{id}/export.docx` — tenant-scoped lookup, calls `markdown_to_docx_bytes()`, returns binary with `Content-Disposition: attachment; filename="<safe-slug>-v<n>.docx"`.
+- **Web** — new Next.js route handler at [apps/web/app/drafts/[id]/export.docx/route.ts](apps/web/app/drafts/[id]/export.docx/route.ts). Lives **outside** the `(app)` route group so the layout shell doesn't wrap a binary response. Uses `auth()` + `getToken({ template: "mactech" })` to attach the Clerk JWT, fetches the API, streams the body back with the API's Content-Disposition. Clerk middleware matcher already excludes `.docx` paths so the route runs without middleware redirects; the handler does its own auth check + redirect-to-signin.
+- **UI** — "⬇ Export DOCX" button in the [draft detail page header](apps/web/app/(app)/drafts/[id]/page.tsx) trailing slot. Brand-teal primary so it reads as the next action after "Save changes."
+
+### Sprint 6B — PDF import for past performance
+
+Founders can now drop a prior-engagement PDF on /library and have Claude extract the fields into a new `past_performance` record they can review before keeping. Closes the gap that forced manual data entry for every record.
+
+- **API deps**: added `pymupdf>=1.24` to `apps/api/pyproject.toml`.
+- **Intelligence** ([extract_past_performance.py](packages/intelligence/src/mactech_intelligence/extract_past_performance.py) + [prompts/extract_past_performance.md](packages/intelligence/src/mactech_intelligence/prompts/extract_past_performance.md)) — Claude Sonnet ("smart"), strict JSON schema for past-performance fields. Hard guardrails: never invent contract numbers or dollar amounts; null over guess. Aggressive truncation (25k chars) for cost control. Returns `ExtractedPastPerformance` dataclass; `PastPerformanceExtractionError` raised on invalid model output.
+- **API** ([routes/library_import.py](apps/api/src/mactech_api/routes/library_import.py)) — `POST /library/import/past-performance/from-pdf` — multipart endpoint. Validates content-type + 20MB cap. Parses with PyMuPDF (`fitz.open(stream=blob, filetype="pdf")` then `page.get_text("text")` per page). Rejects scanned PDFs (<30 chars extracted) with a friendly OCR-not-supported-yet message. Calls Claude, persists a fresh `past_performance` row, returns `{id, title, edit_url, notes[]}`. Title-collision fallback appends a date suffix instead of erroring.
+- **Web** — new server action [lib/library-import.ts](apps/web/lib/library-import.ts) `importPastPerformanceFromPdf`. Receives FormData, attaches Clerk JWT, posts multipart to API with a 90-second timeout, then `redirect()`s to the new record's edit page so the user reviews and saves. Bubbles structured `detail` from API errors so the form can surface them.
+- **Import page** at [/library/past-performance/import](apps/web/app/(app)/library/past-performance/import/page.tsx) — dashed-border drop zone (clickable label wrapping a hidden `<input type="file" accept="application/pdf,.pdf">`), expandable "What works best?" tip block, primary "Import & review →" button. Manual-form fallback link at the bottom.
+- **Library entry points** — past-performance section header now has two CTAs side-by-side: "⬆ Import PDF" (brand-tinted) + "+ Add record" (neutral-dark). Empty state likewise gives both options. Existing manual flow untouched.
+
+### Verification
+- `tsc --noEmit` clean across `apps/web`.
+- `next build` produces all 16 routes (2 new: `/drafts/[id]/export.docx` route handler, `/library/past-performance/import` page).
+- `python3 -m py_compile` clean on the new export module, intelligence module, and API route.
+- New pyproject deps: `python-docx>=1.1`, `pymupdf>=1.24` — both Docker-friendly, both will install on next Railway build.
+
+### Trade-offs called out
+- **No OCR yet.** Scanned PDFs are rejected with a clear "text-based PDFs only — OCR ships in a later sprint" message. Adding OCR (tesseract or paid API) is its own decision.
+- **Title-collision falls back to a date-suffix** rather than 409. The user is going to the edit page next anyway and can rename to whatever they want.
+- **No capability statement PDF upload yet.** Capability statements are still seed-config-only since we haven't built the UI editor — the import flow would have nowhere to land. That's a paired "capability CRUD UI + PDF upload" sprint.
+
+### Sprint 7 candidates
+- **Onboarding flow** — 5-step wizard for net-new tenants with SAM Entity API UEI auto-fill, capability statement parsing, NAICS picker, founder add, first-feed preview.
+- **Capability statement CRUD UI + PDF upload** — finishes the parallel to past performance.
+- **Streaming Q&A** — replace the synchronous `ask_about_opportunity` with native Next.js streaming server components so the answer composes live.
+- **OCR for scanned PDFs** — extends the Sprint 6 PDF flow to handle image-based documents.
