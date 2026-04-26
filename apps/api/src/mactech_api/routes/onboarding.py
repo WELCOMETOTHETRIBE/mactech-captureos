@@ -223,6 +223,29 @@ async def complete_onboarding(
     tenant = ctx.tenant
     tenant.onboarding_completed_at = datetime.now(timezone.utc)
     await ctx.session.flush()
+
+    # First-feed preview (Sprint 15): fire a one-off scoring sweep so the
+    # tenant doesn't have to wait for the next 20-min cron beat to see
+    # scored opportunities. Non-blocking — failure here doesn't block
+    # onboarding completion (the cron beat picks them up anyway).
+    try:
+        from mactech_workers.celery_app import celery_app
+
+        celery_app.send_task(
+            "mactech.onboarding.first_score",
+            args=[tenant.slug],
+            kwargs={"batch_size": 200},
+        )
+        log.info(
+            "fired first_score task for newly-completed tenant %s", tenant.slug
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning(
+            "failed to fire first_score task for tenant %s: %s",
+            tenant.slug,
+            exc,
+        )
+
     return _tenant_to_out(tenant)
 
 

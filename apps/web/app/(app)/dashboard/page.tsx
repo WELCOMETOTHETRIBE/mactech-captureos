@@ -32,6 +32,23 @@ export default async function DashboardPage() {
   const onboardingIncomplete =
     me.tenant.onboarding_completed_at === null;
 
+  // First-feed preview banner: onboarding just completed (within 30 min)
+  // AND no opportunities have scored yet. The first_score Celery task
+  // fired by /me/onboarding/complete typically lands within 1–3 minutes;
+  // the 30-min window covers worst-case worker backlog.
+  const completedAt = me.tenant.onboarding_completed_at
+    ? new Date(me.tenant.onboarding_completed_at)
+    : null;
+  const minsSinceCompletion = completedAt
+    ? (Date.now() - completedAt.getTime()) / 60_000
+    : Infinity;
+  const firstFeedLoading =
+    !onboardingIncomplete &&
+    minsSinceCompletion < 30 &&
+    data.kpis.scored_above_60 === 0 &&
+    data.kpis.your_high_fit_open === 0 &&
+    data.kpis.your_active_pursuits === 0;
+
   const greeting = data.you
     ? `Good morning, ${data.you.full_name.split(" ")[0]}.`
     : "Dashboard";
@@ -79,6 +96,27 @@ export default async function DashboardPage() {
             className="rounded-md border border-amber-700 bg-amber-700 px-4 py-2 text-sm font-medium text-white hover:bg-amber-800"
           >
             Finish setup →
+          </Link>
+        </section>
+      )}
+
+      {firstFeedLoading && (
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brand-200 bg-brand-50 p-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">
+              Loading your first feed
+            </p>
+            <p className="mt-1 text-sm text-brand-900">
+              We&rsquo;re scoring opportunities against your NAICS profile
+              right now — usually takes 1–3 minutes. Refresh this page to
+              see the first scored opps as they land.
+            </p>
+          </div>
+          <Link
+            href="/dashboard"
+            className="rounded-md border border-brand-700 bg-brand-700 px-4 py-2 text-sm font-medium text-white hover:bg-brand-800"
+          >
+            Refresh ↻
           </Link>
         </section>
       )}

@@ -1331,3 +1331,44 @@ User said "execute sprint 14". Mirrors Sprint 13's Q&A streaming pattern but for
 - **First-feed preview** — synchronous one-off SAM ingestion at wizard completion for net-new tenants.
 - **Async OCR worker task** — move OCR to a Celery job.
 - **Drop the non-streaming `/ask`, `/drafts/...`, `/regenerate` endpoints** once telemetry confirms reliability.
+
+---
+
+## 2026-04-25 — Sprint 15: first-feed preview for net-new tenants
+
+User said "execute sprint 15". Closes the productization story Sprint 8/9 started: a brand-new tenant who finishes onboarding immediately gets a scored slate of opportunities instead of waiting up to 20 minutes for the next cron beat.
+
+### Why this matters
+Sprint 9's NAICS picker writes `tenant.target_naics`. Sprint 10 wired the scoring engine to consume it. But scoring runs every 20 minutes — a brand-new tenant clicks "Save & finish setup" and lands on a dashboard with **zero** opportunities for up to 20 minutes. Bad first impression.
+
+### Worker — score worker accepts an explicit tenant
+- **[score.py](apps/workers/src/mactech_workers/tasks/score.py)** `score_unscored_batch()` now accepts an optional `tenant_slug` param. Default behavior preserved (cron beat falls back to `MACTECH_TENANT_SLUG` env). Callers can pin to any tenant explicitly.
+- New helper `first_feed_score_for_tenant(tenant_slug, *, batch_size=200)` invokes `score_unscored_batch` with a 200-row batch (vs the cron beat's 64) so the new tenant sees their full slate in one task run.
+- New Celery task `mactech.onboarding.first_score(tenant_slug, batch_size=200)`. Auto-registers via the existing `import mactech_workers.tasks.score` side-effect in `celery_app.py`.
+
+### API — fire the task on onboarding completion
+- **[routes/onboarding.py](apps/api/src/mactech_api/routes/onboarding.py) `complete_onboarding`** imports `celery_app` from `mactech_workers.celery_app` and fires `mactech.onboarding.first_score` with the tenant's slug. Non-blocking. Failures logged but don't block onboarding completion (cron beat is the safety net).
+- **apps/api/pyproject.toml** declares `mactech-workers` as an explicit dep — was already pulled in by `uv sync --all-packages` in the Dockerfile, just made explicit.
+
+### Web — dashboard "loading your first feed" banner
+- **[dashboard/page.tsx](apps/web/app/(app)/dashboard/page.tsx)** computes `firstFeedLoading` = onboarding completed AND <30 min ago AND zero scored ≥60 AND zero high-fit untracked AND zero active pursuits.
+- When true: brand-teal banner "Loading your first feed — we're scoring opportunities against your NAICS profile right now, usually takes 1–3 minutes." Includes "Refresh ↻" button.
+- 30-min time-bound covers worst-case worker backlog. Banner disappears naturally once any KPI is non-zero.
+
+### Verification
+- `tsc --noEmit` clean across `apps/web`.
+- `next build` clean.
+- `python3 -m py_compile` clean on the modified worker + API route.
+
+### What this changes for users
+- **Net-new tenants**: complete the wizard → land on dashboard → "Loading your first feed" banner → 1–3 minutes later refresh shows scored opps.
+- **MacTech today**: identical behavior (target_naics null; cron beat already scores them; banner condition never triggers because plenty of scored opps exist).
+
+### Trade-offs called out
+- **Failure mode is silent.** If `celery_app.send_task` fails (Redis down), API logs a warning and continues. Cron beat picks up the new tenant on its next 20-min run.
+- **No SAM ingest fired.** Opportunities are global (ingested every 2h). The first-score task scores existing opps for the new tenant. If the tenant's NAICS aren't in the corpus, the next 2h SAM ingest pulls them and the next 20m scoring picks them up. End-to-end: brand-new NAICS see first slate in ~2h; overlapping NAICS in ~1–3 min.
+
+### Sprint 16 candidates left
+- **Async OCR worker task** — move OCR to a Celery job so import requests stay fast on big scans.
+- **Drop the non-streaming `/ask`, `/drafts/.../sources-sought`, `/regenerate` endpoints** now that streaming is proven.
+- **Tenant-bound SAM ingest on onboarding** — for genuinely net-new NAICS, fire a one-off SAM search alongside the first-score task so the tenant doesn't wait the full 2h for the next cron ingest.

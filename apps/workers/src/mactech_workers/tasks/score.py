@@ -195,10 +195,21 @@ async def _capability_similarity_score(
 
 
 async def score_unscored_batch(
-    *, batch_size: int = DEFAULT_BATCH_SIZE, generate_rationale: bool = True
+    *,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+    generate_rationale: bool = True,
+    tenant_slug: str | None = None,
 ) -> ScoreStats:
+    """Score the next `batch_size` unscored opportunities for a tenant.
+
+    `tenant_slug` defaults to the legacy `MACTECH_TENANT_SLUG` env var
+    so the existing cron beat keeps working unchanged. Net-new tenants
+    invoke this with their explicit slug from the onboarding-completion
+    Celery task (sprint 15) to bootstrap their initial feed.
+    """
     started = datetime.now(UTC)
-    tenant_slug = os.environ.get("MACTECH_TENANT_SLUG", "mactech")
+    if tenant_slug is None:
+        tenant_slug = os.environ.get("MACTECH_TENANT_SLUG", "mactech")
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
 
     session_factory = async_session_factory()
@@ -468,3 +479,28 @@ def score_batch_task(batch_size: int = DEFAULT_BATCH_SIZE) -> dict[str, Any]:
 @celery_app.task(name="mactech.score.one")
 def score_one_task(opportunity_id: str) -> dict[str, Any]:
     return asyncio.run(score_one_opportunity(opportunity_id))
+
+
+async def first_feed_score_for_tenant(
+    tenant_slug: str, *, batch_size: int = 200
+) -> dict[str, Any]:
+    """Run an immediate scoring sweep for a freshly-onboarded tenant.
+
+    Larger batch_size than the cron beat (which runs every 20 min on
+    batch=64) so a brand-new tenant sees their first slate of scored
+    opportunities within the first run instead of three.
+    """
+    stats = await score_unscored_batch(
+        batch_size=batch_size,
+        generate_rationale=True,
+        tenant_slug=tenant_slug,
+    )
+    return asdict(stats)
+
+
+@celery_app.task(name="mactech.onboarding.first_score")
+def first_score_task(tenant_slug: str, batch_size: int = 200) -> dict[str, Any]:
+    """Celery task fired from the API on onboarding completion."""
+    return asyncio.run(
+        first_feed_score_for_tenant(tenant_slug, batch_size=batch_size)
+    )

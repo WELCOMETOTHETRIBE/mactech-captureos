@@ -18,6 +18,7 @@ dependencies = [
     "mactech-db",
     "mactech-intelligence",
     "mactech-integrations",
+    "mactech-workers",
     "python-docx>=1.1",
     "pymupdf>=1.24",
     "pytesseract>=0.3.10",
@@ -27,6 +28,7 @@ dependencies = [
 mactech-db = { workspace = true }
 mactech-intelligence = { workspace = true }
 mactech-integrations = { workspace = true }
+mactech-workers = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
