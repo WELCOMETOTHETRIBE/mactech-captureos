@@ -29,6 +29,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.exc import IntegrityError
 
 from mactech_api.auth import RequestContext, get_request_context
+from mactech_api.embed_helpers import embed_capability_inline
 from mactech_db.models import CapabilityStatement, PastPerformance
 from mactech_intelligence import (
     AnthropicLLMClient,
@@ -318,6 +319,20 @@ async def import_capability_statement_pdf(
         notes.append(
             "A capability statement with the same title already existed. "
             "The new record got a date suffix; rename it in the edit form."
+        )
+
+    # Embed inline so the new capability is immediately live in scoring.
+    # Fail-soft: the embed worker picks it up on its next 15-min tick.
+    embedded = await embed_capability_inline(
+        ctx.session,
+        capability_id=str(cs.id),
+        title=cs.title,
+        summary=cs.summary,
+    )
+    if not embedded:
+        notes.append(
+            "Capability saved, but embedding wasn't generated inline. The "
+            "embed worker will pick it up within 15 minutes."
         )
 
     return ImportedCapabilityStatementOut(

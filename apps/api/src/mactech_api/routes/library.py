@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from mactech_api.auth import RequestContext, get_request_context
+from mactech_api.embed_helpers import embed_capability_inline
 from mactech_db.models import CapabilityStatement, Founder
 
 router = APIRouter(tags=["library"])
@@ -261,8 +262,16 @@ async def create_capability_statement(
                 "in this tenant. Pick a unique title."
             ),
         ) from None
-    # Fresh insert: no embedding yet (worker picks it up next 15-min tick).
-    return await _to_out(cs, ctx.session, has_embedding=False)
+    # Embed inline so the new capability is immediately live in opportunity
+    # scoring. Fail-soft: if Voyage is unavailable, the worker picks it up
+    # on its next 15-min tick.
+    has_embedding = await embed_capability_inline(
+        ctx.session,
+        capability_id=str(cs.id),
+        title=cs.title,
+        summary=cs.summary,
+    )
+    return await _to_out(cs, ctx.session, has_embedding=has_embedding)
 
 
 @router.patch(
@@ -301,9 +310,18 @@ async def update_capability_statement(
             else None
         )
 
-    # If the summary text changed, the existing embedding is stale. The embed
-    # worker re-checks on its 15-minute cadence; for now, just clear the
-    # embedding column so the worker picks it up sooner.
+    try:
+        await ctx.session.flush()
+    except IntegrityError:
+        await ctx.session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="another capability statement with that title already exists",
+        ) from None
+
+    # If the summary text changed, the existing embedding is stale. Embed
+    # inline; if that fails, leave the embedding null so the worker
+    # re-embeds on its next tick.
     if summary_changed:
         from sqlalchemy import text as _text
 
@@ -314,15 +332,12 @@ async def update_capability_statement(
             ),
             {"id": str(cs.id)},
         )
-
-    try:
-        await ctx.session.flush()
-    except IntegrityError:
-        await ctx.session.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail="another capability statement with that title already exists",
-        ) from None
+        await embed_capability_inline(
+            ctx.session,
+            capability_id=str(cs.id),
+            title=cs.title,
+            summary=cs.summary,
+        )
     return await _to_out(cs, ctx.session)
 
 

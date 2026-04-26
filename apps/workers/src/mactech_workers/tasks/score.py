@@ -67,17 +67,28 @@ class ScoreStats:
 
 
 async def _build_context(session: AsyncSession, tenant: Tenant) -> ScoringContext:
-    # NAICS tiers from naics_codes.mactech_tier
-    primary_rows = (
-        await session.execute(
-            select(NaicsCode.code).where(NaicsCode.mactech_tier == "primary")
-        )
-    ).scalars().all()
-    secondary_rows = (
-        await session.execute(
-            select(NaicsCode.code).where(NaicsCode.mactech_tier == "secondary")
-        )
-    ).scalars().all()
+    # NAICS tiers — per-tenant override first, fall back to global seed.
+    # When tenant.target_naics is set, the user picked exactly the codes
+    # they care about during onboarding. Treat them all as PRIMARY tier
+    # (full 25 pts). Secondary set is empty in that case — the user's
+    # explicit list IS the universe of what they're pursuing.
+    # When tenant.target_naics is null, use the seeded MacTech tiering
+    # from naics_codes.mactech_tier (existing Phase 1 behaviour).
+    target = list(tenant.target_naics or [])
+    if target:
+        primary_rows: list[str] = target
+        secondary_rows: list[str] = []
+    else:
+        primary_rows = (
+            await session.execute(
+                select(NaicsCode.code).where(NaicsCode.mactech_tier == "primary")
+            )
+        ).scalars().all()
+        secondary_rows = (
+            await session.execute(
+                select(NaicsCode.code).where(NaicsCode.mactech_tier == "secondary")
+            )
+        ).scalars().all()
 
     # Keywords + sweet-spot from saved_searches.filters
     searches = (

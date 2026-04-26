@@ -1106,3 +1106,41 @@ User said "sprint 9 execute". Closes the two biggest open items in the onboardin
 - **Streaming Q&A** on the Ask panel.
 - **OCR for scanned PDFs**.
 - **Inline embedding on capability update**.
+
+---
+
+## 2026-04-25 — Sprint 10: scoring picks up target_naics + inline capability embedding
+
+User said "execute sprint 10". Two operational-correctness wins. OCR defers to Sprint 11 (needs system deps + Docker image surgery, deserves its own session).
+
+### target_naics → scoring engine
+
+The Sprint 9 wizard wrote per-tenant NAICS into `tenant.target_naics`, but the scoring engine still ignored it and read the global seeded `naics_codes.mactech_tier` list. This finishes the wiring.
+
+- **[apps/workers/src/mactech_workers/tasks/score.py](apps/workers/src/mactech_workers/tasks/score.py) `_build_context()`** — when `tenant.target_naics` is non-empty, treat that list as the tenant's PRIMARY NAICS (full 25 pts). Secondary set is empty in that case — the user's explicit picker output IS the universe of what they pursue.
+- When `target_naics` is null (the existing MacTech state), behavior is unchanged: read the seeded `mactech_tier` primary/secondary buckets.
+- Net effect: a brand-new tenant sets their NAICS in the wizard → next scoring sweep (every 20 minutes) ranks opportunities against THEIR list, not MacTech's. MacTech's scoring is identical to before.
+
+### Inline capability embedding
+
+Sprint 7 left a 15-minute lag between "user creates/updates a capability statement" and "the embedding worker picks it up." Closes that.
+
+- **New helper [apps/api/src/mactech_api/embed_helpers.py](apps/api/src/mactech_api/embed_helpers.py)** — `embed_capability_inline(session, capability_id, *, title, summary)` calls Voyage with `title\n\nsummary`, writes the resulting vector via the same `update capability_statements set embedding = CAST(:emb AS vector)` raw SQL the embed worker uses. Fail-soft: if Voyage rate-limits, errors, or `VOYAGE_API_KEY` is unset, log a warning and return False. The embed worker still picks up null-embedding rows on its 15-minute tick — inline is the fast path, worker is the safety net.
+- Wired into three places in [routes/library.py](apps/api/src/mactech_api/routes/library.py) + [routes/library_import.py](apps/api/src/mactech_api/routes/library_import.py):
+  - `POST /capability-statements` — embed after insert; `has_embedding` in the response reflects whether the inline call succeeded.
+  - `PATCH /capability-statements/{id}` — only re-embeds when the summary text changed (was previously: null the column and wait). The order is now: flush → null embedding → embed inline. If embed fails, the row stays null-embedding for the worker to retry.
+  - `POST /library/import/capability-statements/from-pdf` — embeds after upsert. Adds a note to the response when the inline embedding didn't materialize so the UI can surface "embedding pending" affordance to the user.
+
+### Verification
+- `tsc --noEmit` clean across `apps/web` (no web changes; pure backend sprint).
+- `python3 -m py_compile` clean on the new helper + extended library + library_import + extended worker score.py.
+
+### What this changes for users
+- **MacTech today**: identical scoring (no `target_naics` set; falls back to seed config). Editing a capability summary in the UI now updates the embedding in <2 seconds instead of waiting up to 15 minutes for the next worker tick.
+- **Net-new tenants**: NAICS picker actually drives the scoring engine. Drop a capability PDF → it's embedded inline by the time the redirect lands on the edit page.
+
+### Sprint 11 candidates left
+- **Founder tenant-scoping migration** — biggest multi-tenancy gap. Substantial migration with backfill complexity.
+- **First-feed preview** — synchronous one-off SAM ingestion at wizard completion for net-new tenants.
+- **Streaming Q&A** on the Ask panel.
+- **OCR for scanned PDFs** — Tesseract via Docker image addition.
