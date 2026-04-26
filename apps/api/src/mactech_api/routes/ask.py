@@ -1,11 +1,10 @@
 """Per-opportunity natural-language Q&A.
 
 Phase 3 Week 11 (UX Sprint 3). The "Ask Claude about this opp" panel
-on the detail page. Synchronous (5–15s typical); streaming variant
-ships next sprint.
+on the detail page. Streaming-only as of sprint 17.
 
 Endpoints:
-  POST /opportunities/{id}/ask        ask + persist
+  POST /opportunities/{id}/ask/stream SSE: ask + persist on completion
   GET  /opportunities/{id}/questions  history (newest first, capped)
   DELETE /opportunity-questions/{id}  remove a single Q&A round
 """
@@ -43,7 +42,6 @@ from mactech_intelligence import (
     AskFirmContext,
     AskInput,
     AskOpportunityContext,
-    ask_about_opportunity,
     stream_ask_about_opportunity,
 )
 from mactech_intelligence.ask_about_opportunity import PROMPT_VERSION
@@ -215,77 +213,6 @@ def _summarize_partner(p: TeamingPartner) -> str:
     if p.set_aside_certifications:
         bits.append(f"certs: {', '.join(p.set_aside_certifications)}")
     return " | ".join(bits)
-
-
-@router.post(
-    "/opportunities/{opportunity_id}/ask",
-    response_model=QuestionOut,
-    status_code=status.HTTP_201_CREATED,
-)
-async def ask_question(
-    opportunity_id: UUID,
-    body: AskRequest,
-    ctx: Annotated[RequestContext, Depends(get_request_context)],
-) -> QuestionOut:
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        raise HTTPException(
-            status_code=503,
-            detail="ANTHROPIC_API_KEY not configured on the API service.",
-        )
-
-    opp = (
-        await ctx.session.execute(
-            select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id)
-        )
-    ).scalar_one_or_none()
-    if opp is None:
-        raise HTTPException(status_code=404, detail="opportunity not found")
-
-    enr = (
-        await ctx.session.execute(
-            select(OpportunityEnriched).where(
-                OpportunityEnriched.opportunity_id == opportunity_id
-            )
-        )
-    ).scalar_one_or_none()
-    score = (
-        await ctx.session.execute(
-            select(OpportunityScore).where(
-                OpportunityScore.tenant_id == ctx.tenant.id,
-                OpportunityScore.opportunity_id == opportunity_id,
-            )
-        )
-    ).scalar_one_or_none()
-
-    inp = await _build_ask_input(ctx, opp, enr, score, body.question, body.starter_kind)
-
-    client = AnthropicLLMClient(api_key=api_key)
-    try:
-        response = await ask_about_opportunity(client, inp)
-    except Exception as exc:
-        log.exception("ask_about_opportunity failed: %s", exc)
-        raise HTTPException(
-            status_code=502,
-            detail=f"Anthropic call failed: {exc.__class__.__name__}",
-        ) from exc
-
-    persisted_question = inp.question
-    q = OpportunityQuestion(
-        tenant_id=ctx.tenant.id,
-        opportunity_id=opportunity_id,
-        asked_by_founder_id=ctx.founder.id if ctx.founder else None,
-        question=persisted_question,
-        answer=response.text.strip(),
-        starter_kind=body.starter_kind if body.starter_kind in ASK_STARTERS else None,
-        model=response.model,
-        input_tokens=response.input_tokens,
-        output_tokens=response.output_tokens,
-        prompt_version=PROMPT_VERSION,
-    )
-    ctx.session.add(q)
-    await ctx.session.flush()
-    return _q_out(q, ctx.founder)
 
 
 @router.get(

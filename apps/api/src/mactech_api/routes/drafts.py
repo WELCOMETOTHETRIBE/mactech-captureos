@@ -1,17 +1,15 @@
 """Proposal drafts API.
 
-Phase 3 Week 9. The Sources Sought drafter is the first user. Endpoints:
+Phase 3 Week 9 / sprint 17. The Sources Sought drafter is the first
+user. Generation is streaming-only (SSE). Endpoints:
 
-  POST   /opportunities/{id}/drafts/sources-sought    generate (sync)
-  POST   /drafts/{id}/regenerate                      new version, optional new instructions
-  GET    /drafts                                      list (newest first)
-  GET    /drafts/{id}                                 single
-  PATCH  /drafts/{id}                                 edit content / status
+  POST   /opportunities/{id}/drafts/sources-sought/stream   SSE: generate
+  POST   /drafts/{id}/regenerate/stream                     SSE: regenerate
+  GET    /drafts                                            list (newest first)
+  GET    /drafts/{id}                                       single
+  PATCH  /drafts/{id}                                       edit content / status
   DELETE /drafts/{id}
-
-Generation calls Claude Sonnet via mactech_intelligence; the request runs
-synchronously and can take 20-60s depending on context size and length.
-For Phase 3 Week 9 MVP that's acceptable — a streaming variant ships next.
+  GET    /drafts/{id}/export.docx                           DOCX download
 """
 
 from __future__ import annotations
@@ -50,7 +48,6 @@ from mactech_intelligence import (
     TeamingPartnerContext,
     TenantIdentity,
     context_hash,
-    generate_sources_sought_draft,
     stream_sources_sought_draft,
 )
 
@@ -296,128 +293,6 @@ def _make_title(opp: OpportunityRaw, version: int) -> str:
     if version > 1:
         base += f" (v{version})"
     return base[:255]
-
-
-async def _generate_and_persist(
-    ctx: RequestContext,
-    opp: OpportunityRaw,
-    custom_instructions: str | None,
-    parent: ProposalDraft | None,
-    max_tokens: int,
-) -> ProposalDraft:
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "ANTHROPIC_API_KEY not configured on the API service. "
-                "Drafting requires the platform Anthropic key."
-            ),
-        )
-    client = AnthropicLLMClient(api_key=api_key)
-    inp = await _build_input(ctx, opp, custom_instructions)
-    try:
-        resp = await generate_sources_sought_draft(
-            client, inp, max_tokens=max_tokens
-        )
-    except Exception as exc:
-        log.exception("sources sought drafter failed: %s", exc)
-        raise HTTPException(
-            status_code=502,
-            detail=f"Anthropic call failed: {exc.__class__.__name__}: {exc}",
-        ) from exc
-
-    version = (parent.version + 1) if parent else 1
-    draft = ProposalDraft(
-        tenant_id=ctx.tenant.id,
-        opportunity_id=opp.id,
-        parent_draft_id=parent.id if parent else None,
-        created_by_founder_id=ctx.founder.id if ctx.founder else None,
-        draft_type="sources_sought",
-        title=_make_title(opp, version),
-        content=resp.text,
-        status="draft",
-        version=version,
-        custom_instructions=custom_instructions,
-        prompt_context_hash=context_hash(inp),
-        model=resp.model,
-        input_tokens=resp.input_tokens,
-        output_tokens=resp.output_tokens,
-        citations={
-            "capability_count": len(inp.capabilities),
-            "past_performance_count": len(inp.past_performance),
-            "teaming_partner_count": len(inp.teaming_partners),
-            "stop_reason": resp.stop_reason,
-        },
-    )
-    ctx.session.add(draft)
-    await ctx.session.flush()
-    return draft
-
-
-@router.post(
-    "/opportunities/{opportunity_id}/drafts/sources-sought",
-    response_model=DraftOut,
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_sources_sought_draft(
-    opportunity_id: UUID,
-    body: GenerateSourcesSoughtRequest,
-    ctx: Annotated[RequestContext, Depends(get_request_context)],
-) -> DraftOut:
-    opp = (
-        await ctx.session.execute(
-            select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id)
-        )
-    ).scalar_one_or_none()
-    if opp is None:
-        raise HTTPException(status_code=404, detail="opportunity not found")
-
-    draft = await _generate_and_persist(
-        ctx, opp, body.custom_instructions, parent=None, max_tokens=body.max_tokens
-    )
-    return _draft_out(draft, opp, ctx.founder)
-
-
-@router.post(
-    "/drafts/{draft_id}/regenerate",
-    response_model=DraftOut,
-    status_code=status.HTTP_201_CREATED,
-)
-async def regenerate_draft(
-    draft_id: UUID,
-    body: GenerateSourcesSoughtRequest,
-    ctx: Annotated[RequestContext, Depends(get_request_context)],
-) -> DraftOut:
-    parent = (
-        await ctx.session.execute(
-            select(ProposalDraft).where(
-                ProposalDraft.id == draft_id,
-                ProposalDraft.tenant_id == ctx.tenant.id,
-            )
-        )
-    ).scalar_one_or_none()
-    if parent is None:
-        raise HTTPException(status_code=404, detail="draft not found")
-
-    opp = (
-        await ctx.session.execute(
-            select(OpportunityRaw).where(OpportunityRaw.id == parent.opportunity_id)
-        )
-    ).scalar_one_or_none()
-    if opp is None:
-        raise HTTPException(
-            status_code=404, detail="parent draft's opportunity is gone"
-        )
-
-    instructions = body.custom_instructions or parent.custom_instructions
-    new_draft = await _generate_and_persist(
-        ctx, opp, instructions, parent=parent, max_tokens=body.max_tokens
-    )
-    return _draft_out(new_draft, opp, ctx.founder)
-
-
-# ── Streaming variants ───────────────────────────────────────────────
 
 
 async def _stream_draft(

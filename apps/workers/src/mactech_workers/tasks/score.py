@@ -471,9 +471,67 @@ async def score_one_opportunity(opportunity_id: UUID | str) -> dict[str, Any]:
     }
 
 
+async def score_unscored_batch_all_tenants(
+    *,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+    generate_rationale: bool = True,
+    only_tenant_slug: str | None = None,
+) -> list[ScoreStats]:
+    """Fan out scoring across every tenant.
+
+    Mirrors `send_digest_to_all_founders` (sprint 12). For each tenant
+    (ordered by slug for stable runs), invoke `score_unscored_batch`
+    with the tenant pinned. `only_tenant_slug` (or the legacy
+    `MACTECH_PIN_TENANT_SLUG` env var) restricts to a single tenant.
+
+    Per-tenant errors don't tank the loop — they're logged and the run
+    continues so a misconfigured tenant can't starve everyone else.
+    """
+    pin = (
+        only_tenant_slug
+        or os.environ.get("MACTECH_PIN_TENANT_SLUG")
+        or None
+    )
+    session_factory = async_session_factory()
+    async with session_factory() as session:
+        stmt = select(Tenant)
+        if pin:
+            stmt = stmt.where(Tenant.slug == pin)
+        else:
+            stmt = stmt.order_by(Tenant.slug)
+        tenant_slugs = [
+            t.slug for t in (await session.execute(stmt)).scalars().all()
+        ]
+
+    results: list[ScoreStats] = []
+    for slug in tenant_slugs:
+        try:
+            stats = await score_unscored_batch(
+                batch_size=batch_size,
+                generate_rationale=generate_rationale,
+                tenant_slug=slug,
+            )
+        except Exception as exc:  # noqa: BLE001 — per-tenant failure shouldn't abort fan-out
+            log.exception("score fan-out failed for tenant=%s: %s", slug, exc)
+            stats = ScoreStats(
+                tenant_slug=slug,
+                scored=0,
+                why_it_matters_generated=0,
+                skipped_no_naics=0,
+                duration_ms=0,
+            )
+        results.append(stats)
+    return results
+
+
 @celery_app.task(name="mactech.score.batch")
-def score_batch_task(batch_size: int = DEFAULT_BATCH_SIZE) -> dict[str, Any]:
-    return asdict(asyncio.run(score_unscored_batch(batch_size=batch_size)))
+def score_batch_task(batch_size: int = DEFAULT_BATCH_SIZE) -> list[dict[str, Any]]:
+    return [
+        asdict(s)
+        for s in asyncio.run(
+            score_unscored_batch_all_tenants(batch_size=batch_size)
+        )
+    ]
 
 
 @celery_app.task(name="mactech.score.one")
