@@ -81,6 +81,13 @@ celery_app.conf.update(
             "schedule": crontab(minute=0, hour=5),
             "options": {"expires": 60 * 60},
         },
+        # Apify forecast sweep — daily 0530 ET. Pulls DHS APFS, VA FCO,
+        # USACE, AFBES, GSA, HHS forecast hubs into forecasts_raw.
+        "apify-forecasts-kick": {
+            "task": "mactech.apify.kick_forecasts_run",
+            "schedule": crontab(minute=30, hour=5),
+            "options": {"expires": 90 * 60},
+        },
     },
 )
 
@@ -114,6 +121,7 @@ def _reset_db_engine_per_task(*args: object, **kwargs: object) -> None:
 
 
 # Side-effect imports to register tasks defined in submodules. Keep at end of file.
+import mactech_workers.tasks.apify_forecasts  # noqa: E402, F401
 import mactech_workers.tasks.apify_industry_days  # noqa: E402, F401
 import mactech_workers.tasks.digest  # noqa: E402, F401
 import mactech_workers.tasks.embed  # noqa: E402, F401

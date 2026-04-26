@@ -694,3 +694,36 @@ export type AgencyEventsResponse = {
   total: number;
   items: AgencyEventOut[];
 };
+
+/* ── /forecasts ────────────────────────────────────────────────── */
+
+export type ForecastOut = {
+  id: string;
+  title: string;
+  agency: string | null;
+  contracting_office: string | null;
+  description: string | null;
+  naics_code: string | null;
+  naics_codes: string[];
+  set_aside: string | null;
+  contract_type: string | null;
+  estimated_value_low: number | null;
+  estimated_value_high: number | null;
+  estimated_value_text: string | null;
+  expected_solicitation_date: string | null;
+  expected_award_date: string | null;
+  incumbent_name: string | null;
+  poc_name: string | null;
+  poc_email: string | null;
+  source_url: string;
+  source_host: string | null;
+  last_seen_at: string;
+  matches_target_naics: boolean;
+};
+
+export type ForecastsResponse = {
+  total: number;
+  items: ForecastOut[];
+  target_naics_filter: boolean;
+  target_naics: string[];
+};

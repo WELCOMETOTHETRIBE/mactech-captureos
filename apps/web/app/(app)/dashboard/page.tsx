@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { apiFetch, type DashboardResponse, type MeResponse } from "@/lib/api";
+import {
+  apiFetch,
+  type AgencyEventsResponse,
+  type DashboardResponse,
+  type MeResponse
+} from "@/lib/api";
 import { dismissHowItWorks, showHowItWorks } from "@/lib/preferences";
 import {
   Badge,
@@ -22,10 +27,13 @@ export const dynamic = "force-dynamic";
 const HOW_IT_WORKS_COOKIE = "mactech.dismiss.howitworks";
 
 export default async function DashboardPage() {
-  const [data, me, ck] = await Promise.all([
+  const [data, me, ck, events] = await Promise.all([
     apiFetch<DashboardResponse>("/me/dashboard"),
     apiFetch<MeResponse>("/me"),
-    cookies()
+    cookies(),
+    apiFetch<AgencyEventsResponse>("/events?upcoming_only=true&limit=4").catch(
+      () => ({ total: 0, items: [] }) as AgencyEventsResponse
+    )
   ]);
 
   const howItWorksDismissed = ck.get(HOW_IT_WORKS_COOKIE)?.value === "1";
@@ -290,6 +298,59 @@ export default async function DashboardPage() {
           </ul>
         )}
       </section>
+
+      {/* Where to be — upcoming events from /events feed */}
+      {events.items.length > 0 && (
+        <section>
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-base font-semibold text-neutral-900">
+              Where to be{" "}
+              <span className="font-normal text-neutral-500">
+                — next {Math.min(events.items.length, 4)} industry-day / pre-sol events
+              </span>
+            </h2>
+            <Link
+              href="/events"
+              className="text-sm font-medium text-brand-700 hover:underline"
+            >
+              See all →
+            </Link>
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+            {events.items.slice(0, 4).map((ev) => (
+              <a
+                key={ev.id}
+                href={ev.registration_url ?? ev.source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block rounded-lg border border-neutral-200 bg-white p-4 transition-colors hover:border-brand-300 hover:shadow-sm"
+              >
+                <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+                  {ev.starts_at
+                    ? new Date(ev.starts_at).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric"
+                      })
+                    : "Date TBD"}
+                  {ev.agency ? ` · ${ev.agency}` : ""}
+                </p>
+                <p className="mt-1 line-clamp-2 text-sm font-medium text-neutral-900">
+                  {ev.title}
+                </p>
+                {ev.location ? (
+                  <p className="mt-1 line-clamp-1 text-xs text-neutral-500">
+                    {ev.location}
+                  </p>
+                ) : null}
+                <p className="mt-2 text-xs font-medium text-brand-700">
+                  {ev.registration_url ? "Register →" : "Source →"}
+                </p>
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Pillar cards */}
       <section>

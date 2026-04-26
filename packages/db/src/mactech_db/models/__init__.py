@@ -2,6 +2,7 @@ from mactech_db.models.agency_intel import AgencyNaicsIntel
 from mactech_db.models.apify import AgencyEvent, ApifyRun
 from mactech_db.models.draft import DRAFT_STATUSES, DRAFT_TYPES, ProposalDraft
 from mactech_db.models.enrichment import AwardHistory, ExclusionsCache, OpportunityEnriched
+from mactech_db.models.forecast import ForecastRaw
 from mactech_db.models.founder import Founder, FounderNaicsMatrix
 from mactech_db.models.library import (
     PAST_PERFORMANCE_ROLES,
@@ -34,6 +35,7 @@ __all__ = [
     "DRAFT_STATUSES",
     "DRAFT_TYPES",
     "ExclusionsCache",
+    "ForecastRaw",
     "Founder",
     "FounderNaicsMatrix",
     "IngestionState",

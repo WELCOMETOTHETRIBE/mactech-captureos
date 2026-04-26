@@ -35,6 +35,12 @@ const NAV = [
     match: (p: string) => p.startsWith("/drafts")
   },
   {
+    href: "/forecasts",
+    label: "Forecasts",
+    sub: "Coming to SAM 30–180d out",
+    match: (p: string) => p.startsWith("/forecasts")
+  },
+  {
     href: "/events",
     label: "Events",
     sub: "Industry days + pre-sol",
