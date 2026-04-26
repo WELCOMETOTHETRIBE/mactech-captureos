@@ -7,6 +7,11 @@ from mactech_db.models.library import (
     PastPerformance,
     TeamingPartner,
 )
+from mactech_db.models.library_import_job import (
+    LIBRARY_IMPORT_KINDS,
+    LIBRARY_IMPORT_STATUSES,
+    LibraryImportJob,
+)
 from mactech_db.models.naics import NaicsCode
 from mactech_db.models.opportunity import IngestionState, OpportunityRaw
 from mactech_db.models.opportunity_brief import OpportunityBrief
@@ -28,6 +33,9 @@ __all__ = [
     "Founder",
     "FounderNaicsMatrix",
     "IngestionState",
+    "LIBRARY_IMPORT_KINDS",
+    "LIBRARY_IMPORT_STATUSES",
+    "LibraryImportJob",
     "NaicsCode",
     "OpportunityBrief",
     "OpportunityEnriched",

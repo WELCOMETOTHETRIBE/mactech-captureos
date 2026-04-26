@@ -11,7 +11,7 @@ const CLERK_JWT_TEMPLATE =
 
 const IMPORT_TIMEOUT_MS = 90_000;
 
-type ImportedRecord = {
+type SyncImported = {
   id: string;
   title: string;
   extracted_text_chars: number;
@@ -19,10 +19,25 @@ type ImportedRecord = {
   notes: string[];
 };
 
+type AsyncQueued = {
+  job_id: string;
+  status: string;
+  poll_url: string;
+  message: string;
+};
+
+/**
+ * Either the API returns 201 with the new record (text PDF, sync path),
+ * or 202 with a job_id (scanned PDF, OCR runs async in the worker).
+ */
+type ImportResponse =
+  | { kind: "sync"; record: SyncImported }
+  | { kind: "queued"; job: AsyncQueued };
+
 async function _importViaPdf(
   formData: FormData,
   apiPath: string
-): Promise<ImportedRecord> {
+): Promise<ImportResponse> {
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
     throw new Error("Pick a PDF before clicking Import.");
@@ -52,6 +67,10 @@ async function _importViaPdf(
     clearTimeout(timer);
   }
 
+  if (res.status === 202) {
+    const queued = (await res.json()) as AsyncQueued;
+    return { kind: "queued", job: queued };
+  }
   if (!res.ok) {
     let detail: string;
     try {
@@ -62,13 +81,10 @@ async function _importViaPdf(
     }
     throw new Error(detail);
   }
-  return (await res.json()) as ImportedRecord;
+  const record = (await res.json()) as SyncImported;
+  return { kind: "sync", record };
 }
 
-/**
- * Server action: receives a PDF file from the browser, uploads to the
- * API, redirects to the edit page for the freshly-extracted record.
- */
 export async function importPastPerformanceFromPdf(
   formData: FormData
 ): Promise<void> {
@@ -77,7 +93,11 @@ export async function importPastPerformanceFromPdf(
     "/library/import/past-performance/from-pdf"
   );
   revalidatePath("/library");
-  redirect(result.edit_url);
+  if (result.kind === "sync") {
+    redirect(result.record.edit_url);
+  } else {
+    redirect(`/library/import/jobs/${result.job.job_id}`);
+  }
 }
 
 export async function importCapabilityStatementFromPdf(
@@ -88,5 +108,9 @@ export async function importCapabilityStatementFromPdf(
     "/library/import/capability-statements/from-pdf"
   );
   revalidatePath("/library");
-  redirect(result.edit_url);
+  if (result.kind === "sync") {
+    redirect(result.record.edit_url);
+  } else {
+    redirect(`/library/import/jobs/${result.job.job_id}`);
+  }
 }

@@ -83,6 +83,7 @@ def health() -> str:
 import mactech_workers.tasks.digest  # noqa: E402, F401
 import mactech_workers.tasks.embed  # noqa: E402, F401
 import mactech_workers.tasks.enrich  # noqa: E402, F401
+import mactech_workers.tasks.library_import  # noqa: E402, F401
 import mactech_workers.tasks.sam_descriptions  # noqa: E402, F401
 import mactech_workers.tasks.sam_ingest  # noqa: E402, F401
 import mactech_workers.tasks.score  # noqa: E402, F401
