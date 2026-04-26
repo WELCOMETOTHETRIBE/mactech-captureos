@@ -22,3 +22,22 @@
     border-radius: 4px;
   }
 }
+
+/* ─── Clerk SignIn / SignUp polish ──────────────────────────────────────── */
+/* Kill the browser autofill blue without breaking dark/light themes. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: #1f1f1f !important;
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+  caret-color: #1f1f1f !important;
+  transition: background-color 9999s ease-in-out 0s !important;
+}
+/* Hide Clerk's powered-by badge — kept for the dev banner so we still see it. */
+.cl-internal-b3fm6y,
+.cl-poweredBy,
+.cl-badge,
+[data-localization-key="badge__poweredBy"] {
+  display: none !important;
+}

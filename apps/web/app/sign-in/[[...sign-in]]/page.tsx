@@ -36,6 +36,7 @@ const clerkAppearance = {
   },
   elements: {
     rootBox: "w-full",
+    cardBox: "shadow-none border-0 bg-transparent w-full",
     card: "shadow-none border-0 bg-transparent p-0 w-full",
     header: "hidden",
     headerTitle: "hidden",
