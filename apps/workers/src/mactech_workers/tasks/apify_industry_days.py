@@ -2,13 +2,20 @@
 
 Sprint 19 / strategy doc §3.6. Daily beat 0500 ET fires
 `mactech.apify.kick_industry_days_run` which starts a website-content-
-crawler run over a curated list of agency event/industry-day pages.
-Apify webhooks the API on RUN.SUCCEEDED, which dispatches
-`mactech.apify.ingest_industry_days` here. We pull dataset items, run
-Claude Haiku to extract structured event metadata, and upsert into
+crawler run over a curated list of agency event/industry-day pages,
+waits for completion (Apify's `waitForFinish` server-side block,
+capped at INDUSTRY_DAYS_RUN_TIMEOUT_SECS), then dispatches
+`mactech.apify.ingest_industry_days` to pull dataset items, run Claude
+Haiku to extract structured event metadata, and upsert into
 `agency_events` (dedupe on source_url + title).
 
-The agency seed list is small (8 pages) so each daily run is well under
+The synchronous run-then-ingest path means **no Apify-dashboard
+webhook config is required** — activation is just APIFY_API_TOKEN +
+the daily beat. The webhook receiver still ships and is HMAC-verified;
+it's the right pattern for higher-volume capabilities (forecast
+sweep, EDGAR) which we can wire up later without rework.
+
+Agency seed list is small (8 pages) so each daily run is well under
 the strategy doc's $5/mo budget for this capability.
 """
 
@@ -37,6 +44,12 @@ log = logging.getLogger(__name__)
 
 # Apify Store actor — first-party, well-maintained, no rental sunset risk.
 WEBSITE_CONTENT_CRAWLER_ACTOR = "apify/website-content-crawler"
+
+# Wait at most this long for the actor run on the daily beat. Apify's
+# server-side waitForFinish blocks server-side until the run resolves
+# or the deadline expires. 8 seed pages × maxCrawlDepth=2 finishes in
+# ~30-90s in practice; 300s is a comfortable ceiling.
+INDUSTRY_DAYS_RUN_TIMEOUT_SECS = 300
 
 # Curated agency event / industry-day pages. Hand-picked from agencies
 # whose forecasts already drive MacTech NAICS. Keep this list short so
@@ -89,16 +102,13 @@ class IndustryDayIngestStats:
 
 @celery_app.task(name="mactech.apify.kick_industry_days_run")
 def kick_industry_days_run_task() -> dict[str, Any]:
-    """Daily beat — start a website-content-crawler run.
-
-    The actor-level webhook config (set up once in the Apify dashboard
-    or via API) calls our /webhooks/apify/industry_days when the run
-    finishes; ingest_industry_days_task does the rest.
-    """
-    return asyncio.run(_kick_run())
+    """Daily beat — start a website-content-crawler run, wait for it
+    to finish (server-side blocking via Apify's waitForFinish), then
+    dispatch the ingest task. No webhook config required."""
+    return asyncio.run(_kick_and_ingest())
 
 
-async def _kick_run() -> dict[str, Any]:
+async def _kick_and_ingest() -> dict[str, Any]:
     api_token = os.environ.get("APIFY_API_TOKEN", "")
     if not api_token:
         log.warning(
@@ -117,25 +127,104 @@ async def _kick_run() -> dict[str, Any]:
 
     async with ApifyClient(api_token) as client:
         try:
-            run = await client.run_actor(
-                WEBSITE_CONTENT_CRAWLER_ACTOR, run_input
+            run = await client.run_actor_sync(
+                WEBSITE_CONTENT_CRAWLER_ACTOR,
+                run_input,
+                wait_for_finish_secs=INDUSTRY_DAYS_RUN_TIMEOUT_SECS,
             )
         except ApifyError as exc:
-            log.warning(
-                "apify kick industry-days failed: %s", exc
-            )
+            log.warning("apify kick industry-days failed: %s", exc)
             return {"started": False, "error": str(exc)[:300]}
 
     log.info(
-        "industry-days kick: started apify run %s on %d seed urls",
+        "industry-days kick: apify run %s status=%s on %d seed urls",
         run.id,
+        run.status,
         len(INDUSTRY_DAY_SEED_URLS),
+    )
+
+    if run.status != "SUCCEEDED":
+        # The run is still in flight (timeout) or it failed. We don't
+        # ingest a partial dataset; tomorrow's beat will try again.
+        return {
+            "started": True,
+            "apify_run_id": run.id,
+            "status": run.status,
+            "ingested": False,
+            "reason": "run_not_succeeded",
+        }
+    if not run.default_dataset_id:
+        return {
+            "started": True,
+            "apify_run_id": run.id,
+            "status": run.status,
+            "ingested": False,
+            "reason": "no_dataset_id",
+        }
+
+    # Persist a synthetic apify_runs audit row + dispatch ingest. The
+    # webhook receiver writes the same row shape on RUN.SUCCEEDED — we
+    # mirror that here so dashboards and `processed_at` queries don't
+    # need to special-case the no-webhook path.
+    audit_id = await _record_synthetic_audit(
+        capability="industry_days",
+        apify_run_id=run.id,
+        apify_actor_id=run.actor_id,
+        apify_status=run.status,
+        dataset_id=run.default_dataset_id,
+        items_count=int(run.stats.get("requestsFinished") or 0) or None,
+    )
+
+    stats = await _ingest(
+        audit_id=audit_id,
+        dataset_id=run.default_dataset_id,
+        apify_run_id=run.id,
     )
     return {
         "started": True,
         "apify_run_id": run.id,
-        "seed_count": len(INDUSTRY_DAY_SEED_URLS),
+        "status": run.status,
+        "ingested": True,
+        "events_upserted": stats.events_upserted,
+        "items_seen": stats.items_seen,
+        "extraction_failures": stats.extraction_failures,
     }
+
+
+async def _record_synthetic_audit(
+    *,
+    capability: str,
+    apify_run_id: str,
+    apify_actor_id: str,
+    apify_status: str | None,
+    dataset_id: str | None,
+    items_count: int | None,
+) -> str:
+    async with unscoped_session() as session:
+        stmt = (
+            pg_insert(ApifyRun)
+            .values(
+                apify_run_id=apify_run_id,
+                apify_actor_id=apify_actor_id,
+                capability=capability,
+                event_type="WORKER.RUN.SUCCEEDED",
+                apify_status=apify_status,
+                dataset_id=dataset_id,
+                items_count=items_count,
+                payload={"source": "worker_inline"},
+            )
+            .on_conflict_do_update(
+                index_elements=["apify_run_id", "event_type"],
+                set_={
+                    "apify_status": apify_status,
+                    "dataset_id": dataset_id,
+                    "items_count": items_count,
+                },
+            )
+            .returning(ApifyRun.id)
+        )
+        result = await session.execute(stmt)
+        return str(result.scalar_one())
 
 
 @celery_app.task(name="mactech.apify.ingest_industry_days")
