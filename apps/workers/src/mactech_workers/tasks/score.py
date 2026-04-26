@@ -216,7 +216,11 @@ async def score_unscored_batch(
             ctx = await _build_context(session, tenant)
             founders_by_slug = {
                 f.slug: f
-                for f in (await session.execute(select(Founder))).scalars().all()
+                for f in (
+                    await session.execute(
+                        select(Founder).where(Founder.tenant_id == tenant.id)
+                    )
+                ).scalars().all()
             }
 
             # Find unscored opps (no row in opportunity_scores).
@@ -355,7 +359,11 @@ async def score_one_opportunity(opportunity_id: UUID | str) -> dict[str, Any]:
             ctx = await _build_context(session, tenant)
             founders_by_slug = {
                 f.slug: f
-                for f in (await session.execute(select(Founder))).scalars().all()
+                for f in (
+                    await session.execute(
+                        select(Founder).where(Founder.tenant_id == tenant.id)
+                    )
+                ).scalars().all()
             }
             opp = (
                 await session.execute(

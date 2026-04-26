@@ -76,7 +76,11 @@ async def get_settings(
     tenant_id = ctx.tenant.id
 
     founders = (
-        await session.execute(select(Founder).order_by(Founder.full_name))
+        await session.execute(
+            select(Founder)
+            .where(Founder.tenant_id == tenant_id)
+            .order_by(Founder.full_name)
+        )
     ).scalars().all()
     founders_by_id = {f.id: f for f in founders}
 

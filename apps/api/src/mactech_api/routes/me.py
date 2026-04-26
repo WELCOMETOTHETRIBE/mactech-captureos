@@ -205,7 +205,11 @@ async def dashboard(
 
     # Pillar cards — one per founder with their high-score count.
     founders = (
-        await session.execute(select(Founder).order_by(Founder.full_name))
+        await session.execute(
+            select(Founder)
+            .where(Founder.tenant_id == tenant_id)
+            .order_by(Founder.full_name)
+        )
     ).scalars().all()
     pillar_cards: list[FounderCard] = []
     for f in founders:

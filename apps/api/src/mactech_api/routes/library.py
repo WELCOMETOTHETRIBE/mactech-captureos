@@ -69,7 +69,11 @@ async def list_capability_statements(
     # Pull founders once for the related_founders join.
     founders_by_id: dict[UUID, Founder] = {
         f.id: f
-        for f in (await session.execute(select(Founder))).scalars().all()
+        for f in (
+            await session.execute(
+                select(Founder).where(Founder.tenant_id == tenant_id)
+            )
+        ).scalars().all()
     }
     founders_by_slug: dict[str, Founder] = {f.slug: f for f in founders_by_id.values()}
 
@@ -145,12 +149,17 @@ class UpdateCapabilityStatementRequest(BaseModel):
 
 
 async def _resolve_founder_refs(
-    session: Any, slugs: list[str]
+    session: Any, tenant_id: UUID, slugs: list[str]
 ) -> list[CapabilityFounderRef]:
     if not slugs:
         return []
     founders = (
-        await session.execute(select(Founder).where(Founder.slug.in_(slugs)))
+        await session.execute(
+            select(Founder).where(
+                Founder.tenant_id == tenant_id,
+                Founder.slug.in_(slugs),
+            )
+        )
     ).scalars().all()
     by_slug = {f.slug: f for f in founders}
     out: list[CapabilityFounderRef] = []
@@ -199,7 +208,7 @@ async def _to_out(
                 slugs.append(slug)
         elif isinstance(entry, str):
             slugs.append(entry)
-    related = await _resolve_founder_refs(session, slugs)
+    related = await _resolve_founder_refs(session, cs.tenant_id, slugs)
     return CapabilityStatementOut(
         id=str(cs.id),
         title=cs.title,

@@ -247,8 +247,31 @@ async def send_digest_for_founder(
 
     session_factory = async_session_factory()
     async with session_factory() as session:
+        # Resolve tenant first — founder slugs are now per-tenant unique,
+        # not globally unique. The MACTECH_TENANT_SLUG env var pins the
+        # worker to a single tenant; multi-tenant digest is a future sprint.
+        from mactech_db.models import Tenant as _T
+
+        tenant_row = (
+            await session.execute(select(_T).where(_T.slug == tenant_slug))
+        ).scalar_one_or_none()
+        if tenant_row is None:
+            return DigestSendStats(
+                founder_slug=founder_slug,
+                founder_name="",
+                recipient=None,
+                items_count=0,
+                sent=False,
+                skipped_reason=f"tenant {tenant_slug!r} not found",
+                message_id=None,
+            )
         founder = (
-            await session.execute(select(Founder).where(Founder.slug == founder_slug))
+            await session.execute(
+                select(Founder).where(
+                    Founder.tenant_id == tenant_row.id,
+                    Founder.slug == founder_slug,
+                )
+            )
         ).scalar_one_or_none()
         if founder is None:
             return DigestSendStats(
@@ -335,11 +358,27 @@ async def send_digest_for_founder(
 
 
 async def send_digest_to_all_founders(*, top_n: int = DEFAULT_TOP_N) -> list[DigestSendStats]:
+    """Send to every digest-enabled founder in the MACTECH_TENANT_SLUG tenant.
+
+    Multi-tenant fan-out (one digest per tenant) is a future sprint —
+    today the worker is pinned to a single tenant via env var.
+    """
+    tenant_slug = os.environ.get("MACTECH_TENANT_SLUG", "mactech")
     session_factory = async_session_factory()
     async with session_factory() as session:
+        from mactech_db.models import Tenant as _T
+
+        tenant_row = (
+            await session.execute(select(_T).where(_T.slug == tenant_slug))
+        ).scalar_one_or_none()
+        if tenant_row is None:
+            return []
         founders = (
             await session.execute(
-                select(Founder).where(Founder.digest_enabled.is_(True))
+                select(Founder).where(
+                    Founder.tenant_id == tenant_row.id,
+                    Founder.digest_enabled.is_(True),
+                )
             )
         ).scalars().all()
     results: list[DigestSendStats] = []

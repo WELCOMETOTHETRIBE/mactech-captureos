@@ -122,7 +122,12 @@ async def _resolve_owner_founder_id(
     if not slug:
         return None
     f = (
-        await ctx.session.execute(select(Founder).where(Founder.slug == slug))
+        await ctx.session.execute(
+            select(Founder).where(
+                Founder.tenant_id == ctx.tenant.id,
+                Founder.slug == slug,
+            )
+        )
     ).scalar_one_or_none()
     if f is None:
         raise HTTPException(

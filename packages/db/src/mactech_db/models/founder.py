@@ -2,7 +2,16 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import TIMESTAMP, Boolean, ForeignKey, Integer, String, func, text
+from sqlalchemy import (
+    TIMESTAMP,
+    Boolean,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -11,11 +20,21 @@ from mactech_db.base import Base
 
 class Founder(Base):
     __tablename__ = "founders"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "slug", name="uq_founders_tenant_slug"),
+    )
 
     id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
-    slug: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    tenant_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # Slug is unique within a tenant (composite UQ above), not globally.
+    slug: Mapped[str] = mapped_column(String, nullable=False)
     full_name: Mapped[str] = mapped_column(String, nullable=False)
     title: Mapped[str] = mapped_column(String, nullable=False)
     pillar: Mapped[str] = mapped_column(String, nullable=False)

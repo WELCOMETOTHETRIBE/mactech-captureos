@@ -108,13 +108,18 @@ async def seed_naics(session: AsyncSession, naics_doc: dict[str, Any]) -> None:
 
 
 async def seed_founders(
-    session: AsyncSession, founders_doc: dict[str, Any], naics_doc: dict[str, Any]
+    session: AsyncSession,
+    founders_doc: dict[str, Any],
+    naics_doc: dict[str, Any],
+    *,
+    tenant: Tenant,
 ) -> dict[str, Founder]:
     by_slug: dict[str, Founder] = {}
     for f in founders_doc["founders"]:
         stmt = (
             pg_insert(Founder)
             .values(
+                tenant_id=tenant.id,
                 slug=f["slug"],
                 full_name=f["full_name"],
                 title=f["title"],
@@ -130,7 +135,9 @@ async def seed_founders(
                 },
             )
             .on_conflict_do_update(
-                index_elements=["slug"],
+                # Composite key: (tenant_id, slug) — matches the migration's
+                # uq_founders_tenant_slug.
+                index_elements=["tenant_id", "slug"],
                 set_={
                     "full_name": f["full_name"],
                     "title": f["title"],
@@ -144,7 +151,12 @@ async def seed_founders(
 
     for f in founders_doc["founders"]:
         founder = (
-            await session.execute(select(Founder).where(Founder.slug == f["slug"]))
+            await session.execute(
+                select(Founder).where(
+                    Founder.tenant_id == tenant.id,
+                    Founder.slug == f["slug"],
+                )
+            )
         ).scalar_one()
         by_slug[f["slug"]] = founder
 
@@ -277,7 +289,9 @@ async def main() -> int:
             await seed_naics(session, naics_doc)
 
             print(f"seeding {len(founders_doc['founders'])} founders + NAICS matrix...")
-            founders_by_slug = await seed_founders(session, founders_doc, naics_doc)
+            founders_by_slug = await seed_founders(
+                session, founders_doc, naics_doc, tenant=tenant
+            )
 
             print(
                 f"seeding {len(config.get('capability_statements_seed', []))} capability statements..."

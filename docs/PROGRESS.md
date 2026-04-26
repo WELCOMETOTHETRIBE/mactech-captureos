@@ -1144,3 +1144,53 @@ Sprint 7 left a 15-minute lag between "user creates/updates a capability stateme
 - **First-feed preview** — synchronous one-off SAM ingestion at wizard completion for net-new tenants.
 - **Streaming Q&A** on the Ask panel.
 - **OCR for scanned PDFs** — Tesseract via Docker image addition.
+
+---
+
+## 2026-04-25 — Sprint 11: founder tenant-scoping migration
+
+User said "execute sprint 11". Closes the biggest multi-tenancy gap remaining: founders are now tenant-scoped at the schema level. Substantial migration touching 11 files across API + workers + seeder.
+
+### Schema — migration 0015
+- **`founders.tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE`** — added with three-step migration:
+  1. Add nullable column.
+  2. Backfill all existing rows from the single MacTech tenant via `update founders set tenant_id = (select id from tenants where slug = 'mactech')`.
+  3. Defensive `do $$ ... raise exception ...` block to verify no nulls remain before locking down with `SET NOT NULL` + foreign key.
+- **Slug uniqueness pivot**: `founders_slug_key` (global unique on `slug`) → `uq_founders_tenant_slug` (composite unique on `(tenant_id, slug)`). Two tenants can each have a founder with slug "patrick-caruso" without collision.
+- New `ix_founders_tenant_id` index for the per-tenant filter pattern that now appears on every founder query.
+- Documented assumption: backfill targets the single tenant slug `'mactech'`. Multi-tenant backfill (via Clerk org id mapping) would be a different migration; we don't have that scenario yet.
+
+### ORM model + seeder
+- `mactech_db.models.Founder` gains `tenant_id` field with FK + index. Drops the inline `unique=True` on `slug`; the unique constraint moves to a `__table_args__` `UniqueConstraint("tenant_id", "slug", ...)`.
+- `seed_founders()` accepts a `tenant: Tenant` arg, writes `tenant_id=tenant.id` on insert, and uses `(tenant_id, slug)` as the on-conflict index. Caller in `seed.py` updated to pass `tenant=tenant`.
+
+### Founder queries — all 11 files updated
+- **auth.py** — both founder-by-slug lookups (JIT user provisioning + post-creation rebind) gained `Founder.tenant_id == tenant.id` filter.
+- **routes/founders.py** — every CRUD query gained tenant filter. `_unique_slug()` signature accepts `tenant_id` and only checks for collisions within that tenant, so two tenants can independently use "patrick-caruso" as their founder's slug.
+- **routes/me.py** — pillar-cards founder list now filters by `tenant_id`.
+- **routes/settings.py** — `/me/settings` founder list filtered.
+- **routes/ask.py** — Q&A context builder filters founders to current tenant.
+- **routes/drafts.py** — Sources Sought drafter context filtered.
+- **routes/library.py** — both founder lookups (by-id map + `_resolve_founder_refs(slugs)`) filtered. `_resolve_founder_refs` now takes `tenant_id` as a positional arg; callers updated.
+- **routes/opportunities.py** — digest endpoint's by-slug lookup filtered.
+- **routes/pursuits.py** — `_resolve_owner_founder_id(slug)` filtered to current tenant.
+- **workers/score.py** — both `founders_by_slug` reads filtered by `tenant.id` (already in scope inside the per-tenant loop).
+- **workers/digest.py** — `send_digest_for_founder()` and `send_digest_to_all_founders()` now resolve the tenant from `MACTECH_TENANT_SLUG` env var first, then filter founders by `tenant_id`. Multi-tenant fan-out (one digest run per tenant) is a future sprint; today the worker stays pinned to one tenant via env, matching its existing assumption.
+
+### Why this isn't a UI sprint
+Pure backend correctness — the web UI was already calling `/me/settings` and `/founders` for the founder list, both of which now correctly tenant-scope server-side. No frontend changes needed.
+
+### Verification
+- `python3 -m py_compile` clean on all 14 touched files (model, migration, seeder, 9 routes, 2 workers, auth).
+- Founder ORM column set verified via uv: `['id', 'tenant_id', 'slug', 'full_name', 'title', 'pillar', 'bio', 'areas_of_expertise', 'email', 'digest_enabled', 'created_at']`. Constraints: `['uq_founders_tenant_slug']`.
+- Migration 0015 auto-runs on api boot via [entrypoint.sh](apps/api/entrypoint.sh). The defensive null-check block ensures the migration aborts cleanly if backfill leaves any row null (which shouldn't happen, but safety).
+
+### What this unblocks
+- **Multi-tenant onboarding actually works.** A net-new tenant can sign up, the wizard creates their founders via `POST /founders` with `tenant_id` baked in, and there's no chance of collision with MacTech's founders. Sprint 8/9 was wired correctly at the API level; the schema constraint now enforces it.
+- **Future founder tenant-scoped Clerk org claims.** Once we have multiple tenants in production, the `claims.founder_slug` resolver in `auth.py` correctly filters by the JWT's `tenant_org_id` so a founder slug collision across tenants doesn't cross-resolve.
+
+### Sprint 12 candidates left
+- **First-feed preview** — synchronous one-off SAM ingestion at wizard completion for net-new tenants.
+- **Streaming Q&A** on the Ask panel.
+- **OCR for scanned PDFs** — Tesseract via Docker image addition.
+- **Multi-tenant digest fan-out** — iterate tenants in `send_digest_to_all_founders` instead of pinning to one via env var.

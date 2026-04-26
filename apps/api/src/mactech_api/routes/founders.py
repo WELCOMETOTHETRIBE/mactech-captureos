@@ -110,7 +110,11 @@ async def list_founders(
     ctx: Annotated[RequestContext, Depends(get_request_context)],
 ) -> FoundersList:
     rows = (
-        await ctx.session.execute(select(Founder).order_by(Founder.full_name))
+        await ctx.session.execute(
+            select(Founder)
+            .where(Founder.tenant_id == ctx.tenant.id)
+            .order_by(Founder.full_name)
+        )
     ).scalars().all()
     return FoundersList(total=len(rows), items=[_to_out(r) for r in rows])
 
@@ -122,7 +126,10 @@ async def get_founder(
 ) -> FounderOut:
     f = (
         await ctx.session.execute(
-            select(Founder).where(Founder.id == founder_id)
+            select(Founder).where(
+                Founder.id == founder_id,
+                Founder.tenant_id == ctx.tenant.id,
+            )
         )
     ).scalar_one_or_none()
     if f is None:
@@ -131,13 +138,16 @@ async def get_founder(
 
 
 async def _unique_slug(
-    session, base: str, exclude_id: UUID | None = None
+    session, tenant_id: UUID, base: str, exclude_id: UUID | None = None
 ) -> str:
-    """Pick a slug not yet used. If `base` is taken, append -2, -3, etc."""
+    """Pick a slug not yet used in this tenant. If `base` is taken,
+    append -2, -3, etc."""
     slug = base
     suffix = 1
     while True:
-        stmt = select(Founder).where(Founder.slug == slug)
+        stmt = select(Founder).where(
+            Founder.tenant_id == tenant_id, Founder.slug == slug
+        )
         if exclude_id is not None:
             stmt = stmt.where(Founder.id != exclude_id)
         existing = (await session.execute(stmt)).scalar_one_or_none()
@@ -163,9 +173,10 @@ async def create_founder(
 ) -> FounderOut:
     _validate_pillar(body.pillar)
     base_slug = body.slug.strip().lower() if body.slug else _slugify(body.full_name)
-    slug = await _unique_slug(ctx.session, base_slug)
+    slug = await _unique_slug(ctx.session, ctx.tenant.id, base_slug)
 
     f = Founder(
+        tenant_id=ctx.tenant.id,
         slug=slug,
         full_name=body.full_name.strip(),
         title=body.title.strip(),
@@ -194,7 +205,10 @@ async def update_founder(
 ) -> FounderOut:
     f = (
         await ctx.session.execute(
-            select(Founder).where(Founder.id == founder_id)
+            select(Founder).where(
+                Founder.id == founder_id,
+                Founder.tenant_id == ctx.tenant.id,
+            )
         )
     ).scalar_one_or_none()
     if f is None:
@@ -229,7 +243,10 @@ async def delete_founder(
 ) -> None:
     f = (
         await ctx.session.execute(
-            select(Founder).where(Founder.id == founder_id)
+            select(Founder).where(
+                Founder.id == founder_id,
+                Founder.tenant_id == ctx.tenant.id,
+            )
         )
     ).scalar_one_or_none()
     if f is None:

@@ -548,7 +548,12 @@ async def get_founder_digest(
     tenant_id = ctx.tenant.id
 
     founder = (
-        await session.execute(select(Founder).where(Founder.slug == founder_slug))
+        await session.execute(
+            select(Founder).where(
+                Founder.tenant_id == tenant_id,
+                Founder.slug == founder_slug,
+            )
+        )
     ).scalar_one_or_none()
     if founder is None:
         raise HTTPException(status_code=404, detail="founder not found")

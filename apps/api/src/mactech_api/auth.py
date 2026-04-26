@@ -140,7 +140,10 @@ async def _resolve_tenant_and_user(
         if claims.founder_slug:
             f = (
                 await session.execute(
-                    select(Founder).where(Founder.slug == claims.founder_slug)
+                    select(Founder).where(
+                        Founder.tenant_id == tenant.id,
+                        Founder.slug == claims.founder_slug,
+                    )
                 )
             ).scalar_one_or_none()
             founder_id = f.id if f else None
@@ -164,7 +167,10 @@ async def _resolve_tenant_and_user(
     elif claims.founder_slug:
         founder = (
             await session.execute(
-                select(Founder).where(Founder.slug == claims.founder_slug)
+                select(Founder).where(
+                    Founder.tenant_id == tenant.id,
+                    Founder.slug == claims.founder_slug,
+                )
             )
         ).scalar_one_or_none()
         if founder is not None:
