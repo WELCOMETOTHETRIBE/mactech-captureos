@@ -81,11 +81,20 @@ celery_app.conf.update(
             "schedule": crontab(minute=0, hour=5),
             "options": {"expires": 60 * 60},
         },
-        # Apify forecast sweep — daily 0530 ET. Pulls DHS APFS, VA FCO,
-        # USACE, AFBES, GSA, HHS forecast hubs into forecasts_raw.
+        # DHS APFS direct API ingest — daily 0515 ET. Bypasses Apify
+        # (APFS exposes a public JSON endpoint with ~700 structured
+        # forecasts; cheaper + cleaner than scraping the SPA).
+        "dhs-apfs-ingest": {
+            "task": "mactech.dhs_apfs.ingest_all",
+            "schedule": crontab(minute=15, hour=5),
+            "options": {"expires": 30 * 60},
+        },
+        # Apify forecast sweep — daily 0545 ET (after industry-days at
+        # 0500 finishes). Catches GSA, VA, USACE, AFBES, HHS hubs that
+        # don't expose a public JSON API. DHS is handled by dhs-apfs.
         "apify-forecasts-kick": {
             "task": "mactech.apify.kick_forecasts_run",
-            "schedule": crontab(minute=30, hour=5),
+            "schedule": crontab(minute=45, hour=5),
             "options": {"expires": 90 * 60},
         },
     },
@@ -123,6 +132,7 @@ def _reset_db_engine_per_task(*args: object, **kwargs: object) -> None:
 # Side-effect imports to register tasks defined in submodules. Keep at end of file.
 import mactech_workers.tasks.apify_forecasts  # noqa: E402, F401
 import mactech_workers.tasks.apify_industry_days  # noqa: E402, F401
+import mactech_workers.tasks.dhs_apfs_ingest  # noqa: E402, F401
 import mactech_workers.tasks.digest  # noqa: E402, F401
 import mactech_workers.tasks.embed  # noqa: E402, F401
 import mactech_workers.tasks.enrich  # noqa: E402, F401
