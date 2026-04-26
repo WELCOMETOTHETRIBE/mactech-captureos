@@ -2,6 +2,7 @@ import { UserButton } from "@clerk/nextjs";
 import { apiFetch, type MeResponse } from "@/lib/api";
 import { SidebarNav } from "@/components/sidebar-nav";
 import { CmdK, CmdKTrigger } from "@/components/cmd-k";
+import { MacTechFooter } from "@/components/footer";
 import { Pillar } from "@/components/ui";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -14,7 +15,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="grid min-h-screen grid-cols-[240px_1fr] bg-neutral-50">
+    <div className="min-h-screen flex flex-col bg-neutral-50">
+      <div className="grid flex-1 grid-cols-[240px_1fr]">
       <aside className="flex flex-col border-r border-neutral-200 bg-white">
         <div className="px-5 py-5 border-b border-neutral-200">
           <p className="text-[10px] uppercase tracking-wider text-neutral-500">
@@ -82,6 +84,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </header>
         <main className="flex-1 px-6 py-6">{children}</main>
       </div>
+
+      </div>
+      <MacTechFooter />
 
       {/* Global Cmd-K modal — single mount, listens for the shortcut
           anywhere in the app. */}
