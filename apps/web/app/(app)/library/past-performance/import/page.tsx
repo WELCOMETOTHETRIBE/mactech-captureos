@@ -40,7 +40,7 @@ export default function ImportPastPerformancePage() {
               Drop a PDF here
             </span>
             <span className="mt-1 text-sm text-neutral-500">
-              or click to browse · text-based PDFs only · 20 MB max
+              or click to browse · text or scanned PDFs · 20 MB max
             </span>
             <input
               id="pdf-file"
@@ -58,9 +58,10 @@ export default function ImportPastPerformancePage() {
             </summary>
             <ul className="mt-3 list-disc space-y-1.5 pl-5 text-neutral-600">
               <li>
-                Text-based PDFs (Word exports, govwide standard PWS docs).
-                Scanned images won&rsquo;t work yet — OCR ships in a later
-                sprint.
+                Text-based PDFs (Word exports, govwide standard PWS docs)
+                work best. Scanned PDFs and images are also supported via
+                Tesseract OCR (English only) — quality depends on scan
+                resolution.
               </li>
               <li>
                 Past-performance write-ups, contract close-out memos, capture

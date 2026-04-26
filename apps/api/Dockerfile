@@ -40,6 +40,12 @@ ENV PATH="/app/.venv/bin:${PATH}" \
 
 WORKDIR /app
 
+# Tesseract for OCR fallback on scanned PDFs (library_import). The English
+# language pack is the only one we ship; non-English OCR is out of scope.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng \
+ && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /app /app
 
 # Seed + migrations run at startup, so ship the inputs they read.

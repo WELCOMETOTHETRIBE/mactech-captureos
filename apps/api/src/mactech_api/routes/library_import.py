@@ -24,7 +24,9 @@ from typing import Annotated
 from uuid import UUID
 
 import fitz  # type: ignore[import-untyped]  # PyMuPDF
+import pytesseract  # type: ignore[import-untyped]
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from PIL import Image
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.exc import IntegrityError
 
@@ -58,13 +60,50 @@ class ImportedPastPerformanceOut(_Out):
     notes: list[str]
 
 
+# OCR knobs.
+OCR_FALLBACK_THRESHOLD = 80  # if PyMuPDF returns < this many chars, OCR.
+OCR_RENDER_DPI = 220         # pixels per inch when rasterizing pages.
+OCR_MAX_PAGES = 12           # hard cap to bound OCR latency / cost.
+
+
+def _ocr_pdf(blob: bytes) -> str:
+    """Tesseract OCR fall-through for image-based / scanned PDFs.
+
+    Renders each page to a PNG via PyMuPDF at ~220dpi and runs pytesseract.
+    Capped at OCR_MAX_PAGES; for typical past-performance / capability
+    statements that's plenty.
+    """
+    pages: list[str] = []
+    try:
+        with fitz.open(stream=blob, filetype="pdf") as doc:
+            for i, page in enumerate(doc):
+                if i >= OCR_MAX_PAGES:
+                    break
+                pix = page.get_pixmap(dpi=OCR_RENDER_DPI, alpha=False)
+                img_bytes = pix.tobytes("png")
+                with Image.open(io.BytesIO(img_bytes)) as img:
+                    text = pytesseract.image_to_string(img, lang="eng")
+                if text.strip():
+                    pages.append(text.strip())
+    except pytesseract.TesseractNotFoundError as exc:
+        log.warning("tesseract binary not found at runtime: %s", exc)
+        return ""
+    except Exception as exc:
+        log.warning("OCR fall-through errored: %s", exc)
+        return ""
+    return "\n\n".join(pages).strip()
+
+
 def _pdf_to_text(blob: bytes) -> str:
+    """Extract text via PyMuPDF; fall through to Tesseract OCR for scanned
+    PDFs where the embedded text layer is empty.
+    """
     try:
         with fitz.open(stream=blob, filetype="pdf") as doc:
             pages: list[str] = []
             for page in doc:
                 pages.append(page.get_text("text"))
-        return "\n\n".join(pages).strip()
+        embedded = "\n\n".join(pages).strip()
     except fitz.FileDataError as exc:
         raise HTTPException(
             status_code=400, detail=f"not a valid PDF: {exc}"
@@ -73,6 +112,21 @@ def _pdf_to_text(blob: bytes) -> str:
         raise HTTPException(
             status_code=400, detail=f"could not parse PDF: {exc}"
         ) from exc
+
+    # If PyMuPDF found a real text layer, use it. OCR is the fallback.
+    if len(embedded) >= OCR_FALLBACK_THRESHOLD:
+        return embedded
+
+    log.info(
+        "PyMuPDF returned %d chars; attempting OCR fall-through (max %d pages)",
+        len(embedded),
+        OCR_MAX_PAGES,
+    )
+    ocr_text = _ocr_pdf(blob)
+    # Prefer whichever produced more usable text.
+    if len(ocr_text) > len(embedded):
+        return ocr_text
+    return embedded
 
 
 def _date_or_none(d: date | None) -> date | None:
@@ -120,10 +174,10 @@ async def import_past_performance_pdf(
         raise HTTPException(
             status_code=422,
             detail=(
-                "PyMuPDF extracted almost no text from this PDF — "
-                "it may be a scanned image or empty. OCR isn't supported "
-                "yet; try a text-based PDF or paste the content into the "
-                "manual form."
+                "Couldn't extract usable text from this PDF — neither the "
+                "embedded text layer nor OCR returned anything readable. "
+                "Try a higher-resolution scan, or paste the content into "
+                "the manual form."
             ),
         )
 
@@ -260,9 +314,10 @@ async def import_capability_statement_pdf(
         raise HTTPException(
             status_code=422,
             detail=(
-                "PyMuPDF extracted almost no text from this PDF — it may be a "
-                "scanned image. OCR isn't supported yet; try a text-based "
-                "PDF or paste the content into the manual form."
+                "Couldn't extract usable text from this PDF — neither the "
+                "embedded text layer nor OCR returned anything readable. "
+                "Try a higher-resolution scan, or paste the content into "
+                "the manual form."
             ),
         )
 

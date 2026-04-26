@@ -18,6 +18,7 @@ import logging
 import os
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from uuid import UUID
 from html import escape
 
 from sqlalchemy import select
@@ -225,14 +226,20 @@ def _render_text(founder: Founder, rows: list[DigestRow]) -> str:
 
 
 async def send_digest_for_founder(
-    founder_slug: str, *, top_n: int = DEFAULT_TOP_N
+    founder_slug: str,
+    *,
+    tenant_slug: str | None = None,
+    top_n: int = DEFAULT_TOP_N,
 ) -> DigestSendStats:
     api_key = os.environ.get("RESEND_API_KEY", "")
     from_addr = os.environ.get(
         "RESEND_FROM", "MacTech CaptureOS <onboarding@resend.dev>"
     )
     reply_to = os.environ.get("RESEND_REPLY_TO") or None
-    tenant_slug = os.environ.get("MACTECH_TENANT_SLUG", "mactech")
+    # Tenant scope: explicit param wins; falls back to MACTECH_TENANT_SLUG
+    # env (legacy single-tenant default).
+    if tenant_slug is None:
+        tenant_slug = os.environ.get("MACTECH_TENANT_SLUG", "mactech")
 
     if not api_key:
         return DigestSendStats(
@@ -357,34 +364,69 @@ async def send_digest_for_founder(
     )
 
 
-async def send_digest_to_all_founders(*, top_n: int = DEFAULT_TOP_N) -> list[DigestSendStats]:
-    """Send to every digest-enabled founder in the MACTECH_TENANT_SLUG tenant.
+async def send_digest_to_all_founders(
+    *,
+    only_tenant_slug: str | None = None,
+    top_n: int = DEFAULT_TOP_N,
+) -> list[DigestSendStats]:
+    """Fan out the morning digest across every tenant.
 
-    Multi-tenant fan-out (one digest per tenant) is a future sprint —
-    today the worker is pinned to a single tenant via env var.
+    For each tenant: pull every digest_enabled founder, send to each.
+    Errors per-founder are caught and surfaced as DigestSendStats with
+    sent=False rather than aborting the loop.
+
+    `only_tenant_slug` (or the legacy MACTECH_TENANT_SLUG env var) pins
+    the run to a single tenant — useful for testing or for single-tenant
+    deployments. When neither is set, fan out across all tenants.
     """
-    tenant_slug = os.environ.get("MACTECH_TENANT_SLUG", "mactech")
+    pin = only_tenant_slug or os.environ.get("MACTECH_PIN_TENANT_SLUG") or None
     session_factory = async_session_factory()
     async with session_factory() as session:
         from mactech_db.models import Tenant as _T
 
-        tenant_row = (
-            await session.execute(select(_T).where(_T.slug == tenant_slug))
-        ).scalar_one_or_none()
-        if tenant_row is None:
-            return []
-        founders = (
+        stmt = select(_T)
+        if pin:
+            stmt = stmt.where(_T.slug == pin)
+        else:
+            # Stable order so the run is reproducible across deploys.
+            stmt = stmt.order_by(_T.slug)
+        tenants = (await session.execute(stmt)).scalars().all()
+
+        # Pre-load all (tenant_id → list[Founder]) in one query.
+        all_founders = (
             await session.execute(
-                select(Founder).where(
-                    Founder.tenant_id == tenant_row.id,
-                    Founder.digest_enabled.is_(True),
-                )
+                select(Founder).where(Founder.digest_enabled.is_(True))
             )
         ).scalars().all()
+
+    by_tenant: dict[UUID, list[Founder]] = {}
+    for f in all_founders:
+        by_tenant.setdefault(f.tenant_id, []).append(f)
+
     results: list[DigestSendStats] = []
-    for f in founders:
-        stats = await send_digest_for_founder(f.slug, top_n=top_n)
-        results.append(stats)
+    for t in tenants:
+        for f in by_tenant.get(t.id, []):
+            try:
+                stats = await send_digest_for_founder(
+                    f.slug, tenant_slug=t.slug, top_n=top_n
+                )
+            except Exception as exc:  # noqa: BLE001 — per-founder failure shouldn't abort fan-out
+                log.exception(
+                    "digest send_all failed for tenant=%s founder=%s: %s",
+                    t.slug,
+                    f.slug,
+                    exc,
+                )
+                stats = DigestSendStats(
+                    founder_slug=f.slug,
+                    founder_name=f.full_name,
+                    recipient=f.email,
+                    items_count=0,
+                    sent=False,
+                    skipped_reason=f"unexpected error: {exc.__class__.__name__}",
+                    message_id=None,
+                )
+            results.append(stats)
     return results
 
 

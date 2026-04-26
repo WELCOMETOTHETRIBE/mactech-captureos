@@ -41,7 +41,7 @@ export default function ImportCapabilityStatementPage() {
               Drop a capability statement PDF here
             </span>
             <span className="mt-1 text-sm text-neutral-500">
-              or click to browse · text-based PDFs only · 20 MB max
+              or click to browse · text or scanned PDFs · 20 MB max
             </span>
             <input
               id="cs-pdf-file"
@@ -59,9 +59,10 @@ export default function ImportCapabilityStatementPage() {
             </summary>
             <ul className="mt-3 list-disc space-y-1.5 pl-5 text-neutral-600">
               <li>
-                Text-based PDFs only — capability decks, one-pagers, the
-                "About" section of a proposal narrative. Scanned images
-                won&rsquo;t work yet (OCR ships in a later sprint).
+                Text-based PDFs are the highest-fidelity — capability
+                decks, one-pagers, the "About" section of a proposal
+                narrative. Scanned PDFs and images are also supported
+                via Tesseract OCR (English only).
               </li>
               <li>
                 One PDF = one capability cluster. If your deck describes 3

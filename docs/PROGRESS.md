@@ -1194,3 +1194,51 @@ Pure backend correctness — the web UI was already calling `/me/settings` and `
 - **Streaming Q&A** on the Ask panel.
 - **OCR for scanned PDFs** — Tesseract via Docker image addition.
 - **Multi-tenant digest fan-out** — iterate tenants in `send_digest_to_all_founders` instead of pinning to one via env var.
+
+---
+
+## 2026-04-25 — Sprint 12: OCR for scanned PDFs + multi-tenant digest fan-out
+
+User said "execute sprint 12". Two clean, complementary wins: OCR unblocks scanned-PDF imports (a real user need); digest fan-out completes the multi-tenancy correctness story from Sprint 11.
+
+### OCR for scanned PDFs
+
+The existing PDF import flow (Sprints 6/7) extracted text via PyMuPDF only. Scanned PDFs (image-only, no embedded text layer) returned <30 chars and got rejected with "OCR isn't supported yet." This closes that.
+
+- **[apps/api/Dockerfile](apps/api/Dockerfile)**: added `apt-get install tesseract-ocr tesseract-ocr-eng` to the runtime image. English-only — non-English OCR is out of scope. Docker image grows ~30MB.
+- **[apps/api/pyproject.toml](apps/api/pyproject.toml)**: added `pytesseract>=0.3.10`. Pillow comes transitively via PyMuPDF.
+- **[apps/api/src/mactech_api/routes/library_import.py](apps/api/src/mactech_api/routes/library_import.py)** `_pdf_to_text`:
+  - First tries PyMuPDF text extraction (fast path for text-based PDFs).
+  - If <80 chars (`OCR_FALLBACK_THRESHOLD`), falls through to `_ocr_pdf()`:
+    - Renders each page to PNG at 220dpi via `page.get_pixmap(dpi=220)`.
+    - Capped at 12 pages (`OCR_MAX_PAGES`) to bound latency.
+    - Runs `pytesseract.image_to_string(img, lang="eng")` per page.
+    - Returns concatenated text, or empty string on tesseract-not-found / unexpected error (fail-soft so a missing binary doesn't tank the request).
+  - Returns whichever extraction (PyMuPDF or OCR) produced more usable text.
+- The "<30 chars" rejection now reads "Couldn't extract usable text from this PDF — neither the embedded text layer nor OCR returned anything readable" since the text-only assumption is gone.
+- **Import-page copy** updated on both [past-performance/import](apps/web/app/(app)/library/past-performance/import/page.tsx) and [capability-statements/import](apps/web/app/(app)/library/capability-statements/import/page.tsx): "text or scanned PDFs · 20 MB max" instead of "text-based PDFs only", and the "What works best?" tip block now mentions Tesseract OCR.
+
+### Multi-tenant digest fan-out
+
+Sprint 11 made founders tenant-scoped at the schema level but left the digest worker single-tenant via the `MACTECH_TENANT_SLUG` env var. This refactors the worker to fan out across all tenants, with the env var preserved as an opt-in pin for testing / single-tenant deploys.
+
+- **[apps/workers/src/mactech_workers/tasks/digest.py](apps/workers/src/mactech_workers/tasks/digest.py)**:
+  - `send_digest_for_founder(slug, *, tenant_slug=None, ...)` now takes an optional explicit tenant_slug. When None, falls back to `MACTECH_TENANT_SLUG` env (legacy default). The fan-out function passes it explicitly.
+  - `send_digest_to_all_founders(*, only_tenant_slug=None, ...)` is the multi-tenant default. Iterates **all** tenants (ordered by slug for reproducibility), pre-loads digest_enabled founders in one query, then groups by `tenant_id` and dispatches per-founder. Per-founder failures are caught and surfaced as `DigestSendStats(sent=False, skipped_reason=...)` rather than aborting the loop.
+  - The `MACTECH_PIN_TENANT_SLUG` env (or the explicit `only_tenant_slug` arg) pins the run to one tenant — useful for testing or for single-tenant deploys that don't want cross-tenant fan-out.
+
+### Verification
+- `tsc --noEmit` clean across `apps/web`.
+- `python3 -m py_compile` clean on the modified library_import + digest.
+- Pillow + pytesseract verified via uv on api package: Pillow 12.2.0, pytesseract 0.3.13.
+- Docker image will rebuild on next Railway deploy with tesseract installed in the runtime stage.
+
+### Trade-offs called out
+- **OCR quality is variable.** Tesseract on a low-resolution scan won't be great. The 220dpi rasterization + English-only is a reasonable default; non-English documents and very poor scans will still produce thin extractions and the user sees the same fallback rejection.
+- **No async OCR.** OCR runs synchronously per page; a 12-page scanned PDF can take 30+ seconds. The Anthropic timeout downstream is generous so this works, but it's the most expensive path through the import flow. A future sprint could move OCR to a worker task.
+- **Pin env var renamed.** Legacy was `MACTECH_TENANT_SLUG` (still honored as fallback in `send_digest_for_founder`); new fan-out controller honors `MACTECH_PIN_TENANT_SLUG`. The Railway env var doesn't need to change for the existing single-tenant deploy — `MACTECH_TENANT_SLUG=mactech` keeps the per-founder send working as before, and the absence of `MACTECH_PIN_TENANT_SLUG` lets the fan-out iterate (which currently means just MacTech anyway).
+
+### Sprint 13 candidates left
+- **First-feed preview** — synchronous one-off SAM ingestion at wizard completion for net-new tenants.
+- **Streaming Q&A** on the Ask panel — convert the existing endpoint to SSE so the answer composes live instead of arriving all at once after 10s.
+- **Async OCR worker task** — move the OCR fall-through to a background job so import requests stay fast.
