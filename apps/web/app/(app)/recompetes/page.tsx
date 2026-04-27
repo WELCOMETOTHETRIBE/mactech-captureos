@@ -232,14 +232,53 @@ export default async function RecompetesPage({
                       </p>
                     ) : null}
                     <div className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                      <strong>Incumbent:</strong> {fc.incumbent_name}
-                      {fc.incumbent_contract_number
-                        ? ` · contract ${fc.incumbent_contract_number}`
-                        : ""}
-                      {fc.period_of_performance_end ? (
-                        <span className="ml-2">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <strong>Incumbent:</strong> {fc.incumbent_name}
+                        {fc.incumbent_sec_ticker ? (
+                          <span className="rounded-sm bg-neutral-200 px-1.5 py-0.5 font-mono text-[10px] text-neutral-800">
+                            {fc.incumbent_sec_ticker}
+                          </span>
+                        ) : null}
+                        {fc.incumbent_distress_score !== null &&
+                        fc.incumbent_distress_score > 0 ? (
+                          <span className="rounded-sm bg-rose-200 px-1.5 py-0.5 font-semibold text-[10px] text-rose-900">
+                            🚩 distress {fc.incumbent_distress_score}
+                          </span>
+                        ) : null}
+                      </div>
+                      {fc.incumbent_contract_number ? (
+                        <div className="mt-1 text-[11px]">
+                          Contract {fc.incumbent_contract_number}
+                          {fc.period_of_performance_end ? (
+                            <span className="ml-2">
+                              POP ends {fmtDate(fc.period_of_performance_end)}
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : fc.period_of_performance_end ? (
+                        <div className="mt-1 text-[11px]">
                           POP ends {fmtDate(fc.period_of_performance_end)}
-                        </span>
+                        </div>
+                      ) : null}
+                      {fc.incumbent_total_obligations !== null &&
+                      fc.incumbent_total_obligations > 0 ? (
+                        <div className="mt-1 text-[11px]">
+                          Federal footprint:{" "}
+                          {fmtMoney(fc.incumbent_total_obligations)} across{" "}
+                          {fc.incumbent_award_count ?? 0} awards (USASpending)
+                        </div>
+                      ) : null}
+                      {fc.incumbent_distress_summary ? (
+                        <div className="mt-1 text-[11px]">
+                          SEC EDGAR: {fc.incumbent_distress_summary}
+                        </div>
+                      ) : fc.incumbent_filings_last_90d !== null &&
+                        fc.incumbent_filings_last_90d > 0 ? (
+                        <div className="mt-1 text-[11px]">
+                          SEC EDGAR: {fc.incumbent_filings_last_90d} filing
+                          {fc.incumbent_filings_last_90d !== 1 ? "s" : ""} in
+                          last 90 days
+                        </div>
                       ) : null}
                     </div>
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-500">

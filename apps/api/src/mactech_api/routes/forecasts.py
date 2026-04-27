@@ -22,8 +22,10 @@ from sqlalchemy.dialects.postgresql import JSONB
 
 from mactech_api.auth import RequestContext, get_request_context
 from mactech_db.models import (
+    AwardHistory,
     Founder,
     ForecastRaw,
+    IncumbentSignal,
     NaicsCode,
     SavedSearch,
 )
@@ -70,6 +72,12 @@ class ForecastOut(_Out):
     assigned_founder_slug: str | None
     assigned_founder_name: str | None
     assigned_founder_pillar: str | None
+    incumbent_total_obligations: float | None
+    incumbent_award_count: int | None
+    incumbent_distress_score: int | None
+    incumbent_distress_summary: str | None
+    incumbent_sec_ticker: str | None
+    incumbent_filings_last_90d: int | None
 
 
 class ForecastsResponse(_Out):
@@ -257,6 +265,7 @@ def _to_out(
     target_set: set[str],
     scoring_ctx: ScoringContext,
     founder_index: dict[str, tuple[str, str]],
+    intel_index: dict[str, dict] | None = None,
 ) -> ForecastOut:
     naics_set = set(fc.naics_codes or [])
     if fc.naics_code:
@@ -326,6 +335,32 @@ def _to_out(
         assigned_founder_pillar=(
             founder_index.get(result.assigned_founder_slug or "", (None, None))[1]
         ),
+        incumbent_total_obligations=(
+            (intel_index or {}).get(fc.incumbent_name or "", {}).get(
+                "total_obligations"
+            )
+        ),
+        incumbent_award_count=(
+            (intel_index or {}).get(fc.incumbent_name or "", {}).get("award_count")
+        ),
+        incumbent_distress_score=(
+            (intel_index or {}).get(fc.incumbent_name or "", {}).get(
+                "distress_score"
+            )
+        ),
+        incumbent_distress_summary=(
+            (intel_index or {}).get(fc.incumbent_name or "", {}).get(
+                "distress_summary"
+            )
+        ),
+        incumbent_sec_ticker=(
+            (intel_index or {}).get(fc.incumbent_name or "", {}).get("sec_ticker")
+        ),
+        incumbent_filings_last_90d=(
+            (intel_index or {}).get(fc.incumbent_name or "", {}).get(
+                "filings_last_90d"
+            )
+        ),
     )
 
 
@@ -373,6 +408,100 @@ async def _build_founder_index(ctx: RequestContext) -> dict[str, tuple[str, str]
         )
     ).all()
     return {r.slug: (r.full_name, r.pillar) for r in rows}
+
+
+async def _build_incumbent_intel_index(
+    ctx: RequestContext, incumbent_names: list[str]
+) -> dict[str, dict]:
+    """Batch lookup: for every incumbent_name on a forecast, pull their
+    USASpending federal-footprint + EDGAR distress signal in one round
+    trip. Returns a dict keyed by the original name string.
+
+    USASpending side is matched via pg_trgm similarity on
+    awards_history.recipient_name. EDGAR side is matched on
+    incumbent_signals.normalized_name (which is computed by the worker
+    using the same normalize fn we use here).
+    """
+    if not incumbent_names:
+        return {}
+
+    # Dedupe + lowercase the candidates.
+    seen: dict[str, str] = {}
+    for n in incumbent_names:
+        key = (n or "").strip()
+        if key:
+            seen[key] = _normalize_incumbent_name(key)
+    if not seen:
+        return {}
+
+    # USASpending: total obligations + award count per incumbent name.
+    # Use pg_trgm word_similarity to tolerate the case difference between
+    # forecast feeds (DOE uppercase, DHS mixed) and awards_history.
+    awards_rows = (
+        await ctx.session.execute(
+            select(
+                AwardHistory.recipient_name,
+                func.sum(AwardHistory.obligated_amount).label("total"),
+                func.count(AwardHistory.id).label("award_count"),
+            )
+            .where(
+                AwardHistory.recipient_name.is_not(None),
+                func.lower(AwardHistory.recipient_name).in_(
+                    [n.lower() for n in seen.keys()]
+                ),
+            )
+            .group_by(AwardHistory.recipient_name)
+        )
+    ).all()
+    awards_lookup: dict[str, tuple[float, int]] = {}
+    for r in awards_rows:
+        awards_lookup[r.recipient_name.lower()] = (
+            float(r.total) if r.total is not None else 0.0,
+            int(r.award_count or 0),
+        )
+
+    # EDGAR signals — match on normalized_name.
+    normalized_set = set(seen.values())
+    signals_rows = (
+        await ctx.session.execute(
+            select(IncumbentSignal).where(
+                IncumbentSignal.normalized_name.in_(list(normalized_set))
+            )
+        )
+    ).scalars().all()
+    signals_lookup: dict[str, IncumbentSignal] = {
+        s.normalized_name: s for s in signals_rows
+    }
+
+    out: dict[str, dict] = {}
+    for original, normalized in seen.items():
+        awards = awards_lookup.get(original.lower())
+        sig = signals_lookup.get(normalized)
+        out[original] = {
+            "total_obligations": awards[0] if awards else None,
+            "award_count": awards[1] if awards else None,
+            "distress_score": sig.distress_score if sig else None,
+            "distress_summary": sig.distress_summary if sig else None,
+            "sec_ticker": sig.sec_ticker if sig else None,
+            "filings_last_90d": sig.filings_last_90d_count if sig else None,
+        }
+    return out
+
+
+def _normalize_incumbent_name(name: str) -> str:
+    """Match worker's normalize_name (edgar_signals._normalize_name)."""
+    import re as _re
+
+    s = name.lower()
+    s = _re.sub(r"[,\.\(\)\[\]&]+", " ", s)
+    suffixes = (
+        r"\b(inc|incorporated|llc|ltd|limited|corp|corporation|co|company|"
+        r"holdings|group|technologies|technology|services|solutions|"
+        r"systems|federal|government)\b"
+    )
+    s = _re.sub(suffixes, "", s)
+    s = _re.sub(r"\s+", " ", s).strip()
+    return s
 
 
 _SET_ASIDE_SCOPE_TO_NORMALIZED = {
@@ -427,12 +556,16 @@ async def list_forecasts(
     ).limit(limit)
 
     rows = (await ctx.session.execute(stmt)).scalars().all()
+    intel_index = await _build_incumbent_intel_index(
+        ctx, [r.incumbent_name for r in rows if r.incumbent_name]
+    )
     items = [
         _to_out(
             r,
             target_set=target_set,
             scoring_ctx=scoring_ctx,
             founder_index=founder_index,
+            intel_index=intel_index,
         )
         for r in rows
     ]
@@ -525,12 +658,16 @@ async def list_recompetes(
     ).limit(limit)
 
     rows = (await ctx.session.execute(stmt)).scalars().all()
+    intel_index = await _build_incumbent_intel_index(
+        ctx, [r.incumbent_name for r in rows if r.incumbent_name]
+    )
     items = [
         _to_out(
             r,
             target_set=target_set,
             scoring_ctx=scoring_ctx,
             founder_index=founder_index,
+            intel_index=intel_index,
         )
         for r in rows
     ]

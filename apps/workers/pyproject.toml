@@ -5,6 +5,7 @@ description = "Celery workers for MacTech CaptureOS ingestion, enrichment, scori
 requires-python = ">=3.12"
 dependencies = [
     "celery[redis]>=5.4",
+    "celery-redbeat>=2.2",
     "redis>=5.2",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",

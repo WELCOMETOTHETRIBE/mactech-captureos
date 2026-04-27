@@ -726,6 +726,12 @@ export type ForecastOut = {
   assigned_founder_slug: string | null;
   assigned_founder_name: string | null;
   assigned_founder_pillar: string | null;
+  incumbent_total_obligations: number | null;
+  incumbent_award_count: number | null;
+  incumbent_distress_score: number | null;
+  incumbent_distress_summary: string | null;
+  incumbent_sec_ticker: string | null;
+  incumbent_filings_last_90d: number | null;
 };
 
 export type ForecastsResponse = {

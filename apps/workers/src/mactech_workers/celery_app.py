@@ -37,6 +37,14 @@ celery_app.conf.update(
     task_acks_late=True,
     worker_max_tasks_per_child=200,
     broker_connection_retry_on_startup=True,
+    # Redbeat persists the schedule in Redis so missed beats during
+    # container restarts are caught up on the next interval. Without
+    # this, every redeploy resets the beat schedule and a daily run
+    # whose tick falls inside the deploy window is lost (we hit this
+    # twice with the industry-days task — Apr 26 and Apr 27).
+    beat_scheduler="redbeat.RedBeatScheduler",
+    redbeat_redis_url=REDIS_URL,
+    redbeat_lock_timeout=900,
     beat_schedule={
         "sam-ingest-all-mactech-naics": {
             "task": "mactech.sam.ingest_all",
@@ -104,6 +112,16 @@ celery_app.conf.update(
             "schedule": crontab(minute=45, hour=5),
             "options": {"expires": 90 * 60},
         },
+        # SEC EDGAR distress signals — weekly Sunday 1800 ET (per
+        # strategy doc §3.3). Matches top-200 federal contractors against
+        # SEC's CIK registry, scores recent filings, populates
+        # incumbent_signals for recompete-card flagging.
+        "edgar-signals-refresh": {
+            "task": "mactech.edgar.refresh_top_contractors",
+            "schedule": crontab(minute=0, hour=18, day_of_week="sun"),
+            "options": {"expires": 4 * 60 * 60},
+            "kwargs": {"top_n": 200},
+        },
     },
 )
 
@@ -141,6 +159,7 @@ import mactech_workers.tasks.apify_forecasts  # noqa: E402, F401
 import mactech_workers.tasks.apify_industry_days  # noqa: E402, F401
 import mactech_workers.tasks.dhs_apfs_ingest  # noqa: E402, F401
 import mactech_workers.tasks.doe_forecast_ingest  # noqa: E402, F401
+import mactech_workers.tasks.edgar_signals  # noqa: E402, F401
 import mactech_workers.tasks.digest  # noqa: E402, F401
 import mactech_workers.tasks.embed  # noqa: E402, F401
 import mactech_workers.tasks.enrich  # noqa: E402, F401
