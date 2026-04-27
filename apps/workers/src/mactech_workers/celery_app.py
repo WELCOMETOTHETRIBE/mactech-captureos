@@ -104,6 +104,13 @@ celery_app.conf.update(
             "schedule": crontab(minute=20, hour=5),
             "options": {"expires": 30 * 60},
         },
+        # NASA NAF XLSX — daily 0525 ET. ~150 rows with rich quarter
+        # bands and NewOrRecompete flag.
+        "nasa-naf-ingest": {
+            "task": "mactech.nasa_naf.ingest",
+            "schedule": crontab(minute=25, hour=5),
+            "options": {"expires": 30 * 60},
+        },
         # Apify forecast sweep — daily 0545 ET (after industry-days at
         # 0500 finishes). Catches GSA, VA, USACE, AFBES, HHS hubs that
         # don't expose a public JSON API. DHS is handled by dhs-apfs.
@@ -160,6 +167,7 @@ import mactech_workers.tasks.apify_industry_days  # noqa: E402, F401
 import mactech_workers.tasks.dhs_apfs_ingest  # noqa: E402, F401
 import mactech_workers.tasks.doe_forecast_ingest  # noqa: E402, F401
 import mactech_workers.tasks.edgar_signals  # noqa: E402, F401
+import mactech_workers.tasks.nasa_naf_ingest  # noqa: E402, F401
 import mactech_workers.tasks.digest  # noqa: E402, F401
 import mactech_workers.tasks.embed  # noqa: E402, F401
 import mactech_workers.tasks.enrich  # noqa: E402, F401

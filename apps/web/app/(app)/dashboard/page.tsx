@@ -28,7 +28,7 @@ export const dynamic = "force-dynamic";
 const HOW_IT_WORKS_COOKIE = "mactech.dismiss.howitworks";
 
 export default async function DashboardPage() {
-  const [data, me, ck, events, myRecompetes, sdvosbRecompetes] = await Promise.all([
+  const [data, me, ck, events, myRecompetes, sdvosbRecompetes, topForecasts] = await Promise.all([
     apiFetch<DashboardResponse>("/me/dashboard"),
     apiFetch<MeResponse>("/me"),
     cookies(),
@@ -48,6 +48,17 @@ export default async function DashboardPage() {
     ),
     apiFetch<ForecastsResponse>(
       "/recompetes?naics_filter=true&set_aside_scope=sdvosb&limit=4"
+    ).catch(
+      () =>
+        ({
+          total: 0,
+          items: [],
+          target_naics_filter: false,
+          target_naics: []
+        }) as ForecastsResponse
+    ),
+    apiFetch<ForecastsResponse>(
+      "/forecasts?naics_filter=true&upcoming_only=true&limit=6"
     ).catch(
       () =>
         ({
@@ -321,6 +332,69 @@ export default async function DashboardPage() {
           </ul>
         )}
       </section>
+
+      {/* Coming to SAM — top forecasts in your NAICS */}
+      {topForecasts.items.length > 0 && (
+        <section>
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-base font-semibold text-neutral-900">
+              Coming to SAM{" "}
+              <span className="font-normal text-neutral-500">
+                — top {Math.min(topForecasts.items.length, 6)} agency forecasts
+                in your NAICS, 30–180 days ahead of solicitation
+              </span>
+            </h2>
+            <Link
+              href="/forecasts"
+              className="text-sm font-medium text-brand-700 hover:underline"
+            >
+              See all forecasts →
+            </Link>
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {topForecasts.items.slice(0, 6).map((fc) => (
+              <Link
+                key={fc.id}
+                href="/forecasts"
+                className="block rounded-lg border border-neutral-200 bg-white p-4 transition-colors hover:border-brand-300 hover:shadow-sm"
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+                    {fc.agency ?? "agency"}
+                    {fc.naics_code ? ` · NAICS ${fc.naics_code}` : ""}
+                  </p>
+                  <span className="rounded-sm bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-800">
+                    score {fc.score}
+                  </span>
+                </div>
+                <p className="mt-1 line-clamp-2 text-sm font-medium text-neutral-900">
+                  {fc.title}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-neutral-600">
+                  {fc.set_aside ? <span>{fc.set_aside}</span> : null}
+                  {fc.estimated_value_text ? (
+                    <span>{fc.estimated_value_text}</span>
+                  ) : null}
+                  {fc.expected_solicitation_date ? (
+                    <span className="text-amber-700">
+                      RFP{" "}
+                      {fc.expected_solicitation_date.slice(0, 7)}
+                    </span>
+                  ) : null}
+                </div>
+                {fc.incumbent_name ? (
+                  <p className="mt-2 line-clamp-1 text-[11px] text-amber-900">
+                    Incumbent: {fc.incumbent_name}
+                    {fc.incumbent_sec_ticker
+                      ? ` · ${fc.incumbent_sec_ticker}`
+                      : ""}
+                  </p>
+                ) : null}
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Where to be — upcoming events from /events feed */}
       {events.items.length > 0 && (
