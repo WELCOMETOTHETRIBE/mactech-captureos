@@ -39,18 +39,24 @@ log = logging.getLogger(__name__)
 
 DEFAULT_TOP_N = 200
 
-# 8-K items that historically correlate with distress / change-of-control.
+# 8-K item codes that genuinely signal contractor distress.
 # https://www.sec.gov/forms/8K — item code reference.
+#
+# NOT included (too noisy on the federal-contractor surface):
+#   5.02 director/officer departure  — ordinary board hygiene, fires
+#                                       constantly across every public
+#                                       company in the watchlist
+#   5.03 amendment of bylaws         — administrative
+#   8.01 other material events       — generic catchall, weak signal
 _DISTRESS_8K_ITEMS = {
     "1.03": "bankruptcy or receivership",
-    "1.05": "material cybersecurity incidents",
+    "1.05": "material cybersecurity incident",
     "2.04": "triggering events that accelerate financial obligations",
     "2.05": "costs associated with exit/disposal activities",
     "2.06": "material impairments",
+    "3.01": "notice of delisting or failure to satisfy listing rule",
+    "4.01": "changes in registrant's certifying accountant",
     "4.02": "non-reliance on previously issued financials",
-    "5.02": "departure of directors / officers",
-    "5.03": "amendment of bylaws / change in fiscal year",
-    "8.01": "other material events",
 }
 
 
@@ -303,26 +309,72 @@ def _normalize_name(name: str) -> str:
     return s
 
 
+def _name_trigrams(s: str) -> set[str]:
+    """3-character shingles for fuzzy matching, padded with leading
+    space so word starts dominate."""
+    s = " " + s.strip()
+    if len(s) < 3:
+        return set()
+    return {s[i : i + 3] for i in range(len(s) - 2)}
+
+
+def _trigram_similarity(a: str, b: str) -> float:
+    ta = _name_trigrams(a)
+    tb = _name_trigrams(b)
+    if not ta or not tb:
+        return 0.0
+    return len(ta & tb) / len(ta | tb)
+
+
+_MIN_NORMALIZED_LEN = 5  # short names like "ge" or "att" are too ambiguous
+_MIN_TRIGRAM_SIM = 0.78  # rejects "Advantage Solutions" vs "Advantaged Solutions"
+
+
 def _best_cik_match(normalized: str, lookup: dict[str, dict]) -> dict | None:
-    """Try exact normalized name first; then prefix; then containment.
-    Skip very short normalized strings that would over-match."""
-    if not normalized or len(normalized) < 3:
+    """Find the best CIK match for a normalized federal-contractor name.
+
+    Earlier version did exact → prefix → reverse-prefix substring which
+    produced false positives like:
+      "advantaged solutions" → "ADV" (Advantage Solutions Inc, marketing co)
+      "global integrated"    → "GIS" (General Mills, food co)
+
+    Now requires:
+      1. exact match, OR
+      2. trigram similarity >= 0.78 against ALL candidate names
+
+    The exact path stays — most top federal contractors (caci, leidos,
+    saic, l3harris, parsons, fluor, etc.) match exactly after corporate-
+    suffix stripping. The trigram fallback catches verbose/subsidiary
+    variants like "fluor federal petroleum operations" against "fluor
+    corp" without admitting marketing-firm collisions.
+    """
+    if not normalized or len(normalized) < _MIN_NORMALIZED_LEN:
         return None
     if normalized in lookup:
         return lookup[normalized]
-    # Prefix: many SEC titles are longer than the federal awardee name.
+    best_score = 0.0
+    best_match: dict | None = None
     for k, v in lookup.items():
-        if k.startswith(normalized):
-            return v
-    # Reverse prefix: federal awardee may be a longer subsidiary form.
-    for k, v in lookup.items():
-        if normalized.startswith(k) and len(k) >= 5:
-            return v
+        if len(k) < _MIN_NORMALIZED_LEN:
+            continue
+        sim = _trigram_similarity(normalized, k)
+        if sim > best_score:
+            best_score = sim
+            best_match = v
+    if best_score >= _MIN_TRIGRAM_SIM:
+        return best_match
     return None
 
 
 def _score_filings(filings: list) -> tuple[int, str | None]:
-    """Heuristic 0..100. Inputs: filings cadence + 8-K item codes."""
+    """Heuristic 0..100. Score only fires when there's an actual
+    distress 8-K item (1.03/1.05/2.04/2.05/2.06/3.01/4.01/4.02) OR
+    abnormally high filings cadence (>10 in 90d). Plain "company filed
+    its quarterly + a few 8-Ks for routine board matters" → 0.
+
+    This intentionally leaves "no signal" as the default so the 🚩 flag
+    on the recompete card means something when it appears.
+    """
     if not filings:
         return 0, None
     today = date.today()
@@ -341,20 +393,23 @@ def _score_filings(filings: list) -> tuple[int, str | None]:
                     if item in _DISTRESS_8K_ITEMS:
                         distress_items.add(item)
 
-    # Cadence component: more 8-Ks/quarter than usual = stress.
-    cadence = min(40, last_90 * 8)  # cap at 40 from cadence
-    item_score = min(60, len(distress_items) * 20)  # cap at 60 from items
-    total = min(100, cadence + item_score)
-
-    if not distress_items and last_90 == 0:
+    has_distress_items = bool(distress_items)
+    abnormal_cadence = last_90 > 10
+    if not has_distress_items and not abnormal_cadence:
         return 0, None
 
+    # 70 from each item (capped at 100 — even one of these is loud), +5 per
+    # filing over the cadence threshold (max +30).
+    item_score = min(100, 70 if has_distress_items else 0)
+    cadence_bonus = max(0, last_90 - 10) * 5 if abnormal_cadence else 0
+    total = min(100, item_score + cadence_bonus)
+
     summary_bits: list[str] = []
-    if last_90:
-        summary_bits.append(f"{last_90} filing{'s' if last_90 != 1 else ''} in last 90d")
     if distress_items:
         labels = [f"item {i} ({_DISTRESS_8K_ITEMS[i]})" for i in sorted(distress_items)]
-        summary_bits.append(f"recent 8-K signals: {', '.join(labels)}")
+        summary_bits.append(f"recent 8-K: {', '.join(labels)}")
+    if abnormal_cadence:
+        summary_bits.append(f"unusual filings cadence ({last_90} in 90d)")
     return total, "; ".join(summary_bits) or None
 
 
