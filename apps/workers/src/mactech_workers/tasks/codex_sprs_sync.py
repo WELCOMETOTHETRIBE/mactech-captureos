@@ -2,13 +2,19 @@
 
 Sprint 23. CaptureOS doesn't own the CMMC workflow (Codex does), but
 the SPRS score is meaningful eligibility intel for DFARS 7012 / CMMC L2
-opportunities. Daily 0610 ET beat iterates every tenant with a UEI and
-asks Codex for the latest score; updates tenants.sprs_*.
+opportunities. Daily 0610 ET beat iterates every tenant with a Clerk
+org id and asks Codex for the latest score; updates tenants.sprs_*.
+
+Identity: both apps share Clerk for auth, so Codex's
+organizations.clerkOrgId == CaptureOS tenants.clerk_org_id. We key SPRS
+lookup on that shared id.
 
 Failure modes are non-fatal:
-  - Codex 404 (no assessment on file) → leave existing fields, log info
+  - Codex 404 (no org / no assessment on file) → leave existing fields,
+    log info
+  - Codex 401 (bad/missing CODEX_API_TOKEN) → log + skip
   - Codex transport error → leave existing fields, log warning
-  - tenant has no UEI → skip
+  - tenant has no clerk_org_id → skip
 """
 
 from __future__ import annotations
@@ -34,7 +40,7 @@ log = logging.getLogger(__name__)
 class CodexSyncStats:
     tenants_seen: int
     tenants_synced: int
-    tenants_no_uei: int
+    tenants_no_clerk_org: int
     tenants_no_assessment: int
     tenants_errored: int
     duration_ms: int
@@ -52,26 +58,35 @@ async def _refresh() -> CodexSyncStats:
     )
     api_token = os.environ.get("CODEX_API_TOKEN") or None
 
-    seen = synced = no_uei = no_assess = errored = 0
+    seen = synced = no_clerk_org = no_assess = errored = 0
     async with unscoped_session() as session:
         tenants = (await session.execute(select(Tenant))).scalars().all()
         async with CodexClient(base_url=base_url, api_token=api_token) as codex:
             for tenant in tenants:
                 seen += 1
-                if not tenant.uei:
-                    no_uei += 1
+                if not tenant.clerk_org_id:
+                    no_clerk_org += 1
                     continue
                 try:
-                    sprs = await codex.get_sprs(tenant.uei)
+                    sprs = await codex.get_sprs_by_clerk_org(
+                        tenant.clerk_org_id
+                    )
                 except CodexNotFoundError:
                     no_assess += 1
                     continue
                 except CodexError as exc:
                     errored += 1
                     log.warning(
-                        "codex_sprs sync: tenant=%s uei=%s err=%s",
-                        tenant.slug, tenant.uei, exc,
+                        "codex_sprs sync: tenant=%s clerk_org=%s err=%s",
+                        tenant.slug, tenant.clerk_org_id, exc,
                     )
+                    continue
+
+                # Codex returns score=null when the org exists but has no
+                # SPRS computed yet — treat as "no_assessment" rather than
+                # overwriting an existing manual value with NULL.
+                if sprs.score is None:
+                    no_assess += 1
                     continue
 
                 tenant.sprs_score = sprs.score
@@ -92,7 +107,7 @@ async def _refresh() -> CodexSyncStats:
     return CodexSyncStats(
         tenants_seen=seen,
         tenants_synced=synced,
-        tenants_no_uei=no_uei,
+        tenants_no_clerk_org=no_clerk_org,
         tenants_no_assessment=no_assess,
         tenants_errored=errored,
         duration_ms=int((datetime.now(UTC) - started).total_seconds() * 1000),
