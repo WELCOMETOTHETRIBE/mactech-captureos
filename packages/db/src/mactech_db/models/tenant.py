@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
-from sqlalchemy import TIMESTAMP, String, func, text
+from sqlalchemy import TIMESTAMP, Date, Integer, String, Text, func, text
 from sqlalchemy.dialects.postgresql import ARRAY, UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -39,6 +39,22 @@ class Tenant(Base):
     # while this is null. We don't gate routes on it — onboarding is a
     # discoverable affordance, not a forced wall.
     onboarding_completed_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    # Supplier Performance Risk System score — DoD-published per-org
+    # NIST 800-171 self-assessment number that gates DFARS 7012 / CMMC
+    # eligibility. CaptureOS doesn't manage the assessment workflow
+    # (that lives in Codex, codex.mactechsolutionsllc.com); we just
+    # consume the published number for display + scoring eligibility.
+    sprs_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sprs_max: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("110")
+    )
+    sprs_assessment_date: Mapped[date | None] = mapped_column(
+        Date, nullable=True
+    )
+    sprs_source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sprs_synced_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(

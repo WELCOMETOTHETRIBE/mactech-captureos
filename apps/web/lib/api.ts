@@ -68,6 +68,11 @@ export type TenantHeader = {
   set_aside_certifications: string[];
   target_naics: string[];
   onboarding_completed_at: string | null;
+  sprs_score: number | null;
+  sprs_max: number;
+  sprs_assessment_date: string | null;
+  sprs_source_url: string | null;
+  sprs_synced_at: string | null;
 };
 
 /* ── /founders ───────────────────────────────────────────────────── */
@@ -313,6 +318,11 @@ export type TenantOut = {
   uei: string | null;
   cage_code: string | null;
   clerk_org_id: string | null;
+  sprs_score: number | null;
+  sprs_max: number;
+  sprs_assessment_date: string | null;
+  sprs_source_url: string | null;
+  sprs_synced_at: string | null;
 };
 
 export type FounderOut = {

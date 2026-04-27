@@ -50,6 +50,11 @@ class TenantHeader(_Out):
     set_aside_certifications: list[str] = []
     target_naics: list[str] = []
     onboarding_completed_at: str | None = None
+    sprs_score: int | None = None
+    sprs_max: int = 110
+    sprs_assessment_date: str | None = None
+    sprs_source_url: str | None = None
+    sprs_synced_at: str | None = None
 
 
 class MeResponse(_Out):
@@ -141,6 +146,19 @@ async def me(
             onboarding_completed_at=(
                 ctx.tenant.onboarding_completed_at.isoformat()
                 if ctx.tenant.onboarding_completed_at
+                else None
+            ),
+            sprs_score=ctx.tenant.sprs_score,
+            sprs_max=ctx.tenant.sprs_max or 110,
+            sprs_assessment_date=(
+                ctx.tenant.sprs_assessment_date.isoformat()
+                if ctx.tenant.sprs_assessment_date
+                else None
+            ),
+            sprs_source_url=ctx.tenant.sprs_source_url,
+            sprs_synced_at=(
+                ctx.tenant.sprs_synced_at.isoformat()
+                if ctx.tenant.sprs_synced_at
                 else None
             ),
         ),

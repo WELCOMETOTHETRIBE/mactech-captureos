@@ -179,6 +179,72 @@ export default async function DashboardPage() {
         </section>
       )}
 
+      {/* SPRS chip — eligibility signal for DFARS-7012 / CMMC-L2 work.
+          Sourced from Codex (codex.mactechsolutionsllc.com) which owns
+          the assessment workflow; we just display + link out. */}
+      {(me.tenant.sprs_score !== null || me.tenant.uei) && (
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-3 text-sm">
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+            <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+              SPRS · NIST 800-171
+            </span>
+            {me.tenant.sprs_score !== null ? (
+              <>
+                <span className="text-2xl font-semibold tabular-nums text-neutral-900">
+                  {me.tenant.sprs_score}
+                  <span className="ml-1 text-base font-normal text-neutral-500">
+                    / {me.tenant.sprs_max}
+                  </span>
+                </span>
+                {me.tenant.sprs_assessment_date ? (
+                  <span className="text-xs text-neutral-500">
+                    last assessed{" "}
+                    {new Date(me.tenant.sprs_assessment_date).toLocaleDateString(
+                      undefined,
+                      { month: "short", day: "numeric", year: "numeric" }
+                    )}
+                  </span>
+                ) : null}
+                {me.tenant.sprs_synced_at ? (
+                  <span className="text-[11px] text-neutral-400">
+                    synced from Codex
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-amber-700">
+                    pending Codex sync
+                  </span>
+                )}
+              </>
+            ) : (
+              <span className="text-sm text-neutral-600">
+                no score on file —{" "}
+                <a
+                  href="https://codex.mactechsolutionsllc.com/sprs"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-brand-700 hover:underline"
+                >
+                  start your assessment in Codex →
+                </a>
+              </span>
+            )}
+          </div>
+          {me.tenant.sprs_score !== null ? (
+            <a
+              href={
+                me.tenant.sprs_source_url ??
+                `https://codex.mactechsolutionsllc.com/sprs/${me.tenant.uei ?? ""}`
+              }
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-medium text-brand-700 hover:underline"
+            >
+              View assessment in Codex →
+            </a>
+          ) : null}
+        </section>
+      )}
+
       {/* Action-oriented KPIs — your day at a glance */}
       <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <Link

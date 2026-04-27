@@ -6,14 +6,18 @@ saved-search admin UIs ship.
 
 from __future__ import annotations
 
+import logging
+from datetime import UTC, date as _date, datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel, ConfigDict
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
 from mactech_api.auth import RequestContext, get_request_context
 from mactech_db.models import Founder, FounderNaicsMatrix, NaicsCode, SavedSearch
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["settings"])
 
@@ -59,6 +63,21 @@ class TenantOut(_Out):
     uei: str | None
     cage_code: str | None
     clerk_org_id: str | None
+    sprs_score: int | None = None
+    sprs_max: int = 110
+    sprs_assessment_date: str | None = None
+    sprs_source_url: str | None = None
+    sprs_synced_at: str | None = None
+
+
+class SprsPatchRequest(BaseModel):
+    """Manual SPRS override — used when Codex hasn't synced yet or the
+    tenant wants to record a value pending Codex coming online."""
+
+    sprs_score: int | None = Field(default=None, ge=0, le=200)
+    sprs_max: int | None = Field(default=None, ge=1, le=200)
+    sprs_assessment_date: str | None = None  # ISO YYYY-MM-DD
+    sprs_source_url: str | None = Field(default=None, max_length=2000)
 
 
 class SettingsResponse(_Out):
@@ -139,6 +158,19 @@ async def get_settings(
             uei=ctx.tenant.uei,
             cage_code=ctx.tenant.cage_code,
             clerk_org_id=ctx.tenant.clerk_org_id,
+            sprs_score=ctx.tenant.sprs_score,
+            sprs_max=ctx.tenant.sprs_max or 110,
+            sprs_assessment_date=(
+                ctx.tenant.sprs_assessment_date.isoformat()
+                if ctx.tenant.sprs_assessment_date
+                else None
+            ),
+            sprs_source_url=ctx.tenant.sprs_source_url,
+            sprs_synced_at=(
+                ctx.tenant.sprs_synced_at.isoformat()
+                if ctx.tenant.sprs_synced_at
+                else None
+            ),
         ),
         founders=[
             FounderOut(
@@ -162,4 +194,57 @@ async def get_settings(
             for n in naics_rows
         ],
         saved_searches=saved_out,
+    )
+
+
+@router.patch("/me/settings/sprs", response_model=TenantOut)
+async def patch_sprs(
+    body: SprsPatchRequest,
+    ctx: Annotated[RequestContext, Depends(get_request_context)],
+) -> TenantOut:
+    """Manual SPRS override. Codex (codex.mactechsolutionsllc.com) is
+    the authoritative source via the daily mactech.codex.refresh_sprs
+    beat — but until Codex publishes the API, founders can record their
+    score here. The next Codex sync will overwrite this."""
+    tenant = ctx.tenant
+    if body.sprs_score is not None:
+        tenant.sprs_score = body.sprs_score
+    if body.sprs_max is not None:
+        tenant.sprs_max = body.sprs_max
+    if body.sprs_assessment_date is not None:
+        s = body.sprs_assessment_date.strip()
+        if not s:
+            tenant.sprs_assessment_date = None
+        else:
+            try:
+                tenant.sprs_assessment_date = _date.fromisoformat(s[:10])
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"sprs_assessment_date must be YYYY-MM-DD: {exc}",
+                ) from exc
+    if body.sprs_source_url is not None:
+        tenant.sprs_source_url = (body.sprs_source_url.strip() or None)
+    tenant.sprs_synced_at = datetime.now(UTC)
+    await ctx.session.flush()
+    return TenantOut(
+        slug=tenant.slug,
+        name=tenant.name,
+        plan=tenant.plan,
+        uei=tenant.uei,
+        cage_code=tenant.cage_code,
+        clerk_org_id=tenant.clerk_org_id,
+        sprs_score=tenant.sprs_score,
+        sprs_max=tenant.sprs_max or 110,
+        sprs_assessment_date=(
+            tenant.sprs_assessment_date.isoformat()
+            if tenant.sprs_assessment_date
+            else None
+        ),
+        sprs_source_url=tenant.sprs_source_url,
+        sprs_synced_at=(
+            tenant.sprs_synced_at.isoformat()
+            if tenant.sprs_synced_at
+            else None
+        ),
     )
