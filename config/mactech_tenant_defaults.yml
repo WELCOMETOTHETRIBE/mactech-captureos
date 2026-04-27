@@ -14,7 +14,7 @@ tenant:
   # Clerk Organization ID for the MacTech workspace. Required for the
   # API's tenant resolution (auth.py looks up by clerk_org_id).
   # Update if the Clerk org ID rotates.
-  clerk_org_id: org_3CpMVyinL6o6SydBwIPaz188MWk
+  clerk_org_id: org_3Cw1HDp3m223ZpTN1WoSDHMavPJ
   naics:
     primary:
       - 541519
