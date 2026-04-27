@@ -724,6 +724,8 @@ export type ForecastOut = {
   score: number;
   score_breakdown: Record<string, number>;
   assigned_founder_slug: string | null;
+  assigned_founder_name: string | null;
+  assigned_founder_pillar: string | null;
 };
 
 export type ForecastsResponse = {

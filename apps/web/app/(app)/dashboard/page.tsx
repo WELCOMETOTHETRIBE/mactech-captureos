@@ -28,14 +28,27 @@ export const dynamic = "force-dynamic";
 const HOW_IT_WORKS_COOKIE = "mactech.dismiss.howitworks";
 
 export default async function DashboardPage() {
-  const [data, me, ck, events, recompetes] = await Promise.all([
+  const [data, me, ck, events, myRecompetes, sdvosbRecompetes] = await Promise.all([
     apiFetch<DashboardResponse>("/me/dashboard"),
     apiFetch<MeResponse>("/me"),
     cookies(),
     apiFetch<AgencyEventsResponse>("/events?upcoming_only=true&limit=4").catch(
       () => ({ total: 0, items: [] }) as AgencyEventsResponse
     ),
-    apiFetch<ForecastsResponse>("/recompetes?naics_filter=true&limit=4").catch(
+    apiFetch<ForecastsResponse>(
+      "/recompetes?naics_filter=true&mine_only=true&limit=4"
+    ).catch(
+      () =>
+        ({
+          total: 0,
+          items: [],
+          target_naics_filter: false,
+          target_naics: []
+        }) as ForecastsResponse
+    ),
+    apiFetch<ForecastsResponse>(
+      "/recompetes?naics_filter=true&set_aside_scope=sdvosb&limit=4"
+    ).catch(
       () =>
         ({
           total: 0,
@@ -362,28 +375,31 @@ export default async function DashboardPage() {
         </section>
       )}
 
-      {/* Recompete radar — top forecasts with named incumbents */}
-      {recompetes.items.length > 0 && (
+      {/* Your recompetes — filtered to the calling founder's NAICS lane */}
+      {myRecompetes.items.length > 0 && (
         <section>
           <div className="flex items-baseline justify-between">
             <h2 className="text-base font-semibold text-neutral-900">
-              Recompete radar{" "}
+              Your recompetes{" "}
               <span className="font-normal text-neutral-500">
-                — incumbents with NAICS-fit contracts in forecast
+                — incumbents in {data.you?.full_name.split(" ")[0]
+                  ? `${data.you?.full_name.split(" ")[0]}'s`
+                  : "your"}{" "}
+                NAICS lane
               </span>
             </h2>
             <Link
-              href="/recompetes"
+              href="/recompetes?mine=1"
               className="text-sm font-medium text-brand-700 hover:underline"
             >
-              See all →
+              See all your lane →
             </Link>
           </div>
           <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-            {recompetes.items.slice(0, 4).map((fc) => (
+            {myRecompetes.items.slice(0, 4).map((fc) => (
               <Link
                 key={fc.id}
-                href="/recompetes"
+                href="/recompetes?mine=1"
                 className="block rounded-lg border border-neutral-200 bg-white p-4 transition-colors hover:border-brand-300 hover:shadow-sm"
               >
                 <div className="flex items-baseline justify-between gap-2">
@@ -401,6 +417,63 @@ export default async function DashboardPage() {
                 <p className="mt-2 line-clamp-1 text-xs text-amber-900">
                   Incumbent: {fc.incumbent_name}
                   {fc.estimated_value_text ? ` · ${fc.estimated_value_text}` : ""}
+                  {fc.period_of_performance_end
+                    ? ` · POP ends ${fc.period_of_performance_end.slice(0, 7)}`
+                    : ""}
+                </p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* SDVOSB-set-aside recompetes — surface explicitly even if not in your lane */}
+      {sdvosbRecompetes.items.length > 0 && (
+        <section>
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-base font-semibold text-neutral-900">
+              SDVOSB recompetes{" "}
+              <span className="font-normal text-neutral-500">
+                — set-aside opportunities matched to MacTech's certification
+              </span>
+            </h2>
+            <Link
+              href="/recompetes?set_aside=sdvosb"
+              className="text-sm font-medium text-brand-700 hover:underline"
+            >
+              See all SDVOSB →
+            </Link>
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+            {sdvosbRecompetes.items.slice(0, 4).map((fc) => (
+              <Link
+                key={fc.id}
+                href="/recompetes?set_aside=sdvosb"
+                className="block rounded-lg border border-neutral-200 bg-white p-4 transition-colors hover:border-brand-300 hover:shadow-sm"
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+                    {fc.agency ?? "agency"}
+                    {fc.naics_code ? ` · NAICS ${fc.naics_code}` : ""}
+                    {fc.assigned_founder_name ? (
+                      <span className="ml-1">
+                        · @{fc.assigned_founder_name.split(" ")[0]}
+                      </span>
+                    ) : null}
+                  </p>
+                  <span className="rounded-sm bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-800">
+                    score {fc.score}
+                  </span>
+                </div>
+                <p className="mt-1 line-clamp-2 text-sm font-medium text-neutral-900">
+                  {fc.title}
+                </p>
+                <p className="mt-2 line-clamp-1 text-xs text-amber-900">
+                  Incumbent: {fc.incumbent_name}
+                  {fc.estimated_value_text ? ` · ${fc.estimated_value_text}` : ""}
+                  {fc.period_of_performance_end
+                    ? ` · POP ends ${fc.period_of_performance_end.slice(0, 7)}`
+                    : ""}
                 </p>
               </Link>
             ))}

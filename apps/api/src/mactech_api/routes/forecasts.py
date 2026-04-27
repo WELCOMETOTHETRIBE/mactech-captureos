@@ -68,6 +68,8 @@ class ForecastOut(_Out):
     score: int
     score_breakdown: dict[str, int]
     assigned_founder_slug: str | None
+    assigned_founder_name: str | None
+    assigned_founder_pillar: str | None
 
 
 class ForecastsResponse(_Out):
@@ -250,7 +252,11 @@ def _forecast_specific_boost(fc: ForecastRaw) -> tuple[int, dict[str, int]]:
 
 
 def _to_out(
-    fc: ForecastRaw, *, target_set: set[str], scoring_ctx: ScoringContext
+    fc: ForecastRaw,
+    *,
+    target_set: set[str],
+    scoring_ctx: ScoringContext,
+    founder_index: dict[str, tuple[str, str]],
 ) -> ForecastOut:
     naics_set = set(fc.naics_codes or [])
     if fc.naics_code:
@@ -314,6 +320,12 @@ def _to_out(
         score=result.score,
         score_breakdown=dict(result.breakdown),
         assigned_founder_slug=result.assigned_founder_slug,
+        assigned_founder_name=(
+            founder_index.get(result.assigned_founder_slug or "", (None, None))[0]
+        ),
+        assigned_founder_pillar=(
+            founder_index.get(result.assigned_founder_slug or "", (None, None))[1]
+        ),
     )
 
 
@@ -350,6 +362,39 @@ def _apply_naics_filter(stmt, target_set: set[str]):
     )
 
 
+async def _build_founder_index(ctx: RequestContext) -> dict[str, tuple[str, str]]:
+    """slug → (full_name, pillar) so the API can echo back which founder
+    owns each forecast's NAICS — without the web layer making N queries."""
+    rows = (
+        await ctx.session.execute(
+            select(Founder.slug, Founder.full_name, Founder.pillar).where(
+                Founder.tenant_id == ctx.tenant.id
+            )
+        )
+    ).all()
+    return {r.slug: (r.full_name, r.pillar) for r in rows}
+
+
+_SET_ASIDE_SCOPE_TO_NORMALIZED = {
+    "sdvosb": {"SDVOSBC"},
+    "sb": {"SBA", "SDVOSBC", "VSA"},  # any small-biz family
+    "all": None,
+}
+
+
+def _matches_set_aside_scope(
+    fc: ForecastRaw, scope: str, normalized_lookup
+) -> bool:
+    """Filter forecasts by the requested set-aside scope. We re-run the
+    same normalization the scorer uses so the scope filter is consistent
+    with how rows are scored."""
+    allowed = _SET_ASIDE_SCOPE_TO_NORMALIZED.get(scope.lower())
+    if allowed is None:
+        return True
+    facts = normalized_lookup(fc)
+    return facts.set_aside in allowed
+
+
 @router.get("/forecasts", response_model=ForecastsResponse)
 async def list_forecasts(
     ctx: Annotated[RequestContext, Depends(get_request_context)],
@@ -362,6 +407,7 @@ async def list_forecasts(
     target_naics = list(ctx.tenant.target_naics or [])
     target_set = set(target_naics)
     scoring_ctx = await _build_scoring_context(ctx)
+    founder_index = await _build_founder_index(ctx)
 
     sub = _deduped_subquery()
     stmt = select(ForecastRaw).where(ForecastRaw.id.in_(select(sub.c.id)))
@@ -382,15 +428,16 @@ async def list_forecasts(
 
     rows = (await ctx.session.execute(stmt)).scalars().all()
     items = [
-        _to_out(r, target_set=target_set, scoring_ctx=scoring_ctx) for r in rows
-    ]
-    # Sort by score descending so the highest-fit forecasts surface
-    # first; preserve the date sub-ordering as a tiebreaker.
-    items.sort(
-        key=lambda x: (
-            -x.score,
-            x.expected_solicitation_date or "9999",
+        _to_out(
+            r,
+            target_set=target_set,
+            scoring_ctx=scoring_ctx,
+            founder_index=founder_index,
         )
+        for r in rows
+    ]
+    items.sort(
+        key=lambda x: (-x.score, x.expected_solicitation_date or "9999")
     )
     return ForecastsResponse(
         total=len(items),
@@ -405,6 +452,34 @@ async def list_recompetes(
     ctx: Annotated[RequestContext, Depends(get_request_context)],
     naics_filter: Annotated[bool, Query()] = True,
     limit: Annotated[int, Query(ge=1, le=400)] = 200,
+    agency: Annotated[
+        str | None,
+        Query(description="Restrict to a single agency code (e.g. 'DHS', 'DOE')"),
+    ] = None,
+    set_aside_scope: Annotated[
+        str,
+        Query(
+            description="'sdvosb' (only SDVOSB-set-aside), 'sb' (any small-biz family), 'all' (default)"
+        ),
+    ] = "all",
+    pop_window_months: Annotated[
+        int | None,
+        Query(
+            ge=1,
+            le=60,
+            description="Restrict to recompetes whose POP ends within N months",
+        ),
+    ] = None,
+    assigned_founder: Annotated[
+        str | None,
+        Query(description="Restrict to forecasts auto-assigned to this founder slug"),
+    ] = None,
+    mine_only: Annotated[
+        bool,
+        Query(
+            description="When true, restrict to the calling founder's NAICS lane"
+        ),
+    ] = False,
 ) -> ForecastsResponse:
     """Forecasts with a named incumbent — the recompete watchlist.
 
@@ -412,11 +487,18 @@ async def list_recompetes(
     against GovWin is showing up to a recompete with the incumbent's
     weak spots already identified. This endpoint surfaces every
     forecast where we know who currently holds the contract, ranked
-    by fit score.
+    by fit score, with optional filters for agency / set-aside /
+    POP-end window / per-founder lane.
     """
     target_naics = list(ctx.tenant.target_naics or [])
     target_set = set(target_naics)
     scoring_ctx = await _build_scoring_context(ctx)
+    founder_index = await _build_founder_index(ctx)
+
+    # `mine_only` resolves to the calling founder's slug when one is
+    # linked. Frontends use this for the "Your recompetes" tile.
+    if mine_only and ctx.founder is not None and not assigned_founder:
+        assigned_founder = ctx.founder.slug
 
     sub = _deduped_subquery()
     stmt = select(ForecastRaw).where(
@@ -426,6 +508,16 @@ async def list_recompetes(
     )
     if naics_filter and target_set:
         stmt = _apply_naics_filter(stmt, target_set)
+    if agency:
+        stmt = stmt.where(ForecastRaw.agency == agency.upper())
+    if pop_window_months is not None:
+        from datetime import timedelta as _td
+        end_max = datetime.now(UTC).date() + _td(days=pop_window_months * 30)
+        stmt = stmt.where(
+            ForecastRaw.period_of_performance_end.is_not(None),
+            ForecastRaw.period_of_performance_end <= end_max,
+            ForecastRaw.period_of_performance_end >= datetime.now(UTC).date(),
+        )
 
     stmt = stmt.order_by(
         ForecastRaw.estimated_value_high.desc().nulls_last(),
@@ -434,8 +526,30 @@ async def list_recompetes(
 
     rows = (await ctx.session.execute(stmt)).scalars().all()
     items = [
-        _to_out(r, target_set=target_set, scoring_ctx=scoring_ctx) for r in rows
+        _to_out(
+            r,
+            target_set=target_set,
+            scoring_ctx=scoring_ctx,
+            founder_index=founder_index,
+        )
+        for r in rows
     ]
+
+    # Set-aside scope filter (post-scoring so it operates on normalized
+    # codes instead of raw verbose strings).
+    allowed = _SET_ASIDE_SCOPE_TO_NORMALIZED.get(set_aside_scope.lower())
+    if allowed is not None:
+        items = [
+            i for i in items
+            if _forecast_to_facts_set_aside(i.set_aside) in allowed
+        ]
+
+    # Founder filter — assigned_founder is the result of NAICS routing.
+    if assigned_founder:
+        items = [
+            i for i in items if i.assigned_founder_slug == assigned_founder
+        ]
+
     # Recompetes ordered by score first, then high estimated value, then
     # nearest expiry — in that order of intent ("high-fit, expensive,
     # expiring soon").
@@ -454,6 +568,28 @@ async def list_recompetes(
     )
 
 
-# Suppress unused-import (Founder reserved for future per-founder
-# pillar joins on assigned_founder_slug)
-_ = Founder
+def _forecast_to_facts_set_aside(raw: str | None) -> str | None:
+    """Compact mirror of the SDVOSB normalization used inside
+    _forecast_to_facts. Used by the /recompetes set_aside_scope filter."""
+    if not raw:
+        return None
+    sl = raw.lower()
+    if (
+        "sdvosb" in sl
+        or "service disabled veteran" in sl
+        or "service-disabled veteran" in sl
+    ):
+        return "SDVOSBC"
+    if "vosb" in sl or "veteran owned" in sl or "veteran-owned" in sl:
+        return "VSA"
+    if (
+        sl == "true"
+        or sl == "sb"
+        or "small business set-aside" in sl
+        or "total small business" in sl
+        or sl == "small business"
+    ):
+        return "SBA"
+    if "8(a)" in sl or sl == "8a" or "hubzone" in sl or "wosb" in sl:
+        return None
+    return raw

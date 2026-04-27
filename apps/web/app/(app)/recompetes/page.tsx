@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { apiFetch, type ForecastsResponse } from "@/lib/api";
+import { apiFetch, type ForecastsResponse, type MeResponse } from "@/lib/api";
 import {
   Card,
   NaicsBadge,
   PageHeader,
+  Pillar,
   ScoreBadge,
   fmtDate,
   fmtMoney
@@ -11,24 +12,83 @@ import {
 
 export const dynamic = "force-dynamic";
 
+type SP = {
+  all?: string;
+  agency?: string;
+  set_aside?: string;
+  pop?: string;
+  founder?: string;
+  mine?: string;
+};
+
+const POP_WINDOW_LABEL: Record<string, string> = {
+  "6": "Next 6 months",
+  "12": "Next 12 months",
+  "24": "Next 24 months"
+};
+
 export default async function RecompetesPage({
   searchParams
 }: {
-  searchParams?: Promise<{ all?: string }>;
+  searchParams?: Promise<SP>;
 }) {
   const sp = (await searchParams) ?? {};
   const showAll = sp.all === "1";
-  const data = await apiFetch<ForecastsResponse>(
-    `/recompetes?naics_filter=${showAll ? "false" : "true"}&limit=200`
-  ).catch(
-    () =>
-      ({
-        total: 0,
-        items: [],
-        target_naics_filter: false,
-        target_naics: []
-      }) as ForecastsResponse
-  );
+  const agency = sp.agency ?? "";
+  const setAsideScope = sp.set_aside ?? "all";
+  const popWindow = sp.pop ?? "";
+  const founderSlug = sp.founder ?? "";
+  const mineOnly = sp.mine === "1";
+
+  const params = new URLSearchParams({
+    naics_filter: showAll ? "false" : "true",
+    set_aside_scope: setAsideScope,
+    limit: "200"
+  });
+  if (agency) params.set("agency", agency);
+  if (popWindow) params.set("pop_window_months", popWindow);
+  if (founderSlug) params.set("assigned_founder", founderSlug);
+  if (mineOnly) params.set("mine_only", "true");
+
+  const [data, me] = await Promise.all([
+    apiFetch<ForecastsResponse>(`/recompetes?${params.toString()}`).catch(
+      () =>
+        ({
+          total: 0,
+          items: [],
+          target_naics_filter: false,
+          target_naics: []
+        }) as ForecastsResponse
+    ),
+    apiFetch<MeResponse>("/me").catch(() => null as MeResponse | null)
+  ]);
+
+  const myFounder = me?.founder?.slug ?? null;
+  const myFounderName = me?.founder?.full_name ?? null;
+
+  // Filter chip helpers — keep existing params, toggle the one being changed.
+  const buildHref = (overrides: Partial<SP>) => {
+    const next = new URLSearchParams();
+    const merged: SP = {
+      all: showAll ? "1" : undefined,
+      agency: agency || undefined,
+      set_aside: setAsideScope !== "all" ? setAsideScope : undefined,
+      pop: popWindow || undefined,
+      founder: founderSlug || undefined,
+      mine: mineOnly ? "1" : undefined,
+      ...overrides
+    };
+    Object.entries(merged).forEach(([k, v]) => {
+      if (v !== undefined && v !== "") next.set(k, String(v));
+    });
+    const q = next.toString();
+    return q ? `/recompetes?${q}` : "/recompetes";
+  };
+
+  const chipClass = (active: boolean) =>
+    active
+      ? "rounded-full border border-brand-700 bg-brand-700 px-3 py-1 text-xs font-medium text-white"
+      : "rounded-full border border-neutral-300 px-3 py-1 text-xs text-neutral-700 hover:border-neutral-500";
 
   return (
     <div className="space-y-6">
@@ -38,38 +98,100 @@ export default async function RecompetesPage({
         subtitle={
           <span>
             Every forecast where we know who currently holds the contract.
-            The strongest single signal in capture: showing up to a recompete
-            with the incumbent identified, their period of performance pinned,
-            and their contract number on file. Sorted by fit score for your
-            NAICS profile.
+            Sorted by fit score for your NAICS profile, urgency boosted by
+            POP-end proximity. Filter by agency, set-aside scope, or POP
+            window to focus on what matters this quarter.
           </span>
         }
       />
 
+      {/* Filter strip */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-[11px] uppercase tracking-wider text-neutral-500">
+          Set-aside:
+        </span>
+        <Link href={buildHref({ set_aside: undefined })} className={chipClass(setAsideScope === "all")}>
+          All
+        </Link>
+        <Link href={buildHref({ set_aside: "sdvosb" })} className={chipClass(setAsideScope === "sdvosb")}>
+          SDVOSB only
+        </Link>
+        <Link href={buildHref({ set_aside: "sb" })} className={chipClass(setAsideScope === "sb")}>
+          Small biz
+        </Link>
+
+        <span className="ml-3 mr-1 text-[11px] uppercase tracking-wider text-neutral-500">
+          Agency:
+        </span>
+        <Link href={buildHref({ agency: undefined })} className={chipClass(!agency)}>
+          All
+        </Link>
+        <Link href={buildHref({ agency: "DHS" })} className={chipClass(agency === "DHS")}>
+          DHS
+        </Link>
+        <Link href={buildHref({ agency: "DOE" })} className={chipClass(agency === "DOE")}>
+          DOE
+        </Link>
+
+        <span className="ml-3 mr-1 text-[11px] uppercase tracking-wider text-neutral-500">
+          POP ends:
+        </span>
+        <Link href={buildHref({ pop: undefined })} className={chipClass(!popWindow)}>
+          Any time
+        </Link>
+        {Object.entries(POP_WINDOW_LABEL).map(([k, label]) => (
+          <Link key={k} href={buildHref({ pop: k })} className={chipClass(popWindow === k)}>
+            {label}
+          </Link>
+        ))}
+
+        {myFounder ? (
+          <>
+            <span className="ml-3 mr-1 text-[11px] uppercase tracking-wider text-neutral-500">
+              Lane:
+            </span>
+            <Link
+              href={buildHref({ mine: undefined, founder: undefined })}
+              className={chipClass(!mineOnly && !founderSlug)}
+            >
+              Any founder
+            </Link>
+            <Link
+              href={buildHref({ mine: "1", founder: undefined })}
+              className={chipClass(mineOnly)}
+            >
+              Mine ({myFounderName?.split(" ")[0]})
+            </Link>
+          </>
+        ) : null}
+      </div>
+
+      {/* Results */}
       {data.target_naics_filter ? (
-        <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-500">
-          <span>
-            Filtered to your {data.target_naics.length} target NAICS.
-          </span>
-          <Link href="/recompetes?all=1" className="text-brand-700 hover:underline">
-            Show all recompetes
+        <div className="text-xs text-neutral-500">
+          Filtered to your {data.target_naics.length} target NAICS.{" "}
+          <Link href={buildHref({ all: "1" })} className="text-brand-700 hover:underline">
+            Show all NAICS
           </Link>
         </div>
       ) : data.target_naics.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-500">
-          <span>Showing all recompetes.</span>
-          <Link href="/recompetes" className="text-brand-700 hover:underline">
+        <div className="text-xs text-neutral-500">
+          Showing all NAICS.{" "}
+          <Link href={buildHref({ all: undefined })} className="text-brand-700 hover:underline">
             Filter to your NAICS
           </Link>
         </div>
       ) : null}
 
+      <p className="text-xs text-neutral-400">
+        {data.items.length} recompete{data.items.length === 1 ? "" : "s"}.
+      </p>
+
       {data.items.length === 0 ? (
         <Card>
           <p className="text-sm text-neutral-500">
-            No recompete-flagged forecasts captured yet. Forecast ingest runs
-            daily; agencies usually only list incumbents on a fraction of
-            their forecast records.
+            No recompetes match the current filters. Try widening the
+            set-aside scope, agency, or POP window.
           </p>
         </Card>
       ) : (
@@ -79,16 +201,24 @@ export default async function RecompetesPage({
               <Card>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+                    <p className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wider text-neutral-500">
                       <ScoreBadge score={fc.score} />
-                      <span className="ml-2">
+                      <span>
                         {fc.agency ?? "Unknown agency"}
                         {fc.contracting_office
                           ? ` · ${fc.contracting_office}`
                           : ""}
                       </span>
+                      {fc.assigned_founder_pillar ? (
+                        <Pillar pillar={fc.assigned_founder_pillar} />
+                      ) : null}
+                      {fc.assigned_founder_name ? (
+                        <span className="text-neutral-700">
+                          @{fc.assigned_founder_name.split(" ")[0]}
+                        </span>
+                      ) : null}
                       {fc.matches_target_naics ? (
-                        <span className="ml-2 rounded-sm bg-brand-50 px-1.5 py-0.5 font-semibold text-brand-800">
+                        <span className="rounded-sm bg-brand-50 px-1.5 py-0.5 font-semibold text-brand-800">
                           target NAICS
                         </span>
                       ) : null}
