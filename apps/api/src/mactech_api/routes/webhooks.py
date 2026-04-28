@@ -1,37 +1,43 @@
-"""Inbound webhooks — Apify ingest entry point.
+"""Inbound webhooks — Apify ingest + Codex SPRS push.
 
-Sprint 19. Unauthenticated by design (Apify can't carry our Clerk JWT);
-security comes from HMAC-SHA256 verification of the request body using
-APIFY_WEBHOOK_SECRET. Reject signature mismatches with 401.
+Sprint 19/24. Each webhook is unauthenticated for Clerk (the source
+can't carry our JWT) and instead verifies its own shared secret:
+  - Apify: HMAC-SHA256 of body with APIFY_WEBHOOK_SECRET
+  - Codex: bearer secret in Authorization header (CODEX_WEBHOOK_SECRET)
 
-Flow:
-  1. Verify signature (constant-time HMAC).
-  2. Persist an apify_runs audit row (idempotent on (run_id, event_type)).
-  3. For RUN.SUCCEEDED on a known capability, dispatch the ingest
-     Celery task (mactech.apify.ingest_<capability>).
-  4. Return 202 Accepted with the audit row id; Apify retries on 5xx so
-     we never throw past the audit insert.
+Routes:
 
   POST /webhooks/apify/{capability}
        Headers: Apify-Webhook-Signature: sha256=<hex>
        Body:    { "userId":..., "eventType":..., "createdAt":...,
                   "eventData": { "actorId":..., "actorRunId":... },
                   "resource":  { ... actor run resource ... } }
+
+  POST /webhooks/codex/sprs
+       Headers: Authorization: Bearer <CODEX_WEBHOOK_SECRET>
+       Body:    { "clerk_org_id": str, "score": int|null, "max": int,
+                  "assessment_date": "YYYY-MM-DD"|null,
+                  "source_url": str, "computed_at": ISO8601 }
+       Effect: updates tenants.sprs_* for the matching clerk_org_id.
+       Replaces the daily 0610 ET pull as the primary refresh path —
+       the beat now exists only as a safety-net reconciler.
 """
 
 from __future__ import annotations
 
 import logging
+from datetime import UTC, date, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Header, HTTPException, Request, status
-from pydantic import BaseModel, ConfigDict
+from mactech_db import unscoped_session
+from mactech_db.models import ApifyRun, Tenant
+from mactech_integrations.apify import verify_webhook_signature
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from mactech_api.settings import settings
-from mactech_db import unscoped_session
-from mactech_db.models import ApifyRun
-from mactech_integrations.apify import verify_webhook_signature
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["webhooks"])
@@ -213,7 +219,7 @@ def _dispatch_ingest(
             apify_run_id,
         )
         return True
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning(
             "failed to dispatch %s for run=%s: %s",
             task_name,
@@ -221,3 +227,122 @@ def _dispatch_ingest(
             exc,
         )
         return False
+
+
+# ────────────────────────────────────────────────────────────────────────
+# Codex SPRS push — real-time refresh trigger
+# ────────────────────────────────────────────────────────────────────────
+
+
+class CodexSprsWebhookBody(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    clerk_org_id: str
+    score: int | None = None
+    max: int = 110
+    assessment_date: str | None = None  # "YYYY-MM-DD"
+    source_url: str | None = None
+    computed_at: str | None = None  # ISO8601 — informational, not stored
+    reason: str | None = Field(
+        default=None,
+        description="Human-readable trigger (e.g. 'governance_wizard_save').",
+    )
+
+
+class CodexSprsWebhookAck(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    tenant_slug: str | None
+    score: int | None
+    updated: bool
+    reason: str
+
+
+@router.post(
+    "/webhooks/codex/sprs",
+    response_model=CodexSprsWebhookAck,
+    status_code=status.HTTP_200_OK,
+)
+async def codex_sprs_webhook(
+    body: CodexSprsWebhookBody,
+    authorization: Annotated[str | None, Header()] = None,
+) -> CodexSprsWebhookAck:
+    """Receive an SPRS-changed push from Codex and update the tenant.
+
+    Idempotent: sending the same payload twice has no extra effect.
+    Non-fatal misses (no tenant for that clerk_org_id, score=null) are
+    returned as 200 with `updated: false` so Codex can log them but
+    doesn't retry forever — wedge-recovery is the daily beat's job.
+    """
+    expected = settings.codex_webhook_secret
+    if not expected:
+        log.error("CODEX_WEBHOOK_SECRET not configured; rejecting webhook")
+        raise HTTPException(
+            status_code=503,
+            detail="CODEX_WEBHOOK_SECRET not configured on the API service.",
+        )
+    token = (
+        authorization.removeprefix("Bearer ").strip()
+        if authorization and authorization.startswith("Bearer ")
+        else None
+    )
+    if not token or token != expected:
+        raise HTTPException(status_code=401, detail="bad bearer token")
+
+    if body.score is None:
+        # Codex pushed a "no assessment yet" event — don't blow away an
+        # existing manual value with NULL. Treat as a quiet no-op.
+        return CodexSprsWebhookAck(
+            tenant_slug=None,
+            score=None,
+            updated=False,
+            reason="score_null_ignored",
+        )
+
+    async with unscoped_session() as session:
+        tenant = (
+            await session.execute(
+                select(Tenant).where(Tenant.clerk_org_id == body.clerk_org_id)
+            )
+        ).scalar_one_or_none()
+
+        if tenant is None:
+            # Unknown clerk org — likely a Codex tenant that hasn't been
+            # mirrored into CaptureOS yet. Log and return 200 so Codex
+            # doesn't keep retrying.
+            log.info(
+                "codex_sprs webhook: no tenant for clerk_org=%s (score=%d)",
+                body.clerk_org_id,
+                body.score,
+            )
+            return CodexSprsWebhookAck(
+                tenant_slug=None,
+                score=body.score,
+                updated=False,
+                reason="no_tenant_for_clerk_org",
+            )
+
+        tenant.sprs_score = body.score
+        tenant.sprs_max = body.max
+        tenant.sprs_assessment_date = (
+            date.fromisoformat(body.assessment_date)
+            if body.assessment_date
+            else None
+        )
+        if body.source_url:
+            tenant.sprs_source_url = body.source_url
+        tenant.sprs_synced_at = datetime.now(UTC)
+
+        log.info(
+            "codex_sprs webhook: tenant=%s score=%d/%d reason=%s",
+            tenant.slug,
+            body.score,
+            body.max,
+            body.reason or "unspecified",
+        )
+
+        return CodexSprsWebhookAck(
+            tenant_slug=tenant.slug,
+            score=body.score,
+            updated=True,
+            reason=body.reason or "sprs_changed",
+        )

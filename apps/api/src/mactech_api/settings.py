@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     sentry_dsn: str = Field(default="")
     posthog_api_key: str = Field(default="")
 
+    # Shared bearer secret used by Codex (CMMC Control Plane) when it
+    # POSTs to /webhooks/codex/sprs after an SPRS recompute. The same
+    # value lives in Codex env as CAPTUREOS_WEBHOOK_SECRET.
+    codex_webhook_secret: str = Field(default="")
+
     @field_validator("database_url")
     @classmethod
     def _ensure_asyncpg(cls, v: str) -> str:
