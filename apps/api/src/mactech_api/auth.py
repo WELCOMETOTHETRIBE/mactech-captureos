@@ -33,8 +33,29 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mactech_api.mactech_audit_client import send_audit_log
+from mactech_api.mactech_identity_client import (
+    check_identity_access,
+    find_active_access_for_app,
+)
 from mactech_db import scoped_session
 from mactech_db.models import Founder, Tenant, User
+
+CAPTURE_APP_KEY = "capture"
+
+
+def _map_icc_role_to_capture_role(icc_role: str, is_internal: bool) -> str:
+    """Capture's ``users.role`` is a free-form string with conventions
+    ``owner`` / ``admin`` / ``member``. Internal MacTech operators
+    always become owner. Customer roles map: customer_owner → owner,
+    customer_admin → admin, everything else → member."""
+
+    if is_internal:
+        return "owner"
+    if icc_role == "customer_owner":
+        return "owner"
+    if icc_role == "customer_admin":
+        return "admin"
+    return "member"
 
 log = logging.getLogger(__name__)
 
@@ -140,11 +161,47 @@ async def _resolve_tenant_and_user(
             select(Tenant).where(Tenant.clerk_org_id == claims.tenant_org_id)
         )
     ).scalar_one_or_none()
+
+    # If no local tenant exists for this Clerk org, ask the central
+    # Identity Command Center whether the user has access to capture.
+    # On a hit, JIT-create the tenant from ICC metadata. This replaces
+    # the old hard-error path that required manual tenant onboarding.
+    icc_org_role: str | None = None
+    icc_is_internal = False
     if tenant is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"no MacTech tenant linked to Clerk org {claims.tenant_org_id}",
+        icc_result = await check_identity_access(
+            clerk_user_id=claims.sub,
+            app_key=CAPTURE_APP_KEY,
+            clerk_org_id=claims.tenant_org_id,
         )
+        access = find_active_access_for_app(icc_result, CAPTURE_APP_KEY)
+        if access is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Your Clerk org isn't linked to a CaptureOS tenant and "
+                    "the central Identity Command Center has not granted "
+                    "your user access to Capture. Ask a MacTech admin to "
+                    "enable Capture in your org's product entitlements."
+                ),
+            )
+        _user, icc_org, _entitlement = access
+        icc_org_role = icc_org.role
+        icc_is_internal = access[0].is_internal_mactech_user
+
+        slug = (
+            (icc_org.clerk_org_id or "")
+            .lower()
+            .replace("_", "-")[:50]
+            or f"tenant-{claims.tenant_org_id[-12:].lower()}"
+        )
+        tenant = Tenant(
+            slug=slug,
+            name=icc_org.org_name,
+            clerk_org_id=icc_org.clerk_org_id,
+        )
+        session.add(tenant)
+        await session.flush()
 
     user = (
         await session.execute(
@@ -165,12 +222,32 @@ async def _resolve_tenant_and_user(
                 )
             ).scalar_one_or_none()
             founder_id = f.id if f else None
+
+        # Pick the role for the new user. If we already consulted ICC
+        # above (because the tenant was JIT-created), reuse that role.
+        # Otherwise consult ICC now so the user lands with the right role
+        # even when their tenant existed before this rollout.
+        if icc_org_role is None:
+            icc_result_for_user = await check_identity_access(
+                clerk_user_id=claims.sub,
+                app_key=CAPTURE_APP_KEY,
+                clerk_org_id=claims.tenant_org_id,
+            )
+            user_access = find_active_access_for_app(icc_result_for_user, CAPTURE_APP_KEY)
+            if user_access is not None:
+                icc_org_role = user_access[1].role
+                icc_is_internal = user_access[0].is_internal_mactech_user
+        role = _map_icc_role_to_capture_role(
+            icc_org_role or "member", icc_is_internal
+        )
+
         user = User(
             tenant_id=tenant.id,
             clerk_user_id=claims.sub,
             email=claims.raw.get("email", ""),
             full_name=claims.raw.get("name"),
             founder_id=founder_id,
+            role=role,
         )
         session.add(user)
         await session.flush()
