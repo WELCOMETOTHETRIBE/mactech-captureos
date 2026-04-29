@@ -190,7 +190,8 @@ def find_active_access_for_app(
     for org in result.orgs or []:
         if org.member_status != "active":
             continue
-        if org.org_status != "active":
+        # Onboarding orgs are legitimate — block only suspended/archived.
+        if org.org_status not in ("active", "onboarding"):
             continue
         for entitlement in org.enabled_apps:
             if entitlement.get("appKey") != app_key:
