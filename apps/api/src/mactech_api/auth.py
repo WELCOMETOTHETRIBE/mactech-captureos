@@ -15,8 +15,10 @@ that includes the User row + Tenant + a tenant-scoped DB session.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Annotated, Any
@@ -30,10 +32,26 @@ from jwt import PyJWKClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from mactech_api.mactech_audit_client import send_audit_log
 from mactech_db import scoped_session
 from mactech_db.models import Founder, Tenant, User
 
 log = logging.getLogger(__name__)
+
+# In-memory dedup so we fire at most one capture.session.opened event per
+# Clerk user per process per hour. Per-process state, not shared across
+# replicas — acceptable noise for a session-level signal.
+_AUDIT_SESSION_DEDUP_S = 60 * 60
+_audit_session_last_fire: dict[str, float] = {}
+
+
+def _should_fire_audit_session(clerk_user_id: str) -> bool:
+    now = time.time()
+    last = _audit_session_last_fire.get(clerk_user_id)
+    if last and now - last < _AUDIT_SESSION_DEDUP_S:
+        return False
+    _audit_session_last_fire[clerk_user_id] = now
+    return True
 
 # Clerk publishes the JWKS at <frontend-api>/.well-known/jwks.json. Frontend API
 # host comes from CLERK_FRONTEND_API or, on dev, can be inferred from the
@@ -222,6 +240,26 @@ async def get_request_context(
                 await session.execute(select(Founder).where(Founder.id == founder_id))
             ).scalar_one_or_none()
         request.state.tenant_id = tenant_id
+
+        # Fire-and-forget capture.session.opened to the central Identity hub.
+        # Throttled to once per Clerk user per process per hour. Errors are
+        # swallowed inside send_audit_log so a hub outage cannot break auth.
+        if _should_fire_audit_session(claims.sub):
+            asyncio.create_task(
+                send_audit_log(
+                    {
+                        "appKey": "capture",
+                        "eventType": "capture.session.opened",
+                        "eventCategory": "auth",
+                        "action": "Opened MacTech Capture",
+                        "actorClerkUserId": claims.sub,
+                        "customerOrgClerkId": claims.tenant_org_id,
+                        "actorEmail": user_attached.email,
+                        "metadata": {"path": str(request.url.path)},
+                    }
+                )
+            )
+
         yield RequestContext(
             user=user_attached,
             tenant=tenant_attached,
