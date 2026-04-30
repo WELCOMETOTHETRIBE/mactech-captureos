@@ -32,7 +32,11 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import delete, select
 
 from mactech_api.auth import RequestContext, get_request_context
+from mactech_db.audit import record_event
 from mactech_db.models import (
+    EVENT_PURSUIT_KEY_PERSONNEL_REPLACED,
+    EVENT_PURSUIT_PAST_PERFORMANCE_REPLACED,
+    EVENT_PURSUIT_TEAMING_PARTNERS_REPLACED,
     Founder,
     OpportunityRaw,
     PastPerformance,
@@ -41,6 +45,7 @@ from mactech_db.models import (
     PursuitPastPerformance,
     PursuitTeamingPartner,
     TeamingPartner,
+    User,
 )
 
 log = logging.getLogger(__name__)
@@ -101,6 +106,10 @@ class PursuitDetailOut(_Out):
     notes: str | None
     win_themes: list[str]
     discriminators: list[str]
+    bid_decision: str
+    bid_decided_at: str | None
+    bid_decided_by_user_email: str | None
+    bid_rationale: str | None
     owner_founder_slug: str | None
     owner_founder_name: str | None
     created_at: str
@@ -162,6 +171,14 @@ async def get_pursuit_detail(
         owner = (
             await session.execute(
                 select(Founder).where(Founder.id == pursuit.owner_founder_id)
+            )
+        ).scalar_one_or_none()
+
+    bid_decider_email: str | None = None
+    if pursuit.bid_decided_by_user_id is not None:
+        bid_decider_email = (
+            await session.execute(
+                select(User.email).where(User.id == pursuit.bid_decided_by_user_id)
             )
         ).scalar_one_or_none()
 
@@ -227,6 +244,10 @@ async def get_pursuit_detail(
         notes=pursuit.notes,
         win_themes=list(pursuit.win_themes or []),
         discriminators=list(pursuit.discriminators or []),
+        bid_decision=pursuit.bid_decision,
+        bid_decided_at=_to_iso(pursuit.bid_decided_at),
+        bid_decided_by_user_email=bid_decider_email,
+        bid_rationale=pursuit.bid_rationale,
         owner_founder_slug=owner.slug if owner else None,
         owner_founder_name=owner.full_name if owner else None,
         created_at=pursuit.created_at.isoformat(),
@@ -337,6 +358,16 @@ async def replace_past_performance(
             )
         )
     pursuit.updated_at = datetime.utcnow()
+    await record_event(
+        ctx.session,
+        tenant_id=ctx.tenant.id,
+        event_type=EVENT_PURSUIT_PAST_PERFORMANCE_REPLACED,
+        entity_type="pursuit",
+        entity_id=pursuit_id,
+        payload={"selection_count": len(ids)},
+        actor_user_id=ctx.user.id if ctx.user else None,
+        actor_founder_id=ctx.founder.id if ctx.founder else None,
+    )
     await ctx.session.flush()
     return await get_pursuit_detail(pursuit_id, ctx)
 
@@ -370,6 +401,16 @@ async def replace_key_personnel(
             )
         )
     pursuit.updated_at = datetime.utcnow()
+    await record_event(
+        ctx.session,
+        tenant_id=ctx.tenant.id,
+        event_type=EVENT_PURSUIT_KEY_PERSONNEL_REPLACED,
+        entity_type="pursuit",
+        entity_id=pursuit_id,
+        payload={"selection_count": len(ids)},
+        actor_user_id=ctx.user.id if ctx.user else None,
+        actor_founder_id=ctx.founder.id if ctx.founder else None,
+    )
     await ctx.session.flush()
     return await get_pursuit_detail(pursuit_id, ctx)
 
@@ -403,5 +444,15 @@ async def replace_teaming_partners(
             )
         )
     pursuit.updated_at = datetime.utcnow()
+    await record_event(
+        ctx.session,
+        tenant_id=ctx.tenant.id,
+        event_type=EVENT_PURSUIT_TEAMING_PARTNERS_REPLACED,
+        entity_type="pursuit",
+        entity_id=pursuit_id,
+        payload={"selection_count": len(ids)},
+        actor_user_id=ctx.user.id if ctx.user else None,
+        actor_founder_id=ctx.founder.id if ctx.founder else None,
+    )
     await ctx.session.flush()
     return await get_pursuit_detail(pursuit_id, ctx)

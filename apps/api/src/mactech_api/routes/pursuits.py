@@ -24,8 +24,20 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 
 from mactech_api.auth import RequestContext, get_request_context
-from mactech_db.models import Founder, OpportunityRaw, Pursuit
-from mactech_db.models.pursuit import PURSUIT_STAGES
+from mactech_db.audit import record_event
+from mactech_db.models import (
+    EVENT_PURSUIT_BID_DECIDED,
+    EVENT_PURSUIT_CREATED,
+    EVENT_PURSUIT_DELETED,
+    EVENT_PURSUIT_NOTES_UPDATED,
+    EVENT_PURSUIT_OWNER_CHANGED,
+    EVENT_PURSUIT_STAGE_CHANGED,
+    EVENT_PURSUIT_WIN_STRATEGY_UPDATED,
+    Founder,
+    OpportunityRaw,
+    Pursuit,
+)
+from mactech_db.models.pursuit import BID_DECISIONS, PURSUIT_STAGES
 
 router = APIRouter(tags=["pursuits"])
 
@@ -91,6 +103,20 @@ class UpdatePursuitRequest(BaseModel):
     # the current contents; pass None / omit to leave them alone.
     win_themes: list[str] | None = None
     discriminators: list[str] | None = None
+    # Structured bid memo. Setting `bid_decision` to bid|no_bid stamps
+    # bid_decided_at + bid_decided_by_user_id automatically; setting it
+    # back to "pending" clears them.
+    bid_decision: str | None = None
+    bid_rationale: str | None = None
+
+
+def _validate_bid_decision(decision: str) -> str:
+    if decision not in BID_DECISIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"invalid bid_decision '{decision}'. Allowed: {list(BID_DECISIONS)}",
+        )
+    return decision
 
 
 STAGE_LABELS = {
@@ -371,6 +397,21 @@ async def create_pursuit(
             detail="pursuit already exists for this opportunity",
         ) from None
 
+    await record_event(
+        session,
+        tenant_id=tenant_id,
+        event_type=EVENT_PURSUIT_CREATED,
+        entity_type="pursuit",
+        entity_id=pursuit.id,
+        payload={
+            "opportunity_id": str(body.opportunity_id),
+            "stage": body.stage,
+            "owner_founder_slug": body.owner_founder_slug,
+        },
+        **_audit_actor_kwargs(ctx),
+    )
+    await session.flush()
+
     return await get_pursuit_for_opp(body.opportunity_id, ctx)
 
 
@@ -393,29 +434,137 @@ async def update_pursuit(
     if pursuit is None:
         raise HTTPException(status_code=404, detail="pursuit not found")
 
+    actor_kwargs = _audit_actor_kwargs(ctx)
+
     if body.stage is not None:
         _validate_stage(body.stage)
         if body.stage != pursuit.stage:
+            previous_stage = pursuit.stage
             pursuit.stage = body.stage
             pursuit.last_stage_change_at = datetime.now(timezone.utc)
+            await record_event(
+                session,
+                tenant_id=tenant_id,
+                event_type=EVENT_PURSUIT_STAGE_CHANGED,
+                entity_type="pursuit",
+                entity_id=pursuit.id,
+                payload={"from": previous_stage, "to": body.stage},
+                **actor_kwargs,
+            )
 
     if body.clear_owner:
-        pursuit.owner_founder_id = None
+        if pursuit.owner_founder_id is not None:
+            previous_owner_id = pursuit.owner_founder_id
+            pursuit.owner_founder_id = None
+            await record_event(
+                session,
+                tenant_id=tenant_id,
+                event_type=EVENT_PURSUIT_OWNER_CHANGED,
+                entity_type="pursuit",
+                entity_id=pursuit.id,
+                payload={
+                    "from_founder_id": str(previous_owner_id),
+                    "to_founder_id": None,
+                },
+                **actor_kwargs,
+            )
     elif body.owner_founder_slug is not None:
-        pursuit.owner_founder_id = await _resolve_owner_founder_id(
-            ctx, body.owner_founder_slug
+        new_owner_id = await _resolve_owner_founder_id(ctx, body.owner_founder_slug)
+        if new_owner_id != pursuit.owner_founder_id:
+            previous_owner_id = pursuit.owner_founder_id
+            pursuit.owner_founder_id = new_owner_id
+            await record_event(
+                session,
+                tenant_id=tenant_id,
+                event_type=EVENT_PURSUIT_OWNER_CHANGED,
+                entity_type="pursuit",
+                entity_id=pursuit.id,
+                payload={
+                    "from_founder_id": (
+                        str(previous_owner_id) if previous_owner_id else None
+                    ),
+                    "to_founder_id": str(new_owner_id) if new_owner_id else None,
+                    "to_founder_slug": body.owner_founder_slug,
+                },
+                **actor_kwargs,
+            )
+
+    if body.notes is not None and body.notes != pursuit.notes:
+        pursuit.notes = body.notes
+        await record_event(
+            session,
+            tenant_id=tenant_id,
+            event_type=EVENT_PURSUIT_NOTES_UPDATED,
+            entity_type="pursuit",
+            entity_id=pursuit.id,
+            payload={"chars": len(body.notes)},
+            **actor_kwargs,
         )
 
-    if body.notes is not None:
-        pursuit.notes = body.notes
+    if body.win_themes is not None or body.discriminators is not None:
+        if body.win_themes is not None:
+            pursuit.win_themes = [
+                t.strip() for t in body.win_themes if t and t.strip()
+            ]
+        if body.discriminators is not None:
+            pursuit.discriminators = [
+                d.strip() for d in body.discriminators if d and d.strip()
+            ]
+        await record_event(
+            session,
+            tenant_id=tenant_id,
+            event_type=EVENT_PURSUIT_WIN_STRATEGY_UPDATED,
+            entity_type="pursuit",
+            entity_id=pursuit.id,
+            payload={
+                "win_theme_count": len(pursuit.win_themes or []),
+                "discriminator_count": len(pursuit.discriminators or []),
+            },
+            **actor_kwargs,
+        )
 
-    if body.win_themes is not None:
-        pursuit.win_themes = [t.strip() for t in body.win_themes if t and t.strip()]
-
-    if body.discriminators is not None:
-        pursuit.discriminators = [
-            d.strip() for d in body.discriminators if d and d.strip()
-        ]
+    if body.bid_decision is not None:
+        new_decision = _validate_bid_decision(body.bid_decision)
+        if new_decision != pursuit.bid_decision or body.bid_rationale is not None:
+            previous_decision = pursuit.bid_decision
+            pursuit.bid_decision = new_decision
+            if body.bid_rationale is not None:
+                pursuit.bid_rationale = body.bid_rationale or None
+            if new_decision == "pending":
+                pursuit.bid_decided_at = None
+                pursuit.bid_decided_by_user_id = None
+            else:
+                pursuit.bid_decided_at = datetime.now(timezone.utc)
+                pursuit.bid_decided_by_user_id = ctx.user.id
+            await record_event(
+                session,
+                tenant_id=tenant_id,
+                event_type=EVENT_PURSUIT_BID_DECIDED,
+                entity_type="pursuit",
+                entity_id=pursuit.id,
+                payload={
+                    "from": previous_decision,
+                    "to": new_decision,
+                    "rationale_chars": len(pursuit.bid_rationale or ""),
+                },
+                **actor_kwargs,
+            )
+    elif body.bid_rationale is not None and body.bid_rationale != pursuit.bid_rationale:
+        # Update rationale only — no decision change.
+        pursuit.bid_rationale = body.bid_rationale or None
+        await record_event(
+            session,
+            tenant_id=tenant_id,
+            event_type=EVENT_PURSUIT_BID_DECIDED,
+            entity_type="pursuit",
+            entity_id=pursuit.id,
+            payload={
+                "decision": pursuit.bid_decision,
+                "rationale_only_update": True,
+                "rationale_chars": len(pursuit.bid_rationale or ""),
+            },
+            **actor_kwargs,
+        )
 
     # SQLAlchemy `onupdate=func.now()` should bump `updated_at` on flush, but
     # set it explicitly so the value is correct even if a future raw-SQL path
@@ -424,6 +573,14 @@ async def update_pursuit(
 
     await session.flush()
     return await get_pursuit_for_opp(pursuit.opportunity_id, ctx)
+
+
+def _audit_actor_kwargs(ctx: RequestContext) -> dict:
+    """Translate a RequestContext into the actor_* kwargs for record_event."""
+    return {
+        "actor_user_id": ctx.user.id if ctx.user else None,
+        "actor_founder_id": ctx.founder.id if ctx.founder else None,
+    }
 
 
 @router.delete("/pursuits/{pursuit_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -444,5 +601,20 @@ async def delete_pursuit(
     if pursuit is None:
         raise HTTPException(status_code=404, detail="pursuit not found")
 
+    # Emit before delete so the foreign key still resolves and the event
+    # has the final pursuit shape captured in its payload.
+    await record_event(
+        session,
+        tenant_id=tenant_id,
+        event_type=EVENT_PURSUIT_DELETED,
+        entity_type="pursuit",
+        entity_id=pursuit.id,
+        payload={
+            "opportunity_id": str(pursuit.opportunity_id),
+            "stage_at_delete": pursuit.stage,
+            "bid_decision_at_delete": pursuit.bid_decision,
+        },
+        **_audit_actor_kwargs(ctx),
+    )
     await session.delete(pursuit)
     await session.flush()

@@ -790,12 +790,18 @@ export type LinkedTeamingPartner = {
   sort_order: number;
 };
 
+export type BidDecision = "pending" | "bid" | "no_bid";
+
 export type PursuitDetailOut = {
   id: string;
   stage: PursuitStage;
   notes: string | null;
   win_themes: string[];
   discriminators: string[];
+  bid_decision: BidDecision;
+  bid_decided_at: string | null;
+  bid_decided_by_user_email: string | null;
+  bid_rationale: string | null;
   owner_founder_slug: string | null;
   owner_founder_name: string | null;
   created_at: string;

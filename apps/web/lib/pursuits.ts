@@ -34,6 +34,8 @@ export async function createPursuit(input: {
   return card;
 }
 
+export type BidDecision = "pending" | "bid" | "no_bid";
+
 export async function updatePursuit(input: {
   pursuitId: string;
   opportunityId: string;
@@ -43,6 +45,8 @@ export async function updatePursuit(input: {
   notes?: string | null;
   winThemes?: string[];
   discriminators?: string[];
+  bidDecision?: BidDecision;
+  bidRationale?: string | null;
 }): Promise<PursuitCard> {
   const body: Record<string, unknown> = {};
   if (input.stage) body.stage = input.stage;
@@ -54,6 +58,8 @@ export async function updatePursuit(input: {
   if (input.notes !== undefined) body.notes = input.notes;
   if (input.winThemes !== undefined) body.win_themes = input.winThemes;
   if (input.discriminators !== undefined) body.discriminators = input.discriminators;
+  if (input.bidDecision !== undefined) body.bid_decision = input.bidDecision;
+  if (input.bidRationale !== undefined) body.bid_rationale = input.bidRationale;
 
   const card = await apiFetch<PursuitCard>(`/pursuits/${input.pursuitId}`, {
     method: "PATCH",
@@ -62,7 +68,22 @@ export async function updatePursuit(input: {
   revalidatePath("/pipeline");
   revalidatePath(`/opportunities/${input.opportunityId}`);
   revalidatePath(`/pursuits/${input.pursuitId}`);
+  revalidatePath(`/pursuits/${input.pursuitId}/capture-package`);
   return card;
+}
+
+export async function updatePursuitBidDecision(
+  pursuitId: string,
+  opportunityId: string,
+  decision: BidDecision,
+  rationale: string | null
+): Promise<void> {
+  await updatePursuit({
+    pursuitId,
+    opportunityId,
+    bidDecision: decision,
+    bidRationale: rationale,
+  });
 }
 
 export async function deletePursuit(input: {
