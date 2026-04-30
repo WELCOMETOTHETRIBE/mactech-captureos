@@ -1,8 +1,14 @@
 """opportunity_amendments + audit_events + pursuits.bid_decision columns.
 
-Revision ID: 0024_amendments_audit_bid_decision
+Revision ID: 0024_amendments_audit
 Revises: 0023_pursuit_links_evaluation
 Create Date: 2026-04-29
+
+NOTE on the short id: the alembic_version table uses ``varchar(32)``
+and truncates anything longer. The original revision id
+``0024_amendments_audit_bid_decision`` was 34 chars and triggered
+``StringDataRightTruncationError`` when the upgrade tried to advance
+the version row. Future migrations: keep revision ids ≤ 32 characters.
 
 Tier-1 catch-up sprint per the requirements audit. Closes:
 
@@ -28,7 +34,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
-revision: str = "0024_amendments_audit_bid_decision"
+revision: str = "0024_amendments_audit"
 down_revision: str | Sequence[str] | None = "0023_pursuit_links_evaluation"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
