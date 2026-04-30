@@ -37,6 +37,8 @@ from mactech_intelligence.extract_past_performance import (
 )
 from mactech_intelligence.extract_solicitation import (
     ExtractedComplianceItem,
+    ExtractedEvaluationPassFailItem,
+    ExtractedEvaluationScoredFactor,
     ExtractedRequirementItem,
     ExtractSolicitationInput,
     SolicitationExtractionError,
@@ -77,6 +79,8 @@ __all__ = [
     "ExtractSolicitationInput",
     "ExtractedCapabilityStatement",
     "ExtractedComplianceItem",
+    "ExtractedEvaluationPassFailItem",
+    "ExtractedEvaluationScoredFactor",
     "ExtractedPastPerformance",
     "ExtractedRequirementItem",
     "FounderContext",

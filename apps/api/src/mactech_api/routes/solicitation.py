@@ -40,6 +40,8 @@ from sqlalchemy import delete, select
 from mactech_api.auth import RequestContext, get_request_context
 from mactech_db.models import (
     ComplianceMatrixItem,
+    EvaluationPassFailItem,
+    EvaluationScoredFactor,
     OpportunityRaw,
     RequirementMatrixItem,
     SolicitationExtraction,
@@ -67,6 +69,7 @@ class ExtractionOut(_Out):
     description_chars: int | None
     compliance_count: int
     requirements_count: int
+    evaluation_count: int
     model: str | None
     prompt_version: str | None
     input_tokens: int | None
@@ -109,6 +112,30 @@ class RequirementsMatrixOut(_Out):
     last_extracted_at: str
 
 
+class EvaluationPassFailItemOut(_Out):
+    id: str
+    statement: str
+    source_citation: str | None
+    sort_order: int
+
+
+class EvaluationScoredFactorOut(_Out):
+    id: str
+    name: str
+    weight: float | None
+    description: str | None
+    source_citation: str | None
+    sort_order: int
+
+
+class EvaluationOut(_Out):
+    extraction_id: str
+    opportunity_id: str
+    pass_fail_items: list[EvaluationPassFailItemOut]
+    scored_factors: list[EvaluationScoredFactorOut]
+    last_extracted_at: str
+
+
 def _extraction_to_out(e: SolicitationExtraction) -> ExtractionOut:
     return ExtractionOut(
         id=str(e.id),
@@ -117,6 +144,7 @@ def _extraction_to_out(e: SolicitationExtraction) -> ExtractionOut:
         description_chars=e.description_chars,
         compliance_count=e.compliance_count,
         requirements_count=e.requirements_count,
+        evaluation_count=e.evaluation_count,
         model=e.model,
         prompt_version=e.prompt_version,
         input_tokens=e.input_tokens,
@@ -225,6 +253,10 @@ async def generate_extraction(
         )
     ).scalar_one_or_none()
 
+    evaluation_total = (
+        len(result.evaluation_pass_fail_items) + len(result.evaluation_scored_factors)
+    )
+
     if existing is None:
         extraction = SolicitationExtraction(
             tenant_id=ctx.tenant.id,
@@ -234,6 +266,7 @@ async def generate_extraction(
             description_chars=result.description_chars,
             compliance_count=len(result.compliance_items),
             requirements_count=len(result.requirement_items),
+            evaluation_count=evaluation_total,
             model=result.response.model,
             prompt_version=PROMPT_VERSION,
             input_tokens=result.response.input_tokens,
@@ -255,11 +288,22 @@ async def generate_extraction(
                 RequirementMatrixItem.extraction_id == existing.id
             )
         )
+        await ctx.session.execute(
+            delete(EvaluationPassFailItem).where(
+                EvaluationPassFailItem.extraction_id == existing.id
+            )
+        )
+        await ctx.session.execute(
+            delete(EvaluationScoredFactor).where(
+                EvaluationScoredFactor.extraction_id == existing.id
+            )
+        )
         existing.status = "complete"
         existing.source_text_hash = result.source_text_hash
         existing.description_chars = result.description_chars
         existing.compliance_count = len(result.compliance_items)
         existing.requirements_count = len(result.requirement_items)
+        existing.evaluation_count = evaluation_total
         existing.model = result.response.model
         existing.prompt_version = PROMPT_VERSION
         existing.input_tokens = result.response.input_tokens
@@ -292,6 +336,30 @@ async def generate_extraction(
                 statement=item.statement,
                 source_citation=item.source_citation,
                 category=item.category,
+                sort_order=idx,
+            )
+        )
+    for idx, pf in enumerate(result.evaluation_pass_fail_items):
+        ctx.session.add(
+            EvaluationPassFailItem(
+                extraction_id=extraction.id,
+                tenant_id=ctx.tenant.id,
+                opportunity_id=opportunity_id,
+                statement=pf.statement,
+                source_citation=pf.source_citation,
+                sort_order=idx,
+            )
+        )
+    for idx, sf in enumerate(result.evaluation_scored_factors):
+        ctx.session.add(
+            EvaluationScoredFactor(
+                extraction_id=extraction.id,
+                tenant_id=ctx.tenant.id,
+                opportunity_id=opportunity_id,
+                name=sf.name,
+                weight=sf.weight,
+                description=sf.description,
+                source_citation=sf.source_citation,
                 sort_order=idx,
             )
         )
@@ -417,6 +485,77 @@ async def get_requirements_matrix(
                 sort_order=it.sort_order,
             )
             for it in items
+        ],
+        last_extracted_at=extraction.updated_at.isoformat(),
+    )
+
+
+@router.get(
+    "/opportunities/{opportunity_id}/evaluation",
+    response_model=EvaluationOut,
+)
+async def get_evaluation(
+    opportunity_id: UUID,
+    ctx: Annotated[RequestContext, Depends(get_request_context)],
+) -> EvaluationOut:
+    """Section M evaluation factors — pass/fail + scored — extracted by
+    the same Claude pass that produces compliance + requirements."""
+    extraction = (
+        await ctx.session.execute(
+            select(SolicitationExtraction).where(
+                SolicitationExtraction.tenant_id == ctx.tenant.id,
+                SolicitationExtraction.opportunity_id == opportunity_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if extraction is None:
+        raise HTTPException(status_code=404, detail="no evaluation extracted yet")
+
+    pass_fail = (
+        (
+            await ctx.session.execute(
+                select(EvaluationPassFailItem)
+                .where(EvaluationPassFailItem.extraction_id == extraction.id)
+                .order_by(EvaluationPassFailItem.sort_order.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    scored = (
+        (
+            await ctx.session.execute(
+                select(EvaluationScoredFactor)
+                .where(EvaluationScoredFactor.extraction_id == extraction.id)
+                .order_by(EvaluationScoredFactor.sort_order.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    return EvaluationOut(
+        extraction_id=str(extraction.id),
+        opportunity_id=str(opportunity_id),
+        pass_fail_items=[
+            EvaluationPassFailItemOut(
+                id=str(it.id),
+                statement=it.statement,
+                source_citation=it.source_citation,
+                sort_order=it.sort_order,
+            )
+            for it in pass_fail
+        ],
+        scored_factors=[
+            EvaluationScoredFactorOut(
+                id=str(it.id),
+                name=it.name,
+                weight=float(it.weight) if it.weight is not None else None,
+                description=it.description,
+                source_citation=it.source_citation,
+                sort_order=it.sort_order,
+            )
+            for it in scored
         ],
         last_extracted_at=extraction.updated_at.isoformat(),
     )

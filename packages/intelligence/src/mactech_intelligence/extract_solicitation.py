@@ -26,16 +26,19 @@ from mactech_intelligence.llm import AnthropicLLMClient, LLMResponse
 log = logging.getLogger(__name__)
 
 PROMPT_PATH = Path(__file__).parent / "prompts" / "extract_solicitation.md"
-PROMPT_VERSION = "v1"
-DEFAULT_MAX_TOKENS = 4000
+# Bumped from v1 to v2 when the prompt added Section M evaluation items.
+PROMPT_VERSION = "v2"
+DEFAULT_MAX_TOKENS = 5000
 
 # Bound input cost. Section L can be long but the synopsis is usually <12k.
 MAX_DESCRIPTION_CHARS = 24000
 
-# Hard caps on output to keep the prompt's "60 + 80" instruction from
-# blowing past sane proposal-team review capacity.
+# Hard caps on output to keep the prompt's per-array limits from blowing
+# past sane proposal-team review capacity.
 MAX_COMPLIANCE_ITEMS = 60
 MAX_REQUIREMENT_ITEMS = 80
+MAX_EVALUATION_PASS_FAIL_ITEMS = 20
+MAX_EVALUATION_SCORED_FACTORS = 15
 
 # Per-field length caps. Match the prompt's "≤500 chars" / "≤255 chars" rules
 # so the model output that respects the prompt fits cleanly into our DB
@@ -44,6 +47,8 @@ MAX_STATEMENT_CHARS = 500
 MAX_CITATION_CHARS = 255
 MAX_NOTES_CHARS = 500
 MAX_ITEM_ID_CHARS = 32
+MAX_FACTOR_NAME_CHARS = 255
+MAX_FACTOR_DESCRIPTION_CHARS = 500
 
 
 @dataclass(frozen=True)
@@ -76,9 +81,25 @@ class ExtractedRequirementItem:
 
 
 @dataclass(frozen=True)
+class ExtractedEvaluationPassFailItem:
+    statement: str
+    source_citation: str | None
+
+
+@dataclass(frozen=True)
+class ExtractedEvaluationScoredFactor:
+    name: str
+    weight: float | None
+    description: str | None
+    source_citation: str | None
+
+
+@dataclass(frozen=True)
 class SolicitationExtractionResult:
     compliance_items: list[ExtractedComplianceItem]
     requirement_items: list[ExtractedRequirementItem]
+    evaluation_pass_fail_items: list[ExtractedEvaluationPassFailItem]
+    evaluation_scored_factors: list[ExtractedEvaluationScoredFactor]
     response: LLMResponse
     description_chars: int
     source_text_hash: str
@@ -192,6 +213,55 @@ def _coerce_requirement_item(
     )
 
 
+def _coerce_pass_fail_item(
+    raw: object,
+) -> ExtractedEvaluationPassFailItem | None:
+    if not isinstance(raw, dict):
+        return None
+    statement = raw.get("statement")
+    if not isinstance(statement, str) or not statement.strip():
+        return None
+    return ExtractedEvaluationPassFailItem(
+        statement=_truncate(statement, MAX_STATEMENT_CHARS) or statement[:MAX_STATEMENT_CHARS],
+        source_citation=_truncate(raw.get("source_citation"), MAX_CITATION_CHARS),
+    )
+
+
+def _coerce_weight(value: object) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        # Guard: ``isinstance(True, (int, float))`` is True. Drop bools.
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        s = value.strip().rstrip("%")
+        if not s:
+            return None
+        try:
+            return float(s)
+        except ValueError:
+            return None
+    return None
+
+
+def _coerce_scored_factor(
+    raw: object,
+) -> ExtractedEvaluationScoredFactor | None:
+    if not isinstance(raw, dict):
+        return None
+    name = raw.get("name")
+    if not isinstance(name, str) or not name.strip():
+        return None
+    return ExtractedEvaluationScoredFactor(
+        name=_truncate(name, MAX_FACTOR_NAME_CHARS) or name[:MAX_FACTOR_NAME_CHARS],
+        weight=_coerce_weight(raw.get("weight")),
+        description=_truncate(raw.get("description"), MAX_FACTOR_DESCRIPTION_CHARS),
+        source_citation=_truncate(raw.get("source_citation"), MAX_CITATION_CHARS),
+    )
+
+
 def _hash_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
@@ -236,6 +306,8 @@ async def extract_solicitation(
 
     raw_compliance = data.get("compliance_items") or []
     raw_requirements = data.get("requirement_items") or []
+    raw_pass_fail = data.get("evaluation_pass_fail_items") or []
+    raw_scored = data.get("evaluation_scored_factors") or []
     if not isinstance(raw_compliance, list):
         raise SolicitationExtractionError(
             f"compliance_items not a list: {type(raw_compliance).__name__}"
@@ -243,6 +315,14 @@ async def extract_solicitation(
     if not isinstance(raw_requirements, list):
         raise SolicitationExtractionError(
             f"requirement_items not a list: {type(raw_requirements).__name__}"
+        )
+    if not isinstance(raw_pass_fail, list):
+        raise SolicitationExtractionError(
+            f"evaluation_pass_fail_items not a list: {type(raw_pass_fail).__name__}"
+        )
+    if not isinstance(raw_scored, list):
+        raise SolicitationExtractionError(
+            f"evaluation_scored_factors not a list: {type(raw_scored).__name__}"
         )
 
     compliance_items: list[ExtractedComplianceItem] = []
@@ -289,9 +369,31 @@ async def extract_solicitation(
         seen_requirement_ids.add(item.item_id)
         requirement_items.append(item)
 
+    pass_fail_items: list[ExtractedEvaluationPassFailItem] = []
+    for raw_item in raw_pass_fail[:MAX_EVALUATION_PASS_FAIL_ITEMS]:
+        item = _coerce_pass_fail_item(raw_item)
+        if item is not None:
+            pass_fail_items.append(item)
+
+    scored_factors: list[ExtractedEvaluationScoredFactor] = []
+    seen_factor_names: set[str] = set()
+    for raw_item in raw_scored[:MAX_EVALUATION_SCORED_FACTORS]:
+        item = _coerce_scored_factor(raw_item)
+        if item is None:
+            continue
+        # Dedupe by case-insensitive factor name to defend against the model
+        # repeating "Technical Approach" twice.
+        key = item.name.lower()
+        if key in seen_factor_names:
+            continue
+        seen_factor_names.add(key)
+        scored_factors.append(item)
+
     return SolicitationExtractionResult(
         compliance_items=compliance_items,
         requirement_items=requirement_items,
+        evaluation_pass_fail_items=pass_fail_items,
+        evaluation_scored_factors=scored_factors,
         response=response,
         description_chars=len(inp.description),
         source_text_hash=_hash_text(inp.description),

@@ -7,6 +7,7 @@ import {
   type ComplianceMatrixOut,
   type CyberSummaryOut,
   type DraftListResponse,
+  type EvaluationOut,
   type MeResponse,
   type OpportunityDetail,
   type PursuitCard as PursuitCardT,
@@ -127,6 +128,7 @@ export default async function OpportunityDetailPage({
     extraction,
     compliance,
     requirements,
+    evaluation,
     cyberSummary
   ] = await Promise.all([
       apiFetch<MeResponse>("/me"),
@@ -165,6 +167,9 @@ export default async function OpportunityDetailPage({
       apiFetch<RequirementsMatrixOut>(
         `/opportunities/${id}/requirements-matrix`
       ).catch(() => null as RequirementsMatrixOut | null),
+      apiFetch<EvaluationOut>(`/opportunities/${id}/evaluation`).catch(
+        () => null as EvaluationOut | null
+      ),
       apiFetch<CyberSummaryOut>(`/opportunities/${id}/cyber-summary`).catch(
         () => null as CyberSummaryOut | null
       )
@@ -287,6 +292,7 @@ export default async function OpportunityDetailPage({
         extraction={extraction}
         compliance={compliance}
         requirements={requirements}
+        evaluation={evaluation}
       />
 
       {/* Two-column main: description (with brief tab) left, incumbent + capability right */}

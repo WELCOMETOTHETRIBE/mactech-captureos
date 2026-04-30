@@ -19,11 +19,13 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mactech_db.models import (
     ComplianceMatrixItem,
+    EvaluationPassFailItem,
+    EvaluationScoredFactor,
     Founder,
     OpportunityBrief,
     OpportunityEnriched,
@@ -32,6 +34,9 @@ from mactech_db.models import (
     OpportunityScore,
     PastPerformance,
     Pursuit,
+    PursuitKeyPersonnel,
+    PursuitPastPerformance,
+    PursuitTeamingPartner,
     RequirementMatrixItem,
     SolicitationExtraction,
     TeamingPartner,
@@ -52,12 +57,14 @@ from mactech_intelligence.schemas.capture_package import (
     KeyPersonnelSection,
     OpportunitySection,
     PackageCompleteness,
+    PassFailItem,
     PastPerformanceRef,
     PastPerformanceSection,
     QAEntry,
     QAHistorySection,
     RequirementItem,
     RequirementsMatrixSection,
+    ScoredFactor,
     SolicitationSection,
     TeamingPartnerRef,
     TeamingPartnersSection,
@@ -125,9 +132,15 @@ class CapturePackageBuilder:
         bid_decision = self._build_bid_decision_section(pursuit, score, founder_owner)
         qa_section = self._build_qa_section(questions)
 
-        past_performance = await self._build_past_performance_section(tenant_id)
-        key_personnel = await self._build_key_personnel_section(tenant_id)
-        teaming_partners = await self._build_teaming_partners_section(tenant_id)
+        past_performance = await self._build_past_performance_section(
+            tenant_id, pursuit.id
+        )
+        key_personnel = await self._build_key_personnel_section(
+            tenant_id, pursuit.id
+        )
+        teaming_partners = await self._build_teaming_partners_section(
+            tenant_id, pursuit.id
+        )
 
         compliance = await self._build_compliance_matrix_section(
             tenant_id, opportunity.id
@@ -135,12 +148,15 @@ class CapturePackageBuilder:
         requirements = await self._build_requirements_matrix_section(
             tenant_id, opportunity.id
         )
+        evaluation = await self._build_evaluation_section(
+            tenant_id, opportunity.id
+        )
+        win_strategy = WinStrategySection(
+            win_themes=list(pursuit.win_themes or []),
+            discriminators=list(pursuit.discriminators or []),
+        )
 
-        # Sections we don't yet fill: evaluation factors, win strategy,
-        # governance readiness. Schema-stable empties so consumers can
-        # deserialize.
-        evaluation = EvaluationSection()
-        win_strategy = WinStrategySection()
+        # GovernanceOS not yet wired — Integration Contract #2 stays stub.
         governance = GovernanceReadinessSection()
 
         completeness = self._compute_completeness(
@@ -498,57 +514,92 @@ class CapturePackageBuilder:
         )
 
     async def _build_past_performance_section(
-        self, tenant_id: UUID
+        self, tenant_id: UUID, pursuit_id: UUID
     ) -> PastPerformanceSection:
+        library_size = (
+            await self.session.execute(
+                select(func.count())
+                .select_from(PastPerformance)
+                .where(PastPerformance.tenant_id == tenant_id)
+            )
+        ).scalar_one()
+
         rows = list(
             (
                 await self.session.execute(
-                    select(PastPerformance).where(
-                        PastPerformance.tenant_id == tenant_id
+                    select(PastPerformance, PursuitPastPerformance)
+                    .join(
+                        PursuitPastPerformance,
+                        PursuitPastPerformance.past_performance_id
+                        == PastPerformance.id,
                     )
+                    .where(PursuitPastPerformance.pursuit_id == pursuit_id)
+                    .order_by(PursuitPastPerformance.sort_order.asc())
                 )
-            )
-            .scalars()
-            .all()
+            ).all()
         )
-        # V1: pursuits don't yet link to specific PP records. We report
-        # library_size and leave selected[] empty so ProposalOS sees the
-        # gap explicitly.
+        selected = [
+            PastPerformanceRef(
+                id=str(pp.id),
+                title=pp.title,
+                customer_agency=pp.customer_agency,
+                customer_office=pp.customer_office,
+                contract_number=pp.contract_number,
+                role=link.role or pp.role,
+                period_start=to_iso(pp.period_start),
+                period_end=to_iso(pp.period_end),
+                contract_value=_decimal_to_float(pp.contract_value),
+                summary=pp.summary,
+                keywords=list(pp.keywords or []),
+            )
+            for pp, link in rows
+        ]
         return PastPerformanceSection(
-            selected=[],
-            library_size=len(rows),
-            selection_method="none",
+            selected=selected,
+            library_size=int(library_size),
+            selection_method="manual" if selected else "none",
         )
 
     async def _build_key_personnel_section(
-        self, tenant_id: UUID
+        self, tenant_id: UUID, pursuit_id: UUID
     ) -> KeyPersonnelSection:
-        founders = list(
+        library_size = (
+            await self.session.execute(
+                select(func.count())
+                .select_from(Founder)
+                .where(Founder.tenant_id == tenant_id)
+            )
+        ).scalar_one()
+
+        rows = list(
             (
                 await self.session.execute(
-                    select(Founder).where(Founder.tenant_id == tenant_id)
+                    select(Founder, PursuitKeyPersonnel)
+                    .join(
+                        PursuitKeyPersonnel,
+                        PursuitKeyPersonnel.founder_id == Founder.id,
+                    )
+                    .where(PursuitKeyPersonnel.pursuit_id == pursuit_id)
+                    .order_by(PursuitKeyPersonnel.sort_order.asc())
                 )
-            )
-            .scalars()
-            .all()
+            ).all()
         )
-        # V1: founders are the implicit key personnel pool. We surface them
-        # as the available library; explicit per-pursuit selection lands
-        # when key-personnel-on-pursuit linkage is built.
-        refs = [
+        selected = [
             KeyPersonRef(
                 id=str(f.id),
                 slug=f.slug,
                 full_name=f.full_name,
-                title=f.title,
+                title=link.role or f.title,
                 pillar=f.pillar,
                 bio=f.bio,
                 email=f.email,
                 areas_of_expertise=list(f.areas_of_expertise or []),
             )
-            for f in founders
+            for f, link in rows
         ]
-        return KeyPersonnelSection(selected=[], library_size=len(refs))
+        return KeyPersonnelSection(
+            selected=selected, library_size=int(library_size)
+        )
 
     async def _load_extraction(
         self, tenant_id: UUID, opportunity_id: UUID
@@ -599,6 +650,63 @@ class CapturePackageBuilder:
             status=status_value,  # type: ignore[arg-type]
         )
 
+    async def _build_evaluation_section(
+        self, tenant_id: UUID, opportunity_id: UUID
+    ) -> EvaluationSection:
+        extraction = await self._load_extraction(tenant_id, opportunity_id)
+        if extraction is None:
+            return EvaluationSection()
+
+        pass_fail_rows = list(
+            (
+                await self.session.execute(
+                    select(EvaluationPassFailItem)
+                    .where(EvaluationPassFailItem.extraction_id == extraction.id)
+                    .order_by(EvaluationPassFailItem.sort_order.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        scored_rows = list(
+            (
+                await self.session.execute(
+                    select(EvaluationScoredFactor)
+                    .where(EvaluationScoredFactor.extraction_id == extraction.id)
+                    .order_by(EvaluationScoredFactor.sort_order.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        pass_fail = [
+            PassFailItem(
+                statement=row.statement,
+                source_citation=row.source_citation,
+            )
+            for row in pass_fail_rows
+        ]
+        scored = [
+            ScoredFactor(
+                name=row.name,
+                weight=float(row.weight) if row.weight is not None else None,
+                description=row.description,
+                source_citation=row.source_citation,
+            )
+            for row in scored_rows
+        ]
+
+        # An extraction exists, so call it "extracted" even if both arrays
+        # came back empty — the runtime gap is what we surface, not the row's
+        # presence.
+        status_value = "extracted" if (pass_fail or scored) else "not_extracted"
+        return EvaluationSection(
+            pass_fail_items=pass_fail,
+            scored_factors=scored,
+            status=status_value,  # type: ignore[arg-type]
+        )
+
     async def _build_requirements_matrix_section(
         self, tenant_id: UUID, opportunity_id: UUID
     ) -> RequirementsMatrixSection:
@@ -635,24 +743,45 @@ class CapturePackageBuilder:
         )
 
     async def _build_teaming_partners_section(
-        self, tenant_id: UUID
+        self, tenant_id: UUID, pursuit_id: UUID
     ) -> TeamingPartnersSection:
-        partners = list(
+        library_size = (
+            await self.session.execute(
+                select(func.count())
+                .select_from(TeamingPartner)
+                .where(TeamingPartner.tenant_id == tenant_id)
+            )
+        ).scalar_one()
+
+        rows = list(
             (
                 await self.session.execute(
-                    select(TeamingPartner).where(
-                        TeamingPartner.tenant_id == tenant_id
+                    select(TeamingPartner, PursuitTeamingPartner)
+                    .join(
+                        PursuitTeamingPartner,
+                        PursuitTeamingPartner.teaming_partner_id == TeamingPartner.id,
                     )
+                    .where(PursuitTeamingPartner.pursuit_id == pursuit_id)
+                    .order_by(PursuitTeamingPartner.sort_order.asc())
                 )
-            )
-            .scalars()
-            .all()
+            ).all()
         )
-        # V1: pursuits don't yet link to specific partners. Report library
-        # size; selected[] stays empty until per-pursuit linking lands.
+        selected = [
+            TeamingPartnerRef(
+                id=str(p.id),
+                name=p.name,
+                uei=p.uei,
+                cage_code=p.cage_code,
+                capabilities=list(p.capabilities or []),
+                naics_codes=list(p.naics_codes or []),
+                set_aside_certifications=list(p.set_aside_certifications or []),
+                contact_name=p.contact_name,
+                contact_email=p.contact_email,
+            )
+            for p, _link in rows
+        ]
         return TeamingPartnersSection(
-            selected=[],
-            library_size=len(partners),
+            selected=selected, library_size=int(library_size)
         )
 
     # ------------------------------------------------------------------
@@ -730,9 +859,18 @@ class CapturePackageBuilder:
 
         if evaluation.pass_fail_items or evaluation.scored_factors:
             complete.append("evaluation")
+        elif evaluation.status == "extracted":
+            partial.append("evaluation")
+            gaps.append(
+                "Evaluation extracted but yielded no items — Section M likely "
+                "lives in attached PDFs. Re-run after file ingest is built."
+            )
         else:
             missing.append("evaluation")
-            gaps.append("Section M evaluation factors not extracted yet.")
+            gaps.append(
+                "Section M evaluation factors not extracted yet. POST "
+                "/opportunities/{id}/solicitation-extraction to generate."
+            )
 
         if cyber.posture_snapshot is not None:
             complete.append("cyber")
@@ -752,7 +890,10 @@ class CapturePackageBuilder:
             complete.append("win_strategy")
         else:
             missing.append("win_strategy")
-            gaps.append("Win themes and discriminators not captured yet.")
+            gaps.append(
+                "Win themes and discriminators not captured yet. Edit on "
+                "the pursuit detail page."
+            )
 
         if past_performance.selected:
             complete.append("past_performance")

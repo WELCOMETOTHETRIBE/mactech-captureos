@@ -760,6 +760,7 @@ export type SolicitationExtractionOut = {
   description_chars: number | null;
   compliance_count: number;
   requirements_count: number;
+  evaluation_count: number;
   model: string | null;
   prompt_version: string | null;
   input_tokens: number | null;
@@ -808,6 +809,30 @@ export type RequirementsMatrixOut = {
   extraction_id: string;
   opportunity_id: string;
   items: RequirementItemOut[];
+  last_extracted_at: string;
+};
+
+export type EvaluationPassFailItemOut = {
+  id: string;
+  statement: string;
+  source_citation: string | null;
+  sort_order: number;
+};
+
+export type EvaluationScoredFactorOut = {
+  id: string;
+  name: string;
+  weight: number | null;
+  description: string | null;
+  source_citation: string | null;
+  sort_order: number;
+};
+
+export type EvaluationOut = {
+  extraction_id: string;
+  opportunity_id: string;
+  pass_fail_items: EvaluationPassFailItemOut[];
+  scored_factors: EvaluationScoredFactorOut[];
   last_extracted_at: string;
 };
 
