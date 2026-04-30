@@ -744,6 +744,72 @@ export type ForecastOut = {
   incumbent_filings_last_90d: number | null;
 };
 
+/* ── /pursuits/{id} (detail) ────────────────────────────────────── */
+
+export type PursuitOppLite = {
+  id: string;
+  notice_id: string;
+  title: string;
+  agency: string | null;
+  naics_code: string | null;
+  set_aside: string | null;
+  posted_at: string | null;
+  response_deadline: string | null;
+};
+
+export type LinkedPastPerformance = {
+  id: string;
+  title: string;
+  customer_agency: string | null;
+  customer_office: string | null;
+  contract_number: string | null;
+  role: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  contract_value: number | null;
+  summary: string | null;
+  sort_order: number;
+};
+
+export type LinkedKeyPerson = {
+  id: string;
+  slug: string;
+  full_name: string;
+  title: string | null;
+  pillar: string | null;
+  sort_order: number;
+};
+
+export type LinkedTeamingPartner = {
+  id: string;
+  name: string;
+  uei: string | null;
+  capabilities: string[];
+  naics_codes: string[];
+  set_aside_certifications: string[];
+  sort_order: number;
+};
+
+export type PursuitDetailOut = {
+  id: string;
+  stage: PursuitStage;
+  notes: string | null;
+  win_themes: string[];
+  discriminators: string[];
+  owner_founder_slug: string | null;
+  owner_founder_name: string | null;
+  created_at: string;
+  updated_at: string;
+  last_stage_change_at: string;
+  opportunity: PursuitOppLite;
+  selected_past_performance: LinkedPastPerformance[];
+  selected_key_personnel: LinkedKeyPerson[];
+  selected_teaming_partners: LinkedTeamingPartner[];
+  library_size_past_performance: number;
+  library_size_key_personnel: number;
+  library_size_teaming_partners: number;
+};
+
 export type ForecastsResponse = {
   total: number;
   items: ForecastOut[];

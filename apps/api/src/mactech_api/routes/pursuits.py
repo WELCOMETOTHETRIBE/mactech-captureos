@@ -87,6 +87,10 @@ class UpdatePursuitRequest(BaseModel):
     owner_founder_slug: str | None = Field(default=None)
     clear_owner: bool = False
     notes: str | None = None
+    # Capture-strategy fields. Pass an array (possibly empty) to replace
+    # the current contents; pass None / omit to leave them alone.
+    win_themes: list[str] | None = None
+    discriminators: list[str] | None = None
 
 
 STAGE_LABELS = {
@@ -404,6 +408,14 @@ async def update_pursuit(
 
     if body.notes is not None:
         pursuit.notes = body.notes
+
+    if body.win_themes is not None:
+        pursuit.win_themes = [t.strip() for t in body.win_themes if t and t.strip()]
+
+    if body.discriminators is not None:
+        pursuit.discriminators = [
+            d.strip() for d in body.discriminators if d and d.strip()
+        ]
 
     # SQLAlchemy `onupdate=func.now()` should bump `updated_at` on flush, but
     # set it explicitly so the value is correct even if a future raw-SQL path

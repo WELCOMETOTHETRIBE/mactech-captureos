@@ -295,6 +295,20 @@ function Card({
 
       {!compact && (
         <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-neutral-100 pt-2">
+          <Link
+            href={`/pursuits/${card.id}`}
+            className="rounded-md border border-neutral-300 px-2 py-0.5 text-[11px] text-neutral-700 hover:border-neutral-500 hover:bg-neutral-50"
+            title="Open pursuit detail (win themes, asset selection)"
+          >
+            Open
+          </Link>
+          <Link
+            href={`/pursuits/${card.id}/capture-package`}
+            className="rounded-md border border-brand-300 bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-800 hover:bg-brand-100"
+            title="Capture Package handoff to ProposalOS"
+          >
+            Pkg →
+          </Link>
           {canRegress && (
             <StageBtn
               card={card}

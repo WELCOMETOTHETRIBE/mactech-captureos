@@ -1,7 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { apiFetch, type PursuitCard, type PursuitStage } from "@/lib/api";
+import {
+  apiFetch,
+  type PursuitCard,
+  type PursuitDetailOut,
+  type PursuitStage,
+} from "@/lib/api";
 
 /**
  * Server actions for the capture pipeline kanban. All run on the server
@@ -36,6 +41,8 @@ export async function updatePursuit(input: {
   ownerFounderSlug?: string | null;
   clearOwner?: boolean;
   notes?: string | null;
+  winThemes?: string[];
+  discriminators?: string[];
 }): Promise<PursuitCard> {
   const body: Record<string, unknown> = {};
   if (input.stage) body.stage = input.stage;
@@ -45,6 +52,8 @@ export async function updatePursuit(input: {
     body.owner_founder_slug = input.ownerFounderSlug;
   }
   if (input.notes !== undefined) body.notes = input.notes;
+  if (input.winThemes !== undefined) body.win_themes = input.winThemes;
+  if (input.discriminators !== undefined) body.discriminators = input.discriminators;
 
   const card = await apiFetch<PursuitCard>(`/pursuits/${input.pursuitId}`, {
     method: "PATCH",
@@ -52,6 +61,7 @@ export async function updatePursuit(input: {
   });
   revalidatePath("/pipeline");
   revalidatePath(`/opportunities/${input.opportunityId}`);
+  revalidatePath(`/pursuits/${input.pursuitId}`);
   return card;
 }
 
@@ -62,4 +72,60 @@ export async function deletePursuit(input: {
   await apiFetch<void>(`/pursuits/${input.pursuitId}`, { method: "DELETE" });
   revalidatePath("/pipeline");
   revalidatePath(`/opportunities/${input.opportunityId}`);
+}
+
+export async function replacePursuitPastPerformance(
+  pursuitId: string,
+  pastPerformanceIds: string[]
+): Promise<void> {
+  await apiFetch<PursuitDetailOut>(
+    `/pursuits/${pursuitId}/past-performance`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ past_performance_ids: pastPerformanceIds }),
+    }
+  );
+  revalidatePath(`/pursuits/${pursuitId}`);
+  revalidatePath(`/pursuits/${pursuitId}/capture-package`);
+}
+
+export async function replacePursuitKeyPersonnel(
+  pursuitId: string,
+  founderIds: string[]
+): Promise<void> {
+  await apiFetch<PursuitDetailOut>(`/pursuits/${pursuitId}/key-personnel`, {
+    method: "PUT",
+    body: JSON.stringify({ founder_ids: founderIds }),
+  });
+  revalidatePath(`/pursuits/${pursuitId}`);
+  revalidatePath(`/pursuits/${pursuitId}/capture-package`);
+}
+
+export async function replacePursuitTeamingPartners(
+  pursuitId: string,
+  teamingPartnerIds: string[]
+): Promise<void> {
+  await apiFetch<PursuitDetailOut>(
+    `/pursuits/${pursuitId}/teaming-partners`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ teaming_partner_ids: teamingPartnerIds }),
+    }
+  );
+  revalidatePath(`/pursuits/${pursuitId}`);
+  revalidatePath(`/pursuits/${pursuitId}/capture-package`);
+}
+
+export async function updatePursuitWinStrategy(
+  pursuitId: string,
+  opportunityId: string,
+  winThemes: string[],
+  discriminators: string[]
+): Promise<void> {
+  await updatePursuit({
+    pursuitId,
+    opportunityId,
+    winThemes,
+    discriminators,
+  });
 }
