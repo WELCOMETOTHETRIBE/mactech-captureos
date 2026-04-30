@@ -21,6 +21,7 @@ from mactech_api.routes.past_performance import router as past_performance_route
 from mactech_api.routes.pursuits import router as pursuits_router
 from mactech_api.routes.search import router as search_router
 from mactech_api.routes.settings import router as settings_router
+from mactech_api.routes.solicitation import router as solicitation_router
 from mactech_api.routes.teaming_partners import router as teaming_partners_router
 from mactech_api.routes.web_mentions import router as web_mentions_router
 from mactech_api.routes.webhooks import router as webhooks_router
@@ -64,6 +65,7 @@ app.include_router(web_mentions_router)
 app.include_router(webhooks_router)
 app.include_router(events_router)
 app.include_router(forecasts_router)
+app.include_router(solicitation_router)
 app.include_router(capture_package_router)
 
 

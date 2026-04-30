@@ -23,6 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mactech_db.models import (
+    ComplianceMatrixItem,
     Founder,
     OpportunityBrief,
     OpportunityEnriched,
@@ -31,6 +32,8 @@ from mactech_db.models import (
     OpportunityScore,
     PastPerformance,
     Pursuit,
+    RequirementMatrixItem,
+    SolicitationExtraction,
     TeamingPartner,
     Tenant,
 )
@@ -38,6 +41,7 @@ from mactech_intelligence.schemas.capture_package import (
     BidDecisionSection,
     CapturePackage,
     CaptureStrategySection,
+    ComplianceItem,
     ComplianceMatrixSection,
     CyberPostureSnapshot,
     CyberSection,
@@ -52,6 +56,7 @@ from mactech_intelligence.schemas.capture_package import (
     PastPerformanceSection,
     QAEntry,
     QAHistorySection,
+    RequirementItem,
     RequirementsMatrixSection,
     SolicitationSection,
     TeamingPartnerRef,
@@ -124,11 +129,16 @@ class CapturePackageBuilder:
         key_personnel = await self._build_key_personnel_section(tenant_id)
         teaming_partners = await self._build_teaming_partners_section(tenant_id)
 
-        # Sections we don't yet fill: compliance matrix, requirements matrix,
-        # evaluation factors, win strategy, governance readiness. Schema-stable
-        # empties so consumers can deserialize.
-        compliance = ComplianceMatrixSection()
-        requirements = RequirementsMatrixSection()
+        compliance = await self._build_compliance_matrix_section(
+            tenant_id, opportunity.id
+        )
+        requirements = await self._build_requirements_matrix_section(
+            tenant_id, opportunity.id
+        )
+
+        # Sections we don't yet fill: evaluation factors, win strategy,
+        # governance readiness. Schema-stable empties so consumers can
+        # deserialize.
         evaluation = EvaluationSection()
         win_strategy = WinStrategySection()
         governance = GovernanceReadinessSection()
@@ -540,6 +550,90 @@ class CapturePackageBuilder:
         ]
         return KeyPersonnelSection(selected=[], library_size=len(refs))
 
+    async def _load_extraction(
+        self, tenant_id: UUID, opportunity_id: UUID
+    ) -> SolicitationExtraction | None:
+        return (
+            await self.session.execute(
+                select(SolicitationExtraction).where(
+                    SolicitationExtraction.tenant_id == tenant_id,
+                    SolicitationExtraction.opportunity_id == opportunity_id,
+                )
+            )
+        ).scalar_one_or_none()
+
+    async def _build_compliance_matrix_section(
+        self, tenant_id: UUID, opportunity_id: UUID
+    ) -> ComplianceMatrixSection:
+        extraction = await self._load_extraction(tenant_id, opportunity_id)
+        if extraction is None:
+            return ComplianceMatrixSection()
+
+        rows = list(
+            (
+                await self.session.execute(
+                    select(ComplianceMatrixItem)
+                    .where(ComplianceMatrixItem.extraction_id == extraction.id)
+                    .order_by(ComplianceMatrixItem.sort_order.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        items = [
+            ComplianceItem(
+                id=row.item_id,
+                statement=row.statement,
+                section_l_citation=row.section_l_citation,
+                pass_fail=row.pass_fail,
+                notes=row.notes,
+            )
+            for row in rows
+        ]
+
+        status_value = "generated" if items else "not_generated"
+        return ComplianceMatrixSection(
+            items=items,
+            source_documents=["opportunity.description_text"] if items else [],
+            last_generated_at=to_iso(extraction.updated_at),
+            status=status_value,  # type: ignore[arg-type]
+        )
+
+    async def _build_requirements_matrix_section(
+        self, tenant_id: UUID, opportunity_id: UUID
+    ) -> RequirementsMatrixSection:
+        extraction = await self._load_extraction(tenant_id, opportunity_id)
+        if extraction is None:
+            return RequirementsMatrixSection()
+
+        rows = list(
+            (
+                await self.session.execute(
+                    select(RequirementMatrixItem)
+                    .where(RequirementMatrixItem.extraction_id == extraction.id)
+                    .order_by(RequirementMatrixItem.sort_order.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        items = [
+            RequirementItem(
+                id=row.item_id,
+                statement=row.statement,
+                source_citation=row.source_citation,
+                category=row.category,  # type: ignore[arg-type]
+            )
+            for row in rows
+        ]
+
+        status_value = "generated" if items else "not_generated"
+        return RequirementsMatrixSection(
+            items=items,
+            last_generated_at=to_iso(extraction.updated_at),
+            status=status_value,  # type: ignore[arg-type]
+        )
+
     async def _build_teaming_partners_section(
         self, tenant_id: UUID
     ) -> TeamingPartnersSection:
@@ -605,15 +699,34 @@ class CapturePackageBuilder:
 
         if compliance.items:
             complete.append("compliance_matrix")
+        elif compliance.status == "generated":
+            partial.append("compliance_matrix")
+            gaps.append(
+                "Compliance matrix extracted but yielded no items — likely "
+                "the description text is too thin (Section L lives in attached PDFs). "
+                "Re-run after file ingest is built."
+            )
         else:
             missing.append("compliance_matrix")
-            gaps.append("Compliance matrix not generated yet (Section C — pending).")
+            gaps.append(
+                "Compliance matrix not generated yet. POST "
+                "/opportunities/{id}/solicitation-extraction to generate."
+            )
 
         if requirements.items:
             complete.append("requirements_matrix")
+        elif requirements.status == "generated":
+            partial.append("requirements_matrix")
+            gaps.append(
+                "Requirements matrix extracted but yielded no items — same "
+                "cause as compliance matrix above."
+            )
         else:
             missing.append("requirements_matrix")
-            gaps.append("Requirements matrix not generated yet (Section C — pending).")
+            gaps.append(
+                "Requirements matrix not generated yet. POST "
+                "/opportunities/{id}/solicitation-extraction to generate."
+            )
 
         if evaluation.pass_fail_items or evaluation.scored_factors:
             complete.append("evaluation")

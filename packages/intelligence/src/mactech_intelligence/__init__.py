@@ -35,6 +35,14 @@ from mactech_intelligence.extract_past_performance import (
     PastPerformanceExtractionError,
     extract_past_performance,
 )
+from mactech_intelligence.extract_solicitation import (
+    ExtractedComplianceItem,
+    ExtractedRequirementItem,
+    ExtractSolicitationInput,
+    SolicitationExtractionError,
+    SolicitationExtractionResult,
+    extract_solicitation,
+)
 from mactech_intelligence.llm import AnthropicLLMClient, LLMResponse, StreamChunk
 from mactech_intelligence.scoring import (
     OpportunityFacts,
@@ -66,8 +74,11 @@ __all__ = [
     "CapabilityContext",
     "CapabilityExtractionError",
     "ExtractBriefInput",
+    "ExtractSolicitationInput",
     "ExtractedCapabilityStatement",
+    "ExtractedComplianceItem",
     "ExtractedPastPerformance",
+    "ExtractedRequirementItem",
     "FounderContext",
     "LLMResponse",
     "OpportunityContext",
@@ -76,6 +87,8 @@ __all__ = [
     "PastPerformanceExtractionError",
     "ScoringContext",
     "ScoringResult",
+    "SolicitationExtractionError",
+    "SolicitationExtractionResult",
     "SourcesSoughtInput",
     "StreamChunk",
     "StructuredBrief",
@@ -87,6 +100,7 @@ __all__ = [
     "explain_term",
     "extract_capability_statement",
     "extract_past_performance",
+    "extract_solicitation",
     "extract_structured_brief",
     "generate_sources_sought_draft",
     "generate_why_it_matters",
