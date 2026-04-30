@@ -17,8 +17,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import cast, func, or_, select, text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Text, cast, func, or_, select, text
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 
 from mactech_api.auth import RequestContext, get_request_context
 from mactech_db.models import (
@@ -389,10 +389,17 @@ def _deduped_subquery():
 
 
 def _apply_naics_filter(stmt, target_set: set[str]):
+    # ``jsonb ?| text[]`` is the existence-of-any-key operator. SQLAlchemy
+    # passes Python lists as JSONB by default, but the operator requires
+    # the right-hand side to be ``text[]`` — without the explicit cast
+    # asyncpg fails with ``operator does not exist: jsonb ?| jsonb``.
+    target_list = list(target_set)
     return stmt.where(
         or_(
-            ForecastRaw.naics_code.in_(list(target_set)),
-            cast(ForecastRaw.naics_codes, JSONB).op("?|")(list(target_set)),
+            ForecastRaw.naics_code.in_(target_list),
+            cast(ForecastRaw.naics_codes, JSONB).op("?|")(
+                cast(target_list, ARRAY(Text))
+            ),
         )
     )
 
