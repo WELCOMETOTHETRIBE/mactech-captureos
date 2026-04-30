@@ -129,13 +129,14 @@ async function main() {
         last_name: devUser.last_name ?? undefined,
         external_id: devUser.external_id ?? undefined,
         skip_password_checks: true,
-        ...(devUser.password_enabled
+        skip_password_requirement: true,
+        ...(devUser.password_enabled && devUser.password_digest
           ? {
               // Bring over the bcrypt hash if Clerk stored one in dev.
-              // (Users who only ever signed in with Google won't have one;
-              // they'll just sign in with Google again on prod.)
-              password_digest: devUser.password_digest ?? undefined,
-              password_hasher: devUser.password_digest ? 'bcrypt' : undefined,
+              // Users who only ever signed in with Google won't have one;
+              // they'll re-auth with Google on prod.
+              password_digest: devUser.password_digest,
+              password_hasher: 'bcrypt',
             }
           : {}),
       }
