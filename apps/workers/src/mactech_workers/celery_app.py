@@ -156,6 +156,32 @@ def health() -> str:
     return "ok"
 
 
+def _log_integration_token_presence() -> None:
+    """At process boot, log which integration tokens are set vs missing.
+
+    Tasks silently no-op when their token is missing (so transient outages
+    don't crash the worker), but that means a missing-token deploy is
+    invisible until users notice empty UI states. This boot log makes
+    the gap unmissable in the worker's first few log lines.
+    """
+    checks = (
+        ("APIFY_API_TOKEN", "Apify forecast + industry-day scrapers"),
+        ("ANTHROPIC_API_KEY", "Claude — used by every LLM extractor + brief"),
+        ("SAM_GOV_API_KEY", "SAM.gov ingest + tenant verification"),
+        ("CODEX_API_TOKEN", "Codex SPRS posture sync (optional, anonymous works)"),
+        ("RESEND_API_KEY", "Morning digest email delivery"),
+    )
+    for var, purpose in checks:
+        present = bool(os.environ.get(var))
+        marker = "✓" if present else "✗ MISSING"
+        log.warning(
+            "[integration] %s %s — %s", marker.ljust(10), var, purpose
+        )
+
+
+_log_integration_token_presence()
+
+
 @task_prerun.connect
 def _reset_db_engine_per_task(*args: object, **kwargs: object) -> None:
     """Drop the lru_cache'd async engine + session factory before every

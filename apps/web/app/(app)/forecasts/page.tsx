@@ -1,5 +1,9 @@
 import Link from "next/link";
-import { apiFetch, type ForecastsResponse } from "@/lib/api";
+import {
+  apiFetch,
+  type ForecastsResponse,
+  type IntegrationsResponse,
+} from "@/lib/api";
 import {
   Card,
   NaicsBadge,
@@ -8,6 +12,8 @@ import {
   fmtDate,
   fmtMoney
 } from "@/components/ui";
+import { IntegrationDiagnostic } from "@/components/integration-diagnostic";
+import { triggerForecastsRun } from "@/lib/integrations";
 
 export const dynamic = "force-dynamic";
 
@@ -18,11 +24,25 @@ export default async function ForecastsPage({
 }) {
   const sp = (await searchParams) ?? {};
   const showAll = sp.all === "1";
-  const data = await apiFetch<ForecastsResponse>(
-    `/forecasts?upcoming_only=true&naics_filter=${showAll ? "false" : "true"}&limit=120`
-  ).catch(
-    () => ({ total: 0, items: [], target_naics_filter: false, target_naics: [] }) as ForecastsResponse
-  );
+  const [data, integrations] = await Promise.all([
+    apiFetch<ForecastsResponse>(
+      `/forecasts?upcoming_only=true&naics_filter=${showAll ? "false" : "true"}&limit=120`
+    ).catch(
+      () =>
+        ({
+          total: 0,
+          items: [],
+          target_naics_filter: false,
+          target_naics: []
+        }) as ForecastsResponse
+    ),
+    apiFetch<IntegrationsResponse>("/me/integrations").catch(
+      () => null as IntegrationsResponse | null
+    )
+  ]);
+  const forecastsStatus =
+    integrations?.integrations.find((i) => i.capability === "forecasts") ??
+    null;
 
   return (
     <div className="space-y-6">
@@ -58,14 +78,13 @@ export default async function ForecastsPage({
       ) : null}
 
       {data.items.length === 0 ? (
-        <Card>
-          <p className="text-sm text-neutral-500">
-            No forecasts captured yet. The Apify daily beat (0530 ET)
-            populates this on completion. Check back tomorrow, or
-            verify <code>APIFY_API_TOKEN</code> is set on the workers
-            service.
-          </p>
-        </Card>
+        <IntegrationDiagnostic
+          status={forecastsStatus}
+          triggerAction={async () => {
+            "use server";
+            await triggerForecastsRun();
+          }}
+        />
       ) : (
         <ul className="space-y-3">
           {data.items.map((fc) => (

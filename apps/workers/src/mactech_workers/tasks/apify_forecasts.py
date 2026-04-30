@@ -194,6 +194,11 @@ async def _kick_and_ingest() -> dict[str, Any]:
     api_token = os.environ.get("APIFY_API_TOKEN", "")
     if not api_token:
         log.warning("APIFY_API_TOKEN not set; skipping forecasts kick")
+        await _record_skipped_run(
+            capability="forecasts",
+            actor_id=WEBSITE_CONTENT_CRAWLER_ACTOR,
+            reason="APIFY_API_TOKEN not set on the workers service",
+        )
         return {"started": False, "reason": "no_token"}
 
     run_input = {
@@ -264,6 +269,44 @@ async def _kick_and_ingest() -> dict[str, Any]:
         "skipped": stats.skipped_low_signal,
         "extraction_failures": stats.extraction_failures,
     }
+
+
+async def _record_skipped_run(
+    *,
+    capability: str,
+    actor_id: str,
+    reason: str,
+) -> None:
+    """Persist an audit row when a kick is skipped (e.g. token missing).
+
+    Without this, missing-config skips leave zero trace in the DB, and
+    the UI can't tell users why the worker isn't producing data. Idempotent
+    per (capability, day) via the synthetic apify_run_id.
+    """
+    sentinel_run_id = f"worker-skipped-{capability}-{date.today().isoformat()}"
+    async with unscoped_session() as session:
+        stmt = (
+            pg_insert(ApifyRun)
+            .values(
+                apify_run_id=sentinel_run_id,
+                apify_actor_id=actor_id,
+                capability=capability,
+                event_type="WORKER.RUN.SKIPPED",
+                apify_status="SKIPPED",
+                dataset_id=None,
+                items_count=0,
+                ingest_error=reason[:1000],
+                payload={"reason": reason, "source": "worker_inline"},
+            )
+            .on_conflict_do_update(
+                index_elements=["apify_run_id", "event_type"],
+                set_={
+                    "ingest_error": reason[:1000],
+                    "received_at": datetime.now(UTC),
+                },
+            )
+        )
+        await session.execute(stmt)
 
 
 async def _record_synthetic_audit(

@@ -13,6 +13,7 @@ from mactech_api.routes.drafts import router as drafts_router
 from mactech_api.routes.eligibility import router as eligibility_router
 from mactech_api.routes.events import router as events_router
 from mactech_api.routes.forecasts import router as forecasts_router
+from mactech_api.routes.integrations import router as integrations_router
 from mactech_api.routes.explain import router as explain_router
 from mactech_api.routes.founders import router as founders_router
 from mactech_api.routes.library import router as library_router
@@ -73,6 +74,7 @@ app.include_router(forecasts_router)
 app.include_router(solicitation_router)
 app.include_router(amendments_router)
 app.include_router(eligibility_router)
+app.include_router(integrations_router)
 app.include_router(cyber_router)
 app.include_router(capture_package_router)
 

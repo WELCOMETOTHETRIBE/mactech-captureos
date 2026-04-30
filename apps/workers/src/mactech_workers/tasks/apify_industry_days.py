@@ -172,6 +172,11 @@ async def _kick_and_ingest() -> dict[str, Any]:
         log.warning(
             "APIFY_API_TOKEN not set; skipping industry-days kick"
         )
+        await _record_skipped_run(
+            capability="industry_days",
+            actor_id=WEBSITE_CONTENT_CRAWLER_ACTOR,
+            reason="APIFY_API_TOKEN not set on the workers service",
+        )
         return {"started": False, "reason": "no_token"}
 
     run_input = {
@@ -259,6 +264,41 @@ async def _kick_and_ingest() -> dict[str, Any]:
         "items_seen": stats.items_seen,
         "extraction_failures": stats.extraction_failures,
     }
+
+
+async def _record_skipped_run(
+    *,
+    capability: str,
+    actor_id: str,
+    reason: str,
+) -> None:
+    """Audit row for a kick that didn't actually start (e.g. token missing).
+    Mirrored in apify_forecasts._record_skipped_run; same idempotency
+    via the synthetic apify_run_id ``worker-skipped-{cap}-{date}``."""
+    sentinel_run_id = f"worker-skipped-{capability}-{date.today().isoformat()}"
+    async with unscoped_session() as session:
+        stmt = (
+            pg_insert(ApifyRun)
+            .values(
+                apify_run_id=sentinel_run_id,
+                apify_actor_id=actor_id,
+                capability=capability,
+                event_type="WORKER.RUN.SKIPPED",
+                apify_status="SKIPPED",
+                dataset_id=None,
+                items_count=0,
+                ingest_error=reason[:1000],
+                payload={"reason": reason, "source": "worker_inline"},
+            )
+            .on_conflict_do_update(
+                index_elements=["apify_run_id", "event_type"],
+                set_={
+                    "ingest_error": reason[:1000],
+                    "received_at": datetime.now(UTC),
+                },
+            )
+        )
+        await session.execute(stmt)
 
 
 async def _record_synthetic_audit(

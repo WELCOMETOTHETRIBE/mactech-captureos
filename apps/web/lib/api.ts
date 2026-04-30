@@ -744,6 +744,32 @@ export type ForecastOut = {
   incumbent_filings_last_90d: number | null;
 };
 
+/* ── /me/integrations ──────────────────────────────────────────── */
+
+export type IntegrationRunOut = {
+  capability: string;
+  last_event_type: string | null;
+  apify_status: string | null;
+  items_count: number | null;
+  ingest_error: string | null;
+  received_at: string | null;
+  processed_at: string | null;
+};
+
+export type IntegrationStatusOut = {
+  capability: string;
+  label: string;
+  description: string;
+  schedule: string;
+  api_token_var: string;
+  api_token_set: boolean;
+  last_run: IntegrationRunOut | null;
+};
+
+export type IntegrationsResponse = {
+  integrations: IntegrationStatusOut[];
+};
+
 /* ── /tenant/eligibility ────────────────────────────────────────── */
 
 export type SamRegistrationStatus =
