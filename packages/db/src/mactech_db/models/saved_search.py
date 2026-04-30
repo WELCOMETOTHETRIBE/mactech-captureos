@@ -31,6 +31,9 @@ class SavedSearch(Base):
     alert_channels: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'[\"email\"]'::jsonb")
     )
+    last_delivered_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

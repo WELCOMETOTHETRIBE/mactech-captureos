@@ -30,6 +30,7 @@ from mactech_db.models import (
     OpportunityEnriched,
     OpportunityRaw,
     OpportunityScore,
+    SavedSearch,
     Tenant,
 )
 from mactech_integrations.resend import ResendClient, ResendError
@@ -39,6 +40,7 @@ log = logging.getLogger(__name__)
 
 DEFAULT_TOP_N = 5
 MIN_SCORE_FOR_DIGEST = 60
+SAVED_SEARCH_HITS_CAP = 5  # per search; bound email length
 
 
 @dataclass
@@ -55,11 +57,19 @@ class DigestRow:
 
 
 @dataclass
+class SavedSearchHits:
+    search_id: UUID
+    search_name: str
+    rows: list[DigestRow]
+
+
+@dataclass
 class DigestSendStats:
     founder_slug: str
     founder_name: str
     recipient: str | None
     items_count: int
+    saved_search_hit_count: int
     sent: bool
     skipped_reason: str | None
     message_id: str | None
@@ -80,6 +90,111 @@ def _incumbent_one_liner(enr: OpportunityEnriched | None) -> str | None:
             f"${float(enr.incumbent_award_amount):,.0f} prior obligations"
         )
     return " — ".join(parts)
+
+
+async def _load_saved_search_hits(
+    session: AsyncSession,
+    *,
+    tenant: Tenant,
+    founder: Founder,
+) -> list[SavedSearchHits]:
+    """Saved-search hits scored above each search's threshold and not yet
+    delivered. Caller is responsible for stamping ``last_delivered_at``
+    after a successful send.
+
+    V1 keyword/set-aside filtering: applied as ANY-of-list. NAICS
+    filtering same. Empty filter list = no filter on that field (any
+    value matches).
+    """
+    searches = (
+        await session.execute(
+            select(SavedSearch).where(
+                SavedSearch.tenant_id == tenant.id,
+                SavedSearch.owner_founder_id == founder.id,
+                SavedSearch.alert_cadence == "daily",
+            )
+        )
+    ).scalars().all()
+
+    out: list[SavedSearchHits] = []
+    for search in searches:
+        channels = search.alert_channels or []
+        if isinstance(channels, list) and "email" not in channels:
+            continue
+        filters = search.filters or {}
+        naics_codes = list(filters.get("naics") or [])
+        set_asides = list(filters.get("set_asides") or [])
+        keywords = [k for k in (filters.get("keywords") or []) if k.strip()]
+
+        stmt = (
+            select(OpportunityScore, OpportunityRaw)
+            .join(OpportunityRaw, OpportunityRaw.id == OpportunityScore.opportunity_id)
+            .where(
+                OpportunityScore.tenant_id == tenant.id,
+                OpportunityScore.score >= search.alert_threshold,
+            )
+            .order_by(OpportunityScore.score.desc())
+            .limit(SAVED_SEARCH_HITS_CAP)
+        )
+        if naics_codes:
+            stmt = stmt.where(OpportunityRaw.naics_code.in_(naics_codes))
+        if set_asides:
+            stmt = stmt.where(OpportunityRaw.set_aside.in_(set_asides))
+        if keywords:
+            keyword_filter = None
+            for kw in keywords:
+                like = f"%{kw}%"
+                clause = OpportunityRaw.title.ilike(like) | OpportunityRaw.description_text.ilike(
+                    like
+                )
+                keyword_filter = clause if keyword_filter is None else (keyword_filter | clause)
+            stmt = stmt.where(keyword_filter)
+        if search.last_delivered_at is not None:
+            # Only show new scoring activity since the last digest delivery.
+            stmt = stmt.where(OpportunityScore.created_at > search.last_delivered_at)
+
+        rows = (await session.execute(stmt)).all()
+        if not rows:
+            continue
+
+        digest_rows: list[DigestRow] = []
+        for sc, opp in rows:
+            raw_payload = opp.raw_payload or {}
+            digest_rows.append(
+                DigestRow(
+                    title=opp.title,
+                    notice_type=opp.notice_type,
+                    set_aside=opp.set_aside,
+                    naics_code=opp.naics_code,
+                    agency_short=_short_agency(opp.agency),
+                    score=sc.score,
+                    why_it_matters=sc.why_it_matters,
+                    incumbent_summary=None,
+                    sam_link=raw_payload.get("uiLink"),
+                )
+            )
+        out.append(
+            SavedSearchHits(
+                search_id=search.id,
+                search_name=search.name,
+                rows=digest_rows,
+            )
+        )
+
+    return out
+
+
+async def _stamp_saved_searches_delivered(
+    session: AsyncSession, search_ids: list[UUID]
+) -> None:
+    if not search_ids:
+        return
+    now = datetime.now(UTC)
+    await session.execute(
+        SavedSearch.__table__.update()
+        .where(SavedSearch.id.in_(search_ids))
+        .values(last_delivered_at=now)
+    )
 
 
 async def _load_top_for_founder(
@@ -121,7 +236,48 @@ async def _load_top_for_founder(
     return out
 
 
-def _render_html(founder: Founder, rows: list[DigestRow]) -> str:
+def _render_search_block_html(hits: SavedSearchHits) -> str:
+    items: list[str] = []
+    for r in hits.rows:
+        meta_bits = [
+            r.notice_type or "",
+            r.set_aside or "",
+            f"NAICS {r.naics_code}" if r.naics_code else "",
+            r.agency_short or "",
+        ]
+        meta = " · ".join(b for b in meta_bits if b)
+        link = (
+            f'<a href="{escape(r.sam_link)}" '
+            f'style="color:#1a3a5c;font-size:13px">View on SAM.gov</a>'
+            if r.sam_link
+            else ""
+        )
+        items.append(
+            f"""
+            <div style="border:1px solid #e5e5e5;border-radius:6px;padding:12px 16px;margin-bottom:8px;background:#fff">
+              <div style="font-size:12px;color:#666;letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px">
+                score {r.score}
+              </div>
+              <div style="font-size:14px;font-weight:600;color:#111;margin:0 0 4px">{escape(r.title)}</div>
+              <div style="font-size:12px;color:#888">{escape(meta)}</div>
+              <div style="margin-top:8px">{link}</div>
+            </div>
+            """.strip()
+        )
+    return (
+        f'<div style="margin:18px 0 8px"><h2 style="font-size:14px;'
+        f'margin:0 0 8px;color:#1a3a5c">'
+        f"Saved search: {escape(hits.search_name)} · {len(hits.rows)} new hit"
+        f"{'s' if len(hits.rows) != 1 else ''}</h2></div>"
+        + "".join(items)
+    )
+
+
+def _render_html(
+    founder: Founder,
+    rows: list[DigestRow],
+    saved_search_blocks: list[SavedSearchHits] | None = None,
+) -> str:
     today = datetime.now(UTC).strftime("%A, %B %-d, %Y")
     items_html: list[str] = []
     for i, r in enumerate(rows, start=1):
@@ -171,6 +327,11 @@ def _render_html(founder: Founder, rows: list[DigestRow]) -> str:
         '<p style="color:#666">No opportunities scored above the threshold today. '
         "Continuous SAM ingestion runs every 2 hours; check back tomorrow.</p>"
     )
+    saved_search_html = ""
+    for hits in saved_search_blocks or []:
+        saved_search_html += _render_search_block_html(hits)
+    if saved_search_html:
+        items_block = items_block + saved_search_html
 
     return f"""<!doctype html>
 <html><body style="margin:0;background:#fafafa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#111">
@@ -195,7 +356,11 @@ def _render_html(founder: Founder, rows: list[DigestRow]) -> str:
 </body></html>"""
 
 
-def _render_text(founder: Founder, rows: list[DigestRow]) -> str:
+def _render_text(
+    founder: Founder,
+    rows: list[DigestRow],
+    saved_search_blocks: list[SavedSearchHits] | None = None,
+) -> str:
     today = datetime.now(UTC).strftime("%A, %B %-d, %Y")
     out = [f"MacTech CaptureOS — {today}", f"{founder.full_name} ({founder.pillar})"]
     out.append("")
@@ -220,6 +385,14 @@ def _render_text(founder: Founder, rows: list[DigestRow]) -> str:
         if r.sam_link:
             out.append(f"    {r.sam_link}")
         out.append("")
+    for hits in saved_search_blocks or []:
+        out.append("")
+        out.append(f"-- Saved search: {hits.search_name} ({len(hits.rows)} new) --")
+        for r in hits.rows:
+            out.append(f"  score {r.score}  {r.title}")
+            if r.sam_link:
+                out.append(f"    {r.sam_link}")
+    out.append("")
     out.append("--")
     out.append("MacTech Solutions LLC · SDVOSB-certified · Veteran-Owned")
     return "\n".join(out)
@@ -247,6 +420,7 @@ async def send_digest_for_founder(
             founder_name="",
             recipient=None,
             items_count=0,
+            saved_search_hit_count=0,
             sent=False,
             skipped_reason="RESEND_API_KEY not set",
             message_id=None,
@@ -268,6 +442,7 @@ async def send_digest_for_founder(
                 founder_name="",
                 recipient=None,
                 items_count=0,
+                saved_search_hit_count=0,
                 sent=False,
                 skipped_reason=f"tenant {tenant_slug!r} not found",
                 message_id=None,
@@ -286,6 +461,7 @@ async def send_digest_for_founder(
                 founder_name="",
                 recipient=None,
                 items_count=0,
+                saved_search_hit_count=0,
                 sent=False,
                 skipped_reason="founder not found",
                 message_id=None,
@@ -296,6 +472,7 @@ async def send_digest_for_founder(
                 founder_name=founder.full_name,
                 recipient=founder.email,
                 items_count=0,
+                saved_search_hit_count=0,
                 sent=False,
                 skipped_reason="digest_enabled=false",
                 message_id=None,
@@ -306,6 +483,7 @@ async def send_digest_for_founder(
                 founder_name=founder.full_name,
                 recipient=None,
                 items_count=0,
+                saved_search_hit_count=0,
                 sent=False,
                 skipped_reason="no email on file",
                 message_id=None,
@@ -314,11 +492,23 @@ async def send_digest_for_founder(
             await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))
         ).scalar_one()
         rows = await _load_top_for_founder(session, tenant, founder, top_n)
+        saved_hits = await _load_saved_search_hits(
+            session, tenant=tenant, founder=founder
+        )
 
+    saved_total = sum(len(h.rows) for h in saved_hits)
     today = datetime.now(UTC).strftime("%a %b %-d")
-    subject = f"[MacTech Capture] {len(rows)} new {founder.full_name.split()[0]} picks for {today}"
-    html = _render_html(founder, rows)
-    text = _render_text(founder, rows)
+    extra = (
+        f" + {saved_total} saved-search hit{'s' if saved_total != 1 else ''}"
+        if saved_total
+        else ""
+    )
+    subject = (
+        f"[MacTech Capture] {len(rows)} {founder.full_name.split()[0]} picks"
+        f"{extra} for {today}"
+    )
+    html = _render_html(founder, rows, saved_hits)
+    text = _render_text(founder, rows, saved_hits)
 
     async with ResendClient(api_key=api_key) as resend:
         try:
@@ -341,16 +531,28 @@ async def send_digest_for_founder(
                 founder_name=founder.full_name,
                 recipient=founder.email,
                 items_count=len(rows),
+                saved_search_hit_count=saved_total,
                 sent=False,
                 skipped_reason=f"resend error: {exc!s}"[:300],
                 message_id=None,
             )
 
+    # Mark each saved search that contributed hits as delivered. Uses a
+    # fresh session — async_session_factory()() produces a new one — so
+    # we don't depend on the prior `with` block still being open.
+    if saved_hits:
+        async with session_factory() as session2:
+            await _stamp_saved_searches_delivered(
+                session2, [h.search_id for h in saved_hits]
+            )
+            await session2.commit()
+
     log.info(
-        "digest sent founder=%s recipient=%s items=%d msg=%s",
+        "digest sent founder=%s recipient=%s items=%d saved_hits=%d msg=%s",
         founder.slug,
         founder.email,
         len(rows),
+        saved_total,
         result.message_id,
     )
     return DigestSendStats(
@@ -358,6 +560,7 @@ async def send_digest_for_founder(
         founder_name=founder.full_name,
         recipient=founder.email,
         items_count=len(rows),
+        saved_search_hit_count=saved_total,
         sent=True,
         skipped_reason=None,
         message_id=result.message_id,
@@ -422,6 +625,7 @@ async def send_digest_to_all_founders(
                     founder_name=f.full_name,
                     recipient=f.email,
                     items_count=0,
+                    saved_search_hit_count=0,
                     sent=False,
                     skipped_reason=f"unexpected error: {exc.__class__.__name__}",
                     message_id=None,
