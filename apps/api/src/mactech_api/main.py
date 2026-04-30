@@ -4,6 +4,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy import text
 
 from mactech_api.routes.agency_intel import router as agency_intel_router
+from mactech_api.routes.amendments import router as amendments_router
 from mactech_api.routes.ask import router as ask_router
 from mactech_api.routes.brief import router as brief_router
 from mactech_api.routes.capture_package import router as capture_package_router
@@ -69,6 +70,7 @@ app.include_router(webhooks_router)
 app.include_router(events_router)
 app.include_router(forecasts_router)
 app.include_router(solicitation_router)
+app.include_router(amendments_router)
 app.include_router(cyber_router)
 app.include_router(capture_package_router)
 

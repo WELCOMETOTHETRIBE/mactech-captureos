@@ -27,6 +27,7 @@ from mactech_db.models import (
     EvaluationPassFailItem,
     EvaluationScoredFactor,
     Founder,
+    OpportunityAmendment,
     OpportunityBrief,
     OpportunityEnriched,
     OpportunityQuestion,
@@ -41,8 +42,10 @@ from mactech_db.models import (
     SolicitationExtraction,
     TeamingPartner,
     Tenant,
+    User,
 )
 from mactech_intelligence.schemas.capture_package import (
+    AmendmentDiffEntry,
     BidDecisionSection,
     CapturePackage,
     CaptureStrategySection,
@@ -50,6 +53,7 @@ from mactech_intelligence.schemas.capture_package import (
     ComplianceMatrixSection,
     CyberPostureSnapshot,
     CyberSection,
+    DetectedAmendment,
     EvaluationSection,
     GovernanceReadinessSection,
     IncumbentSummary,
@@ -126,10 +130,12 @@ class CapturePackageBuilder:
         founder_owner = await self._load_owner_founder(pursuit.owner_founder_id)
 
         opportunity_section = self._build_opportunity_section(opportunity)
-        solicitation_section = self._build_solicitation_section(opportunity)
+        solicitation_section = await self._build_solicitation_section(opportunity)
         cyber_section = await self._build_cyber_section(opportunity, brief, tenant)
         capture_strategy = self._build_capture_strategy_section(brief, enriched)
-        bid_decision = self._build_bid_decision_section(pursuit, score, founder_owner)
+        bid_decision = await self._build_bid_decision_section(
+            pursuit, score, founder_owner
+        )
         qa_section = self._build_qa_section(questions)
 
         past_performance = await self._build_past_performance_section(
@@ -327,12 +333,39 @@ class CapturePackageBuilder:
             description_text_excerpt=excerpt,
         )
 
-    def _build_solicitation_section(
+    async def _build_solicitation_section(
         self, opp: OpportunityRaw
     ) -> SolicitationSection:
         # V1: separate file-level ingestion not yet built (Section C of
         # CaptureOS_Requirements.md). The primary description URL is what
-        # we expose today.
+        # we expose today. ``detected_amendments`` carries any system-
+        # detected content changes since first ingestion.
+        amendment_rows = (
+            await self.session.execute(
+                select(OpportunityAmendment)
+                .where(OpportunityAmendment.opportunity_id == opp.id)
+                .order_by(OpportunityAmendment.detected_at.desc())
+            )
+        ).scalars().all()
+        detected = [
+            DetectedAmendment(
+                id=str(a.id),
+                detected_at=a.detected_at.isoformat(),
+                fields_changed=[entry.get("field", "") for entry in (a.diff_summary or [])],
+                diff=[
+                    AmendmentDiffEntry(
+                        field=entry.get("field", ""),
+                        before=entry.get("before"),
+                        after=entry.get("after"),
+                    )
+                    for entry in (a.diff_summary or [])
+                ],
+                previous_response_deadline=to_iso(a.previous_response_deadline),
+                new_response_deadline=to_iso(a.new_response_deadline),
+            )
+            for a in amendment_rows
+        ]
+
         return SolicitationSection(
             primary_description_url=opp.description_url,
             primary_description_text_excerpt=(
@@ -342,6 +375,7 @@ class CapturePackageBuilder:
             ),
             files=[],
             amendments=[],
+            detected_amendments=detected,
             raw_payload_available=bool(opp.raw_payload),
         )
 
@@ -459,39 +493,57 @@ class CapturePackageBuilder:
             suggested_team_roles=brief.suggested_team_roles or [],
         )
 
-    def _build_bid_decision_section(
+    async def _build_bid_decision_section(
         self,
         pursuit: Pursuit,
         score: OpportunityScore | None,
         founder: Founder | None,
     ) -> BidDecisionSection:
-        decision: str
-        if pursuit.stage in ("submit", "won", "lost"):
-            decision = "bid"
-        elif pursuit.stage in ("lead", "qualify"):
-            decision = "pending"
-        else:
-            # pursue, propose — committed to the chase
-            decision = "bid"
+        # Prefer the structured bid_decision column. Fall back to inferring
+        # from stage so legacy pursuits (created before 0024) still produce
+        # a reasonable section.
+        decision: str = pursuit.bid_decision
+        if decision == "pending":
+            if pursuit.stage in ("submit", "won", "lost"):
+                decision = "bid"
+            elif pursuit.stage in ("pursue", "propose"):
+                decision = "bid"
+            # else: stay "pending"
 
         score_breakdown: dict[str, Any] | None = None
         score_value: int | None = None
         if score is not None:
             score_value = score.score
-            # OpportunityScore stores breakdown as JSONB in some schemas; use
-            # getattr to remain robust to model differences across migrations.
             raw_breakdown = getattr(score, "breakdown", None) or getattr(
                 score, "score_breakdown", None
             )
             if isinstance(raw_breakdown, dict):
                 score_breakdown = raw_breakdown
 
+        # Use structured bid_decided_at when set, falling back to last
+        # stage change for the inferred path.
+        decided_at = pursuit.bid_decided_at or pursuit.last_stage_change_at
+
+        decider_user_id_str: str | None = None
+        if pursuit.bid_decided_by_user_id is not None:
+            user = (
+                await self.session.execute(
+                    select(User).where(User.id == pursuit.bid_decided_by_user_id)
+                )
+            ).scalar_one_or_none()
+            if user is not None:
+                decider_user_id_str = str(user.id)
+
+        # Prefer the structured bid_rationale; fall back to notes.
+        rationale = pursuit.bid_rationale or pursuit.notes
+
         return BidDecisionSection(
             decision=decision,  # type: ignore[arg-type]
             pursuit_stage=pursuit.stage,
-            decided_at=to_iso(pursuit.last_stage_change_at),
+            decided_at=to_iso(decided_at),
+            decider_user_id=decider_user_id_str,
             decider_founder_slug=founder.slug if founder else None,
-            rationale=pursuit.notes,
+            rationale=rationale,
             score=score_value,
             score_breakdown=score_breakdown,
         )
@@ -642,7 +694,7 @@ class CapturePackageBuilder:
             for row in rows
         ]
 
-        status_value = "generated" if items else "not_generated"
+        status_value = _matrix_status(extraction, has_items=bool(items))
         return ComplianceMatrixSection(
             items=items,
             source_documents=["opportunity.description_text"] if items else [],
@@ -697,10 +749,12 @@ class CapturePackageBuilder:
             for row in scored_rows
         ]
 
-        # An extraction exists, so call it "extracted" even if both arrays
-        # came back empty — the runtime gap is what we surface, not the row's
-        # presence.
-        status_value = "extracted" if (pass_fail or scored) else "not_extracted"
+        # An extraction exists, so call it "extracted" unless the
+        # extraction itself is stale (amendment landed after the run).
+        if extraction.status == "stale":
+            status_value: str = "not_extracted"
+        else:
+            status_value = "extracted" if (pass_fail or scored) else "not_extracted"
         return EvaluationSection(
             pass_fail_items=pass_fail,
             scored_factors=scored,
@@ -735,7 +789,7 @@ class CapturePackageBuilder:
             for row in rows
         ]
 
-        status_value = "generated" if items else "not_generated"
+        status_value = _matrix_status(extraction, has_items=bool(items))
         return RequirementsMatrixSection(
             items=items,
             last_generated_at=to_iso(extraction.updated_at),
@@ -826,7 +880,14 @@ class CapturePackageBuilder:
             missing.append("solicitation")
             gaps.append("Solicitation: no description URL or text available.")
 
-        if compliance.items:
+        if compliance.status == "stale":
+            partial.append("compliance_matrix")
+            gaps.append(
+                "Compliance matrix is STALE — opportunity was amended after "
+                "the last extraction. Re-run extraction to capture the new "
+                "Section L."
+            )
+        elif compliance.items:
             complete.append("compliance_matrix")
         elif compliance.status == "generated":
             partial.append("compliance_matrix")
@@ -842,7 +903,13 @@ class CapturePackageBuilder:
                 "/opportunities/{id}/solicitation-extraction to generate."
             )
 
-        if requirements.items:
+        if requirements.status == "stale":
+            partial.append("requirements_matrix")
+            gaps.append(
+                "Requirements matrix is STALE — opportunity was amended "
+                "after the last extraction."
+            )
+        elif requirements.items:
             complete.append("requirements_matrix")
         elif requirements.status == "generated":
             partial.append("requirements_matrix")
@@ -855,6 +922,13 @@ class CapturePackageBuilder:
             gaps.append(
                 "Requirements matrix not generated yet. POST "
                 "/opportunities/{id}/solicitation-extraction to generate."
+            )
+
+        if solicitation.detected_amendments:
+            gaps.append(
+                f"Opportunity has {len(solicitation.detected_amendments)} "
+                f"detected amendment(s) since first ingest. Review on the "
+                f"opportunity detail page."
             )
 
         if evaluation.pass_fail_items or evaluation.scored_factors:
@@ -983,6 +1057,22 @@ def _decimal_to_float(value: Decimal | None) -> float | None:
     if value is None:
         return None
     return float(value)
+
+
+def _matrix_status(
+    extraction: SolicitationExtraction, *, has_items: bool
+) -> str:
+    """Translate a SolicitationExtraction.status + item count to the
+    Capture Package matrix-section status enum.
+
+    The DB enum is ``pending | running | complete | failed | stale``;
+    the Capture Package enum is ``not_generated | generated | stale``.
+    """
+    if extraction.status == "stale":
+        return "stale"
+    if has_items:
+        return "generated"
+    return "not_generated"
 
 
 def _extract_contract_type(raw_payload: dict[str, Any] | None) -> str | None:

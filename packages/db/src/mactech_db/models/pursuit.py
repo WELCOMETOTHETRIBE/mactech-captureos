@@ -19,6 +19,12 @@ from mactech_db.base import Base
 
 PURSUIT_STAGES = ("lead", "qualify", "pursue", "propose", "submit", "won", "lost")
 
+# Bid decision is independent of stage — a pursuit can be in "pursue" and
+# still have decision="pending" if the team hasn't formally committed yet.
+# stage="lost" with decision="no_bid" is the formal kill; stage="lost"
+# with decision="bid" means we bid and lost on evaluation.
+BID_DECISIONS = ("pending", "bid", "no_bid")
+
 
 class Pursuit(Base):
     __tablename__ = "pursuits"
@@ -27,6 +33,10 @@ class Pursuit(Base):
         CheckConstraint(
             "stage in ('lead','qualify','pursue','propose','submit','won','lost')",
             name="ck_pursuits_stage",
+        ),
+        CheckConstraint(
+            "bid_decision in ('pending','bid','no_bid')",
+            name="ck_pursuits_bid_decision",
         ),
         Index("ix_pursuits_tenant_stage", "tenant_id", "stage"),
         Index("ix_pursuits_owner", "owner_founder_id"),
@@ -61,6 +71,22 @@ class Pursuit(Base):
     discriminators: Mapped[list[str]] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )
+    # Structured bid memo. Stage flow can carry the same information
+    # informally ("won" implies a bid was placed) but the structured
+    # decision + decider + rationale is what the Capture Package's
+    # BidDecisionSection actually wants.
+    bid_decision: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("'pending'")
+    )
+    bid_decided_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    bid_decided_by_user_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    bid_rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

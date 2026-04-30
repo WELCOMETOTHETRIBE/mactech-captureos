@@ -9,6 +9,7 @@ within a major version.
 
 from mactech_intelligence.schemas.capture_package import (
     CAPTURE_PACKAGE_SCHEMA_VERSION,
+    AmendmentDiffEntry,
     BidDecisionSection,
     CapturePackage,
     CaptureStrategySection,
@@ -16,6 +17,7 @@ from mactech_intelligence.schemas.capture_package import (
     ComplianceMatrixSection,
     CyberPostureSnapshot,
     CyberSection,
+    DetectedAmendment,
     EvaluationSection,
     GovernanceDocState,
     GovernanceReadinessSection,
@@ -41,6 +43,7 @@ from mactech_intelligence.schemas.capture_package import (
 
 __all__ = [
     "CAPTURE_PACKAGE_SCHEMA_VERSION",
+    "AmendmentDiffEntry",
     "BidDecisionSection",
     "CapturePackage",
     "CaptureStrategySection",
@@ -48,6 +51,7 @@ __all__ = [
     "ComplianceMatrixSection",
     "CyberPostureSnapshot",
     "CyberSection",
+    "DetectedAmendment",
     "EvaluationSection",
     "GovernanceDocState",
     "GovernanceReadinessSection",

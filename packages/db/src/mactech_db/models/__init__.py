@@ -1,5 +1,21 @@
 from mactech_db.models.agency_intel import AgencyNaicsIntel
 from mactech_db.models.apify import AgencyEvent, ApifyRun
+from mactech_db.models.audit_event import (
+    EVENT_OPPORTUNITY_AMENDMENT_DETECTED,
+    EVENT_PURSUIT_BID_DECIDED,
+    EVENT_PURSUIT_CREATED,
+    EVENT_PURSUIT_DELETED,
+    EVENT_PURSUIT_KEY_PERSONNEL_REPLACED,
+    EVENT_PURSUIT_NOTES_UPDATED,
+    EVENT_PURSUIT_OWNER_CHANGED,
+    EVENT_PURSUIT_PAST_PERFORMANCE_REPLACED,
+    EVENT_PURSUIT_STAGE_CHANGED,
+    EVENT_PURSUIT_TEAMING_PARTNERS_REPLACED,
+    EVENT_PURSUIT_WIN_STRATEGY_UPDATED,
+    EVENT_SOLICITATION_EXTRACTION_COMPLETED,
+    EVENT_SOLICITATION_EXTRACTION_DELETED,
+    AuditEvent,
+)
 from mactech_db.models.draft import DRAFT_STATUSES, DRAFT_TYPES, ProposalDraft
 from mactech_db.models.enrichment import AwardHistory, ExclusionsCache, OpportunityEnriched
 from mactech_db.models.forecast import ForecastRaw
@@ -17,9 +33,10 @@ from mactech_db.models.library_import_job import (
 )
 from mactech_db.models.naics import NaicsCode
 from mactech_db.models.opportunity import IngestionState, OpportunityRaw
+from mactech_db.models.opportunity_amendment import OpportunityAmendment
 from mactech_db.models.opportunity_brief import OpportunityBrief
 from mactech_db.models.opportunity_question import OpportunityQuestion
-from mactech_db.models.pursuit import PURSUIT_STAGES, Pursuit
+from mactech_db.models.pursuit import BID_DECISIONS, PURSUIT_STAGES, Pursuit
 from mactech_db.models.pursuit_links import (
     PursuitKeyPersonnel,
     PursuitPastPerformance,
@@ -45,11 +62,26 @@ __all__ = [
     "AgencyEvent",
     "AgencyNaicsIntel",
     "ApifyRun",
+    "AuditEvent",
     "AwardHistory",
+    "BID_DECISIONS",
     "CapabilityStatement",
     "ComplianceMatrixItem",
     "DRAFT_STATUSES",
     "DRAFT_TYPES",
+    "EVENT_OPPORTUNITY_AMENDMENT_DETECTED",
+    "EVENT_PURSUIT_BID_DECIDED",
+    "EVENT_PURSUIT_CREATED",
+    "EVENT_PURSUIT_DELETED",
+    "EVENT_PURSUIT_KEY_PERSONNEL_REPLACED",
+    "EVENT_PURSUIT_NOTES_UPDATED",
+    "EVENT_PURSUIT_OWNER_CHANGED",
+    "EVENT_PURSUIT_PAST_PERFORMANCE_REPLACED",
+    "EVENT_PURSUIT_STAGE_CHANGED",
+    "EVENT_PURSUIT_TEAMING_PARTNERS_REPLACED",
+    "EVENT_PURSUIT_WIN_STRATEGY_UPDATED",
+    "EVENT_SOLICITATION_EXTRACTION_COMPLETED",
+    "EVENT_SOLICITATION_EXTRACTION_DELETED",
     "EXTRACTION_STATUSES",
     "EvaluationPassFailItem",
     "EvaluationScoredFactor",
@@ -63,6 +95,7 @@ __all__ = [
     "LIBRARY_IMPORT_STATUSES",
     "LibraryImportJob",
     "NaicsCode",
+    "OpportunityAmendment",
     "OpportunityBrief",
     "OpportunityEnriched",
     "OpportunityQuestion",

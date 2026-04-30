@@ -25,7 +25,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-CAPTURE_PACKAGE_SCHEMA_VERSION = "1.0.0"
+CAPTURE_PACKAGE_SCHEMA_VERSION = "1.1.0"
 
 
 class _Base(BaseModel):
@@ -97,11 +97,36 @@ class SolicitationFile(_Base):
     sha256: str | None = None
 
 
+class AmendmentDiffEntry(_Base):
+    """A single field-level change captured by amendment detection."""
+
+    field: str
+    before: object | None = None
+    after: object | None = None
+
+
+class DetectedAmendment(_Base):
+    """A system-detected change to the opportunity since first ingestion.
+
+    Different from ``files``/``amendments`` (which are *file-level*
+    attachments published by the agency); this is *event-level* — the
+    SAM API returned different content than before. Schema-version 1.1+.
+    """
+
+    id: str
+    detected_at: str
+    fields_changed: list[str] = Field(default_factory=list)
+    diff: list[AmendmentDiffEntry] = Field(default_factory=list)
+    previous_response_deadline: str | None = None
+    new_response_deadline: str | None = None
+
+
 class SolicitationSection(_Base):
     primary_description_url: str | None = None
     primary_description_text_excerpt: str | None = None
     files: list[SolicitationFile] = Field(default_factory=list)
     amendments: list[SolicitationFile] = Field(default_factory=list)
+    detected_amendments: list[DetectedAmendment] = Field(default_factory=list)
     raw_payload_available: bool = False
 
 

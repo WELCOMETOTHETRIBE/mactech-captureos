@@ -28,6 +28,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mactech_db import async_session_factory
+from mactech_db.amendments import record_amendment, snapshot_for_diff
 from mactech_db.models import IngestionState, NaicsCode, OpportunityRaw
 from mactech_integrations.sam_gov import OpportunityRecord, SamGovOpportunitiesClient
 from mactech_workers.celery_app import celery_app
@@ -113,19 +114,31 @@ def _row_from_record(record: OpportunityRecord) -> dict[str, Any]:
 
 
 async def _upsert_record(session: AsyncSession, record: OpportunityRecord) -> str:
-    """Returns 'inserted' | 'updated' | 'unchanged'."""
+    """Returns 'inserted' | 'updated' | 'unchanged'.
+
+    On 'updated' (an existing opportunity's content hash changed), we
+    record an OpportunityAmendment with a structured diff_summary so the
+    UI can show what changed. This satisfies G2 (amendment ingest) and
+    feeds the audit trail.
+    """
     row = _row_from_record(record)
-    existing_hash = (
+
+    # Load the existing row (full, not just hash) so we can snapshot it
+    # before the upsert. If absent, this is a clean insert.
+    existing = (
         await session.execute(
-            select(OpportunityRaw.hash).where(
+            select(OpportunityRaw).where(
                 OpportunityRaw.source == SOURCE,
                 OpportunityRaw.source_id == record.notice_id,
             )
         )
     ).scalar_one_or_none()
 
+    existing_hash = existing.hash if existing else None
     if existing_hash == row["hash"]:
         return "unchanged"
+
+    previous_snapshot = snapshot_for_diff(existing) if existing is not None else None
 
     stmt = (
         pg_insert(OpportunityRaw)
@@ -151,6 +164,22 @@ async def _upsert_record(session: AsyncSession, record: OpportunityRecord) -> st
         )
     )
     await session.execute(stmt)
+
+    if existing is not None and previous_snapshot is not None:
+        # Re-load to get the post-upsert state for amendment recording.
+        refreshed = (
+            await session.execute(
+                select(OpportunityRaw).where(OpportunityRaw.id == existing.id)
+            )
+        ).scalar_one()
+        await record_amendment(
+            session,
+            opportunity=refreshed,
+            previous_snapshot=previous_snapshot,
+            previous_hash=existing_hash,
+            new_hash=row["hash"],
+        )
+
     return "inserted" if existing_hash is None else "updated"
 
 
