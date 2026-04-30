@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import {
   apiFetch,
   type AgencyIntelOut,
+  type AmendmentListOut,
   type BriefOut,
   type ComplianceMatrixOut,
   type CyberSummaryOut,
@@ -21,6 +22,7 @@ import {
 } from "@/lib/api";
 import { createPursuit, deletePursuit, updatePursuit } from "@/lib/pursuits";
 import { deleteOpportunityQuestion } from "@/lib/ask";
+import { AmendmentsPanel } from "@/components/amendments-panel";
 import { AskStreamingPanel } from "@/components/ask-streaming";
 import { CyberPostureCard } from "@/components/cyber-posture-card";
 import { StreamingDraftButton } from "@/components/draft-streaming";
@@ -129,7 +131,8 @@ export default async function OpportunityDetailPage({
     compliance,
     requirements,
     evaluation,
-    cyberSummary
+    cyberSummary,
+    amendmentsList
   ] = await Promise.all([
       apiFetch<MeResponse>("/me"),
       apiFetch<PursuitCardT>(`/pursuits/by-opportunity/${id}`).catch(
@@ -172,6 +175,9 @@ export default async function OpportunityDetailPage({
       ),
       apiFetch<CyberSummaryOut>(`/opportunities/${id}/cyber-summary`).catch(
         () => null as CyberSummaryOut | null
+      ),
+      apiFetch<AmendmentListOut>(`/opportunities/${id}/amendments`).catch(
+        () => null as AmendmentListOut | null
       )
     ]);
 
@@ -281,6 +287,9 @@ export default async function OpportunityDetailPage({
         questions={questions}
         meFounderSlug={me.founder?.slug ?? null}
       />
+
+      {/* Amendments — system-detected SAM changes since first ingest */}
+      <AmendmentsPanel amendments={amendmentsList} />
 
       {/* Solicitation decoder — compliance + requirements matrices for ProposalOS */}
       <SolicitationPanel

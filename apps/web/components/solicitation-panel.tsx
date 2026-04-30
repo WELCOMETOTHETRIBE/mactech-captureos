@@ -81,6 +81,9 @@ export function SolicitationPanel({
         <ExtractedButEmpty extraction={extraction} />
       ) : (
         <div className="space-y-6 pt-4">
+          {extraction.status === "stale" && (
+            <StaleExtractionBanner generateAction={generateAction} />
+          )}
           <ExtractionMeta extraction={extraction} />
           <ComplianceMatrixTable compliance={compliance} />
           <RequirementsMatrixTable requirements={requirements} />
@@ -88,6 +91,36 @@ export function SolicitationPanel({
         </div>
       )}
     </Card>
+  );
+}
+
+function StaleExtractionBanner({
+  generateAction,
+}: {
+  generateAction: () => Promise<void>;
+}) {
+  return (
+    <div className="rounded-md border border-amber-300 bg-amber-50 p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-amber-900">
+            Matrices are stale — opportunity was amended after the last extraction.
+          </p>
+          <p className="mt-1 text-[11px] text-amber-800">
+            Re-run extraction to pull updated Section L / SOW / Section M
+            from the latest SAM payload.
+          </p>
+        </div>
+        <form action={generateAction}>
+          <button
+            type="submit"
+            className="rounded-md border border-amber-700 bg-amber-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-800"
+          >
+            Re-extract now →
+          </button>
+        </form>
+      </div>
+    </div>
   );
 }
 

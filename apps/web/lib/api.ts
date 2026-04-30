@@ -744,6 +744,50 @@ export type ForecastOut = {
   incumbent_filings_last_90d: number | null;
 };
 
+/* ── /opportunities/{id}/amendments + /pursuits/{id}/audit ───── */
+
+export type AmendmentDiffEntry = {
+  field: string;
+  before: unknown | null;
+  after: unknown | null;
+};
+
+export type AmendmentOut = {
+  id: string;
+  opportunity_id: string;
+  previous_hash: string | null;
+  new_hash: string;
+  previous_response_deadline: string | null;
+  new_response_deadline: string | null;
+  previous_title: string | null;
+  new_title: string | null;
+  diff_summary: AmendmentDiffEntry[];
+  detected_at: string;
+};
+
+export type AmendmentListOut = {
+  opportunity_id: string;
+  amendments: AmendmentOut[];
+};
+
+export type AuditEventOut = {
+  id: string;
+  event_type: string;
+  entity_type: string;
+  entity_id: string;
+  actor_user_email: string | null;
+  actor_founder_slug: string | null;
+  actor_founder_name: string | null;
+  actor_label: string | null;
+  payload: Record<string, unknown>;
+  created_at: string;
+};
+
+export type AuditTrailOut = {
+  pursuit_id: string;
+  events: AuditEventOut[];
+};
+
 /* ── /pursuits/{id} (detail) ────────────────────────────────────── */
 
 export type PursuitOppLite = {

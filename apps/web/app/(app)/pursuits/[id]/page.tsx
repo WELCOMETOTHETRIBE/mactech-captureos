@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 
 import {
   apiFetch,
+  type AuditTrailOut,
+  type BidDecision,
   type FoundersListResponse,
   type PastPerformanceList,
   type PursuitDetailOut,
@@ -15,8 +17,11 @@ import {
   replacePursuitPastPerformance,
   replacePursuitTeamingPartners,
   updatePursuit,
+  updatePursuitBidDecision,
   updatePursuitWinStrategy,
 } from "@/lib/pursuits";
+import { AuditTrailCard } from "@/components/audit-trail-card";
+import { BidDecisionForm } from "@/components/bid-decision-form";
 import {
   Badge,
   Card,
@@ -62,7 +67,7 @@ export default async function PursuitDetailPage(props: {
     throw err;
   }
 
-  const [pastPerformanceLib, foundersLib, teamingLib] = await Promise.all([
+  const [pastPerformanceLib, foundersLib, teamingLib, auditTrail] = await Promise.all([
     apiFetch<PastPerformanceList>("/past-performance").catch(
       () => ({ total: 0, items: [] }) as PastPerformanceList
     ),
@@ -71,6 +76,9 @@ export default async function PursuitDetailPage(props: {
     ),
     apiFetch<TeamingPartnerList>("/teaming-partners").catch(
       () => ({ total: 0, active_count: 0, items: [] }) as TeamingPartnerList
+    ),
+    apiFetch<AuditTrailOut>(`/pursuits/${id}/audit`).catch(
+      () => null as AuditTrailOut | null
     ),
   ]);
 
@@ -118,6 +126,15 @@ export default async function PursuitDetailPage(props: {
     });
   };
 
+  const bidDecisionAction = async (formData: FormData) => {
+    "use server";
+    const raw = String(formData.get("bid_decision") ?? "pending");
+    const decision: BidDecision =
+      raw === "bid" || raw === "no_bid" || raw === "pending" ? raw : "pending";
+    const rationale = String(formData.get("bid_rationale") ?? "").trim() || null;
+    await updatePursuitBidDecision(id, opportunityId, decision, rationale);
+  };
+
   const deleteAction = async () => {
     "use server";
     await deletePursuit({ pursuitId: id, opportunityId });
@@ -163,6 +180,8 @@ export default async function PursuitDetailPage(props: {
 
       <PursuitMetaStrip detail={detail} />
 
+      <BidDecisionForm detail={detail} action={bidDecisionAction} />
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <NotesEditor notes={detail.notes} action={notesAction} />
         <WinStrategyEditor
@@ -189,6 +208,8 @@ export default async function PursuitDetailPage(props: {
         library={teamingLib.items}
         action={replaceTeamingPartnersAction}
       />
+
+      <AuditTrailCard trail={auditTrail} />
 
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-3">
