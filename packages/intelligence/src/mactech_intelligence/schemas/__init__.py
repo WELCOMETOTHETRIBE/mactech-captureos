@@ -38,6 +38,7 @@ from mactech_intelligence.schemas.capture_package import (
     SolicitationSection,
     TeamingPartnerRef,
     TeamingPartnersSection,
+    TenantRegistrationSection,
     WinStrategySection,
 )
 
@@ -72,5 +73,6 @@ __all__ = [
     "SolicitationSection",
     "TeamingPartnerRef",
     "TeamingPartnersSection",
+    "TenantRegistrationSection",
     "WinStrategySection",
 ]

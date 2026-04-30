@@ -48,6 +48,11 @@ EVENT_OPPORTUNITY_AMENDMENT_DETECTED = "opportunity.amendment_detected"
 EVENT_SOLICITATION_EXTRACTION_COMPLETED = "solicitation.extraction_completed"
 EVENT_SOLICITATION_EXTRACTION_DELETED = "solicitation.extraction_deleted"
 
+# Tenant SAM verification (B1/B2/B3-on-self).
+EVENT_TENANT_SAM_VERIFIED = "tenant.sam_verified"
+EVENT_TENANT_SAM_REGISTRATION_STATUS_CHANGED = "tenant.sam_registration_status_changed"
+EVENT_TENANT_SAM_EXCLUSION_CHANGED = "tenant.sam_exclusion_changed"
+
 
 class AuditEvent(Base):
     __tablename__ = "audit_events"

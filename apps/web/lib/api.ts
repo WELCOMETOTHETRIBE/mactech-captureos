@@ -744,6 +744,57 @@ export type ForecastOut = {
   incumbent_filings_last_90d: number | null;
 };
 
+/* ── /tenant/eligibility ────────────────────────────────────────── */
+
+export type SamRegistrationStatus =
+  | "active"
+  | "expired"
+  | "invalid"
+  | "unverified";
+
+export type SamRegistrationOut = {
+  status: SamRegistrationStatus;
+  registration_date: string | null;
+  expires_at: string | null;
+  days_until_expiration: number | null;
+  last_checked_at: string | null;
+};
+
+export type ExclusionsBlock = {
+  is_excluded: boolean;
+  record_count: number;
+  last_checked_at: string | null;
+};
+
+export type CyberPostureBlock = {
+  sprs_score: number | null;
+  sprs_max: number;
+  sprs_assessment_date: string | null;
+  sprs_synced_at: string | null;
+};
+
+export type GovernanceReadinessBlock = {
+  accounting_system_dcaa_ready: boolean | null;
+  fcl_status: string | null;
+  fcl_level: string | null;
+  e_verify_enrolled: boolean | null;
+  reps_certs_current: boolean | null;
+  source: string;
+};
+
+export type TenantEligibilityOut = {
+  tenant_slug: string;
+  uei: string | null;
+  cage_code: string | null;
+  set_aside_certifications: string[];
+  sam_registration: SamRegistrationOut;
+  exclusions: ExclusionsBlock;
+  cyber: CyberPostureBlock;
+  governance: GovernanceReadinessBlock;
+  blockers: string[];
+  has_hard_blocker: boolean;
+};
+
 /* ── /opportunities/{id}/amendments + /pursuits/{id}/audit ───── */
 
 export type AmendmentDiffEntry = {

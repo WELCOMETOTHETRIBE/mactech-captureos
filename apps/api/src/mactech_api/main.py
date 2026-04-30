@@ -10,6 +10,7 @@ from mactech_api.routes.brief import router as brief_router
 from mactech_api.routes.capture_package import router as capture_package_router
 from mactech_api.routes.cyber import router as cyber_router
 from mactech_api.routes.drafts import router as drafts_router
+from mactech_api.routes.eligibility import router as eligibility_router
 from mactech_api.routes.events import router as events_router
 from mactech_api.routes.forecasts import router as forecasts_router
 from mactech_api.routes.explain import router as explain_router
@@ -71,6 +72,7 @@ app.include_router(events_router)
 app.include_router(forecasts_router)
 app.include_router(solicitation_router)
 app.include_router(amendments_router)
+app.include_router(eligibility_router)
 app.include_router(cyber_router)
 app.include_router(capture_package_router)
 

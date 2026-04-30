@@ -138,6 +138,15 @@ celery_app.conf.update(
             "schedule": crontab(minute=10, hour=6),
             "options": {"expires": 30 * 60},
         },
+        # Tenant SAM verification — daily 0630 ET, after Codex sync.
+        # Hits SAM Entity + Exclusions APIs for every tenant with a UEI;
+        # updates registration status / expiration / debarment flags;
+        # emits audit events on state transitions.
+        "tenant-sam-verify": {
+            "task": "mactech.tenant.verify_sam",
+            "schedule": crontab(minute=30, hour=6),
+            "options": {"expires": 30 * 60},
+        },
     },
 )
 

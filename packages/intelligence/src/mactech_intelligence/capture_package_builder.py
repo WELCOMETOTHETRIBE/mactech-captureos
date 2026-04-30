@@ -72,6 +72,7 @@ from mactech_intelligence.schemas.capture_package import (
     SolicitationSection,
     TeamingPartnerRef,
     TeamingPartnersSection,
+    TenantRegistrationSection,
     WinStrategySection,
     to_iso,
 )
@@ -162,8 +163,22 @@ class CapturePackageBuilder:
             discriminators=list(pursuit.discriminators or []),
         )
 
-        # GovernanceOS not yet wired — Integration Contract #2 stays stub.
-        governance = GovernanceReadinessSection()
+        # GovernanceOS not yet wired, but CaptureOS already syncs set-asides
+        # from SAM Entity. Populate that one field; the rest stay null and
+        # source flips to "captureos_partial" so consumers know.
+        set_asides = list(tenant.set_aside_certifications or [])
+        governance = GovernanceReadinessSection(
+            set_asides_held=set_asides,
+            reps_certs_current=(
+                tenant.sam_registration_status == "active"
+                if tenant.sam_registration_status
+                else None
+            ),
+            reps_certs_last_renewed_at=to_iso(tenant.sam_registration_date),
+            source=("captureos_partial" if set_asides or tenant.sam_registration_status else "stub"),
+        )
+
+        tenant_registration = self._build_tenant_registration_section(tenant)
 
         completeness = self._compute_completeness(
             opportunity_section=opportunity_section,
@@ -180,6 +195,7 @@ class CapturePackageBuilder:
             bid_decision=bid_decision,
             governance=governance,
             qa=qa_section,
+            tenant_registration=tenant_registration,
         )
 
         return CapturePackage(
@@ -200,6 +216,7 @@ class CapturePackageBuilder:
             teaming_partners=teaming_partners,
             bid_decision=bid_decision,
             governance_readiness=governance,
+            tenant_registration=tenant_registration,
             qa_history=qa_section,
             completeness=completeness,
         )
@@ -331,6 +348,65 @@ class CapturePackageBuilder:
             submission_method=_extract_submission_method(opp.raw_payload),
             description_url=opp.description_url,
             description_text_excerpt=excerpt,
+        )
+
+    def _build_tenant_registration_section(
+        self, tenant: Tenant
+    ) -> TenantRegistrationSection:
+        from datetime import date as date_t
+
+        status = tenant.sam_registration_status or "unverified"
+        # Match the eligibility endpoint's enum exactly.
+        if status not in ("active", "expired", "invalid", "unverified"):
+            status = "invalid"
+        days_until = None
+        if tenant.sam_registration_expires_at is not None:
+            days_until = (
+                tenant.sam_registration_expires_at - date_t.today()
+            ).days
+
+        # Mirror the eligibility endpoint's blocker list logic without
+        # circular-importing the route module. Keep wording in sync if you
+        # edit one, edit both.
+        blockers: list[str] = []
+        hard = False
+        if not tenant.uei:
+            blockers.append("No UEI on file. Add the company's UEI in Settings.")
+            hard = True
+        if tenant.is_excluded:
+            blockers.append(
+                f"Company appears on the federal exclusions list "
+                f"({tenant.exclusions_record_count} record(s))."
+            )
+            hard = True
+        if status == "expired":
+            blockers.append("SAM.gov registration is EXPIRED.")
+            hard = True
+        elif status == "invalid":
+            blockers.append("SAM.gov registration could not be verified.")
+            hard = True
+        elif status == "active" and days_until is not None and days_until <= 30:
+            blockers.append(
+                f"SAM.gov registration expires in {days_until} day(s)."
+            )
+        if not (tenant.set_aside_certifications or []):
+            blockers.append("No set-aside certifications on file.")
+        if tenant.sprs_score is None:
+            blockers.append("No SPRS score on file (DFARS 7019/7020 risk).")
+
+        return TenantRegistrationSection(
+            uei=tenant.uei,
+            cage_code=tenant.cage_code,
+            sam_registration_status=status,  # type: ignore[arg-type]
+            sam_registration_date=to_iso(tenant.sam_registration_date),
+            sam_registration_expires_at=to_iso(tenant.sam_registration_expires_at),
+            sam_days_until_expiration=days_until,
+            sam_last_checked_at=to_iso(tenant.sam_registration_last_checked_at),
+            is_excluded=tenant.is_excluded,
+            exclusions_record_count=tenant.exclusions_record_count,
+            exclusions_last_checked_at=to_iso(tenant.exclusions_last_checked_at),
+            blockers=blockers,
+            has_hard_blocker=hard,
         )
 
     async def _build_solicitation_section(
@@ -859,6 +935,7 @@ class CapturePackageBuilder:
         bid_decision: BidDecisionSection,
         governance: GovernanceReadinessSection,
         qa: QAHistorySection,
+        tenant_registration: TenantRegistrationSection,
     ) -> PackageCompleteness:
         complete: list[str] = []
         partial: list[str] = []
@@ -1014,11 +1091,33 @@ class CapturePackageBuilder:
 
         if governance.source == "governance_os":
             complete.append("governance_readiness")
+        elif governance.source == "captureos_partial":
+            partial.append("governance_readiness")
+            gaps.append(
+                "Governance readiness is partial: set-asides + reps & certs "
+                "currency from SAM, but FCL / accounting / E-Verify need "
+                "GovernanceOS (Integration Contract #2)."
+            )
         else:
             missing.append("governance_readiness")
             gaps.append(
                 "GovernanceOS readiness facts feed not wired up yet (Integration Contract #2)."
             )
+
+        if tenant_registration.has_hard_blocker:
+            missing.append("tenant_registration")
+            gaps.append(
+                "TENANT REGISTRATION HARD BLOCKER — bidding must not proceed "
+                "until resolved: " + "; ".join(tenant_registration.blockers[:3])
+            )
+        elif tenant_registration.blockers:
+            partial.append("tenant_registration")
+            gaps.append(
+                "Tenant registration warnings: "
+                + "; ".join(tenant_registration.blockers[:3])
+            )
+        else:
+            complete.append("tenant_registration")
 
         if qa.entries:
             complete.append("qa_history")

@@ -9,6 +9,8 @@ from mactech_integrations.sam_gov.entities import (
 from mactech_integrations.sam_gov.exclusions import (
     ExclusionResult,
     SamExclusionsClient,
+    SamExclusionsError,
+    SamExclusionsRateLimitError,
 )
 from mactech_integrations.sam_gov.models import (
     OpportunityAward,
@@ -31,5 +33,7 @@ __all__ = [
     "SamEntityNotFoundError",
     "SamEntityRateLimitError",
     "SamExclusionsClient",
+    "SamExclusionsError",
+    "SamExclusionsRateLimitError",
     "SamGovOpportunitiesClient",
 ]

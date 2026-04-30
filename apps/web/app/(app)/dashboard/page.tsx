@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { TenantEligibilityCard } from "@/components/tenant-eligibility-card";
 import {
   apiFetch,
   type AgencyEventsResponse,
   type DashboardResponse,
   type ForecastsResponse,
-  type MeResponse
+  type MeResponse,
+  type TenantEligibilityOut
 } from "@/lib/api";
 import { dismissHowItWorks, showHowItWorks } from "@/lib/preferences";
 import {
@@ -28,7 +30,7 @@ export const dynamic = "force-dynamic";
 const HOW_IT_WORKS_COOKIE = "mactech.dismiss.howitworks";
 
 export default async function DashboardPage() {
-  const [data, me, ck, events, myRecompetes, sdvosbRecompetes, topForecasts] = await Promise.all([
+  const [data, me, ck, events, myRecompetes, sdvosbRecompetes, topForecasts, eligibility] = await Promise.all([
     apiFetch<DashboardResponse>("/me/dashboard"),
     apiFetch<MeResponse>("/me"),
     cookies(),
@@ -67,6 +69,9 @@ export default async function DashboardPage() {
           target_naics_filter: false,
           target_naics: []
         }) as ForecastsResponse
+    ),
+    apiFetch<TenantEligibilityOut>("/tenant/eligibility").catch(
+      () => null as TenantEligibilityOut | null
     )
   ]);
 
@@ -145,6 +150,10 @@ export default async function DashboardPage() {
             Finish setup →
           </Link>
         </section>
+      )}
+
+      {eligibility && (eligibility.has_hard_blocker || eligibility.blockers.length > 0) && (
+        <TenantEligibilityCard eligibility={eligibility} />
       )}
 
       {firstFeedLoading && (

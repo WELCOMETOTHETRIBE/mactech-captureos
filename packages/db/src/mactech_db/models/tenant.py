@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from uuid import UUID
 
-from sqlalchemy import TIMESTAMP, Date, Integer, String, Text, func, text
+from sqlalchemy import TIMESTAMP, Boolean, Date, Integer, String, Text, func, text
 from sqlalchemy.dialects.postgresql import ARRAY, UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -55,6 +55,32 @@ class Tenant(Base):
     )
     sprs_source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     sprs_synced_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    # SAM.gov registration verification (B1, B2). The
+    # mactech.tenant.verify_sam worker keeps these fresh daily by
+    # hitting SAM Entity API. ``sam_registration_status`` is "active",
+    # "expired", "invalid", or null until first check.
+    sam_registration_status: Mapped[str | None] = mapped_column(
+        String(16), nullable=True
+    )
+    sam_registration_date: Mapped[date | None] = mapped_column(
+        Date, nullable=True
+    )
+    sam_registration_expires_at: Mapped[date | None] = mapped_column(
+        Date, nullable=True
+    )
+    sam_registration_last_checked_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    # Federal exclusions / debarment check on the tenant's own UEI (B3).
+    is_excluded: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    exclusions_record_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    exclusions_last_checked_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(

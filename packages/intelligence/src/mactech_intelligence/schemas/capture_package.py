@@ -25,7 +25,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-CAPTURE_PACKAGE_SCHEMA_VERSION = "1.1.0"
+CAPTURE_PACKAGE_SCHEMA_VERSION = "1.2.0"
 
 
 class _Base(BaseModel):
@@ -367,9 +367,12 @@ class BidDecisionSection(_Base):
 class GovernanceReadinessSection(_Base):
     """Snapshot of corporate readiness facts from GovernanceOS at decision time.
 
-    Until GovernanceOS exists, every field is None and ``source`` is
-    ``"stub"``. CaptureOS still publishes the section so ProposalOS clients
-    have a stable shape to deserialize.
+    Until GovernanceOS exists, fields with no GovernanceOS source stay
+    None. ``set_asides_held`` is populated from the tenant's SAM Entity
+    sync today (CaptureOS knows the certs without GovernanceOS) — when
+    that's the only populated field, ``source`` is ``"captureos_partial"``;
+    when GovernanceOS lands, ``source`` becomes ``"governance_os"`` and
+    every field is authoritative.
     """
 
     accounting_system_dcaa_ready: bool | None = None
@@ -381,7 +384,31 @@ class GovernanceReadinessSection(_Base):
     reps_certs_current: bool | None = None
     reps_certs_last_renewed_at: str | None = None
     snapshot_at: str | None = None
-    source: Literal["governance_os", "stub"] = "stub"
+    source: Literal["governance_os", "captureos_partial", "stub"] = "stub"
+
+
+class TenantRegistrationSection(_Base):
+    """CaptureOS-owned tenant eligibility snapshot (B1, B2, B3-on-self).
+
+    Fed by the daily ``mactech.tenant.verify_sam`` worker. Distinct from
+    GovernanceReadinessSection (which is GovernanceOS-owned) — these are
+    facts CaptureOS observes from SAM directly, every day.
+    """
+
+    uei: str | None = None
+    cage_code: str | None = None
+    sam_registration_status: Literal[
+        "active", "expired", "invalid", "unverified"
+    ] = "unverified"
+    sam_registration_date: str | None = None
+    sam_registration_expires_at: str | None = None
+    sam_days_until_expiration: int | None = None
+    sam_last_checked_at: str | None = None
+    is_excluded: bool = False
+    exclusions_record_count: int = 0
+    exclusions_last_checked_at: str | None = None
+    blockers: list[str] = Field(default_factory=list)
+    has_hard_blocker: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -468,6 +495,9 @@ class CapturePackage(_Base):
     bid_decision: BidDecisionSection = Field(default_factory=BidDecisionSection)
     governance_readiness: GovernanceReadinessSection = Field(
         default_factory=GovernanceReadinessSection
+    )
+    tenant_registration: TenantRegistrationSection = Field(
+        default_factory=TenantRegistrationSection
     )
     qa_history: QAHistorySection = Field(default_factory=QAHistorySection)
 
