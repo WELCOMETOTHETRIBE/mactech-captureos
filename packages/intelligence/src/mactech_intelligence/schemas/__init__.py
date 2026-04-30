@@ -1,0 +1,72 @@
+"""Public schema exports for cross-app integration contracts.
+
+The Capture Package is the published handoff artifact between CaptureOS
+and ProposalOS (see ``docs/CAPTURE_PACKAGE.md`` and
+``docs/00_Ecosystem_Overview.md``). Treat its schema as a public API:
+versioned via ``CAPTURE_PACKAGE_SCHEMA_VERSION``, backwards-compatible
+within a major version.
+"""
+
+from mactech_intelligence.schemas.capture_package import (
+    CAPTURE_PACKAGE_SCHEMA_VERSION,
+    BidDecisionSection,
+    CapturePackage,
+    CaptureStrategySection,
+    ComplianceItem,
+    ComplianceMatrixSection,
+    CyberPostureSnapshot,
+    CyberSection,
+    EvaluationSection,
+    GovernanceDocState,
+    GovernanceReadinessSection,
+    IncumbentSummary,
+    KeyPersonRef,
+    KeyPersonnelSection,
+    OpportunitySection,
+    PackageCompleteness,
+    PassFailItem,
+    PastPerformanceRef,
+    PastPerformanceSection,
+    QAEntry,
+    QAHistorySection,
+    RequirementItem,
+    RequirementsMatrixSection,
+    ScoredFactor,
+    SolicitationFile,
+    SolicitationSection,
+    TeamingPartnerRef,
+    TeamingPartnersSection,
+    WinStrategySection,
+)
+
+__all__ = [
+    "CAPTURE_PACKAGE_SCHEMA_VERSION",
+    "BidDecisionSection",
+    "CapturePackage",
+    "CaptureStrategySection",
+    "ComplianceItem",
+    "ComplianceMatrixSection",
+    "CyberPostureSnapshot",
+    "CyberSection",
+    "EvaluationSection",
+    "GovernanceDocState",
+    "GovernanceReadinessSection",
+    "IncumbentSummary",
+    "KeyPersonRef",
+    "KeyPersonnelSection",
+    "OpportunitySection",
+    "PackageCompleteness",
+    "PassFailItem",
+    "PastPerformanceRef",
+    "PastPerformanceSection",
+    "QAEntry",
+    "QAHistorySection",
+    "RequirementItem",
+    "RequirementsMatrixSection",
+    "ScoredFactor",
+    "SolicitationFile",
+    "SolicitationSection",
+    "TeamingPartnerRef",
+    "TeamingPartnersSection",
+    "WinStrategySection",
+]
