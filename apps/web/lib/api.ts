@@ -750,3 +750,354 @@ export type ForecastsResponse = {
   target_naics_filter: boolean;
   target_naics: string[];
 };
+
+/* ── /opportunities/{id}/solicitation-extraction ────────────────── */
+
+export type SolicitationExtractionOut = {
+  id: string;
+  opportunity_id: string;
+  status: string; // pending | running | complete | failed
+  description_chars: number | null;
+  compliance_count: number;
+  requirements_count: number;
+  model: string | null;
+  prompt_version: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ComplianceItemOut = {
+  id: string;
+  item_id: string;
+  statement: string;
+  section_l_citation: string | null;
+  pass_fail: boolean;
+  notes: string | null;
+  sort_order: number;
+};
+
+export type ComplianceMatrixOut = {
+  extraction_id: string;
+  opportunity_id: string;
+  items: ComplianceItemOut[];
+  last_extracted_at: string;
+};
+
+export type RequirementCategory =
+  | "technical"
+  | "operational"
+  | "security"
+  | "staffing"
+  | "performance"
+  | "reporting"
+  | "other";
+
+export type RequirementItemOut = {
+  id: string;
+  item_id: string;
+  statement: string;
+  source_citation: string | null;
+  category: RequirementCategory;
+  sort_order: number;
+};
+
+export type RequirementsMatrixOut = {
+  extraction_id: string;
+  opportunity_id: string;
+  items: RequirementItemOut[];
+  last_extracted_at: string;
+};
+
+/* ── /opportunities/{id}/cyber-summary ──────────────────────────── */
+
+export type CyberPostureSummary = {
+  sprs_score: number | null;
+  sprs_max: number;
+  sprs_assessment_date: string | null;
+  sprs_source_url: string | null;
+  sprs_synced_at: string | null;
+};
+
+export type CyberSummaryOut = {
+  opportunity_id: string;
+  clauses_identified: string[];
+  cmmc_level_required: string | null;
+  handles_cui: boolean;
+  handles_fci: boolean;
+  handles_itar: boolean;
+  posture: CyberPostureSummary;
+  sufficiency: "sufficient" | "gap" | "unknown";
+  sufficiency_notes: string | null;
+};
+
+/* ── /pursuits/{id}/capture-package ─────────────────────────────── */
+
+export type CPOpportunitySection = {
+  notice_id: string;
+  source: string;
+  solicitation_number: string | null;
+  title: string;
+  notice_type: string | null;
+  agency: string | null;
+  subagency: string | null;
+  office: string | null;
+  naics_code: string | null;
+  set_aside: string | null;
+  contract_type: string | null;
+  response_deadline: string | null;
+  posted_at: string | null;
+  estimated_value_low: number | null;
+  estimated_value_high: number | null;
+  place_of_performance: Record<string, unknown> | null;
+  submission_method: string | null;
+  description_url: string | null;
+  description_text_excerpt: string | null;
+};
+
+export type CPSolicitationFile = {
+  file_id: string | null;
+  name: string;
+  url: string | null;
+  kind: string;
+  posted_at: string | null;
+  sha256: string | null;
+};
+
+export type CPSolicitationSection = {
+  primary_description_url: string | null;
+  primary_description_text_excerpt: string | null;
+  files: CPSolicitationFile[];
+  amendments: CPSolicitationFile[];
+  raw_payload_available: boolean;
+};
+
+export type CPComplianceItem = {
+  id: string;
+  statement: string;
+  section_l_citation: string | null;
+  pass_fail: boolean;
+  notes: string | null;
+};
+
+export type CPComplianceMatrixSection = {
+  items: CPComplianceItem[];
+  source_documents: string[];
+  last_generated_at: string | null;
+  status: "not_generated" | "generated" | "stale";
+};
+
+export type CPRequirementItem = {
+  id: string;
+  statement: string;
+  source_citation: string | null;
+  category: RequirementCategory;
+};
+
+export type CPRequirementsMatrixSection = {
+  items: CPRequirementItem[];
+  last_generated_at: string | null;
+  status: "not_generated" | "generated" | "stale";
+};
+
+export type CPPassFailItem = {
+  statement: string;
+  source_citation: string | null;
+};
+
+export type CPScoredFactor = {
+  name: string;
+  weight: number | null;
+  description: string | null;
+  source_citation: string | null;
+};
+
+export type CPEvaluationSection = {
+  pass_fail_items: CPPassFailItem[];
+  scored_factors: CPScoredFactor[];
+  status: "not_extracted" | "extracted";
+};
+
+export type CPCyberPostureSnapshot = {
+  sprs_score: number | null;
+  sprs_max: number | null;
+  sprs_assessment_date: string | null;
+  sprs_source_url: string | null;
+  cmmc_level_current: string | null;
+  source: "codex" | "stub";
+  snapshot_at: string;
+};
+
+export type CPCyberSection = {
+  clauses_identified: string[];
+  cmmc_level_required: string | null;
+  handles_cui: boolean | null;
+  handles_fci: boolean | null;
+  handles_itar: boolean | null;
+  posture_snapshot: CPCyberPostureSnapshot | null;
+  sufficiency: "sufficient" | "gap" | "unknown";
+  sufficiency_notes: string | null;
+};
+
+export type CPIncumbentSummary = {
+  name: string | null;
+  uei: string | null;
+  contract_id: string | null;
+  end_date: string | null;
+  award_amount: number | null;
+  cleared_exclusions: boolean | null;
+};
+
+export type CPCaptureStrategySection = {
+  agency_brief: string | null;
+  scope_one_sentence: string | null;
+  incumbent: CPIncumbentSummary | null;
+  likely_competitors: string[];
+  customer_priorities: string | null;
+  must_have_requirements: string[];
+  nice_to_have: string[];
+  red_flags_for_small_biz: string[];
+  suggested_team_roles: string[];
+};
+
+export type CPWinStrategySection = {
+  win_themes: string[];
+  discriminators: string[];
+};
+
+export type CPPastPerformanceRef = {
+  id: string;
+  title: string;
+  customer_agency: string | null;
+  customer_office: string | null;
+  contract_number: string | null;
+  role: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  contract_value: number | null;
+  summary: string | null;
+  keywords: string[];
+};
+
+export type CPPastPerformanceSection = {
+  selected: CPPastPerformanceRef[];
+  library_size: number;
+  selection_method: "manual" | "ai_suggested" | "none";
+};
+
+export type CPKeyPersonRef = {
+  id: string;
+  slug: string;
+  full_name: string;
+  title: string | null;
+  pillar: string | null;
+  bio: string | null;
+  email: string | null;
+  areas_of_expertise: string[];
+};
+
+export type CPKeyPersonnelSection = {
+  selected: CPKeyPersonRef[];
+  library_size: number;
+};
+
+export type CPGovernanceDocState = {
+  mnda_executed: boolean | null;
+  mnda_signed_at: string | null;
+  teaming_agreement_executed: boolean | null;
+  teaming_agreement_signed_at: string | null;
+  subcontract_executed: boolean | null;
+  subcontract_signed_at: string | null;
+  last_synced_at: string | null;
+  source: "governance_os" | "stub";
+};
+
+export type CPTeamingPartnerRef = {
+  id: string;
+  name: string;
+  uei: string | null;
+  cage_code: string | null;
+  capabilities: string[];
+  naics_codes: string[];
+  set_aside_certifications: string[];
+  contact_name: string | null;
+  contact_email: string | null;
+  governance_doc_state: CPGovernanceDocState;
+};
+
+export type CPTeamingPartnersSection = {
+  selected: CPTeamingPartnerRef[];
+  library_size: number;
+};
+
+export type CPBidDecisionSection = {
+  decision: "bid" | "no_bid" | "pending";
+  pursuit_stage: string | null;
+  decided_at: string | null;
+  decider_user_id: string | null;
+  decider_founder_slug: string | null;
+  rationale: string | null;
+  score: number | null;
+  score_breakdown: Record<string, unknown> | null;
+};
+
+export type CPGovernanceReadinessSection = {
+  accounting_system_dcaa_ready: boolean | null;
+  accounting_system_provider: string | null;
+  fcl_status: string | null;
+  fcl_level: string | null;
+  set_asides_held: string[];
+  e_verify_enrolled: boolean | null;
+  reps_certs_current: boolean | null;
+  reps_certs_last_renewed_at: string | null;
+  snapshot_at: string | null;
+  source: "governance_os" | "stub";
+};
+
+export type CPQAEntry = {
+  id: string;
+  question: string;
+  answer: string | null;
+  asked_by_founder_slug: string | null;
+  submitted_at: string | null;
+  answered_at: string | null;
+  starter_kind: string | null;
+};
+
+export type CPQAHistorySection = {
+  entries: CPQAEntry[];
+};
+
+export type CPPackageCompleteness = {
+  overall_pct: number;
+  sections_complete: string[];
+  sections_partial: string[];
+  sections_missing: string[];
+  gaps: string[];
+};
+
+export type CapturePackageOut = {
+  schema_version: string;
+  generated_at: string;
+  tenant_id: string;
+  tenant_slug: string;
+  pursuit_id: string;
+
+  opportunity: CPOpportunitySection;
+  solicitation: CPSolicitationSection;
+  compliance_matrix: CPComplianceMatrixSection;
+  requirements_matrix: CPRequirementsMatrixSection;
+  evaluation: CPEvaluationSection;
+  cyber: CPCyberSection;
+  capture_strategy: CPCaptureStrategySection;
+  win_strategy: CPWinStrategySection;
+  past_performance: CPPastPerformanceSection;
+  key_personnel: CPKeyPersonnelSection;
+  teaming_partners: CPTeamingPartnersSection;
+  bid_decision: CPBidDecisionSection;
+  governance_readiness: CPGovernanceReadinessSection;
+  qa_history: CPQAHistorySection;
+  completeness: CPPackageCompleteness;
+};

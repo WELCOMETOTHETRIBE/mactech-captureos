@@ -4,6 +4,8 @@ import {
   apiFetch,
   type AgencyIntelOut,
   type BriefOut,
+  type ComplianceMatrixOut,
+  type CyberSummaryOut,
   type DraftListResponse,
   type MeResponse,
   type OpportunityDetail,
@@ -11,13 +13,17 @@ import {
   type PursuitStage,
   type QuestionListResponse,
   type QuestionOut,
+  type RequirementsMatrixOut,
+  type SolicitationExtractionOut,
   type TermExplanationResponse,
   type WebMentionsResponse
 } from "@/lib/api";
 import { createPursuit, deletePursuit, updatePursuit } from "@/lib/pursuits";
 import { deleteOpportunityQuestion } from "@/lib/ask";
 import { AskStreamingPanel } from "@/components/ask-streaming";
+import { CyberPostureCard } from "@/components/cyber-posture-card";
 import { StreamingDraftButton } from "@/components/draft-streaming";
+import { SolicitationPanel } from "@/components/solicitation-panel";
 import {
   deleteOpportunityBrief,
   generateOpportunityBrief
@@ -117,7 +123,11 @@ export default async function OpportunityDetailPage({
     brief,
     agencyIntel,
     explanation,
-    webMentions
+    webMentions,
+    extraction,
+    compliance,
+    requirements,
+    cyberSummary
   ] = await Promise.all([
       apiFetch<MeResponse>("/me"),
       apiFetch<PursuitCardT>(`/pursuits/by-opportunity/${id}`).catch(
@@ -145,6 +155,18 @@ export default async function OpportunityDetailPage({
         `/opportunities/${id}/web-mentions`
       ).catch(
         () => null as WebMentionsResponse | null
+      ),
+      apiFetch<SolicitationExtractionOut>(
+        `/opportunities/${id}/solicitation-extraction`
+      ).catch(() => null as SolicitationExtractionOut | null),
+      apiFetch<ComplianceMatrixOut>(
+        `/opportunities/${id}/compliance-matrix`
+      ).catch(() => null as ComplianceMatrixOut | null),
+      apiFetch<RequirementsMatrixOut>(
+        `/opportunities/${id}/requirements-matrix`
+      ).catch(() => null as RequirementsMatrixOut | null),
+      apiFetch<CyberSummaryOut>(`/opportunities/${id}/cyber-summary`).catch(
+        () => null as CyberSummaryOut | null
       )
     ]);
 
@@ -255,6 +277,18 @@ export default async function OpportunityDetailPage({
         meFounderSlug={me.founder?.slug ?? null}
       />
 
+      {/* Solicitation decoder — compliance + requirements matrices for ProposalOS */}
+      <SolicitationPanel
+        opportunityId={opp.id}
+        hasDescription={
+          data.description.fetch_status === "fetched" &&
+          !!data.description.text?.trim()
+        }
+        extraction={extraction}
+        compliance={compliance}
+        requirements={requirements}
+      />
+
       {/* Two-column main: description (with brief tab) left, incumbent + capability right */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <BriefAndDescriptionPanel
@@ -265,6 +299,7 @@ export default async function OpportunityDetailPage({
         />
 
         <div className="space-y-4">
+          {cyberSummary && <CyberPostureCard summary={cyberSummary} />}
           <Card title="Incumbent intelligence">
             {data.incumbent && data.incumbent.name ? (
               <>
@@ -580,6 +615,13 @@ function PursuitPanel({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <DetailStageButtons pursuit={pursuit} />
+          <Link
+            href={`/pursuits/${pursuit.id}/capture-package`}
+            className="rounded-md border border-brand-300 bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-800 hover:bg-brand-100"
+            title="Snapshot of everything CaptureOS knows about this pursuit — handoff to ProposalOS"
+          >
+            Capture Package →
+          </Link>
           <Link
             href="/pipeline"
             className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:border-neutral-500"
