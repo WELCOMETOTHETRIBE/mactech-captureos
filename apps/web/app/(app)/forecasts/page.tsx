@@ -24,7 +24,12 @@ export default async function ForecastsPage({
 }) {
   const sp = (await searchParams) ?? {};
   const showAll = sp.all === "1";
-  const [data, integrations] = await Promise.all([
+
+  type IntegrationsResult =
+    | { ok: true; data: IntegrationsResponse }
+    | { ok: false; error: string };
+
+  const [data, integrationsResult] = await Promise.all([
     apiFetch<ForecastsResponse>(
       `/forecasts?upcoming_only=true&naics_filter=${showAll ? "false" : "true"}&limit=120`
     ).catch(
@@ -36,13 +41,23 @@ export default async function ForecastsPage({
           target_naics: []
         }) as ForecastsResponse
     ),
-    apiFetch<IntegrationsResponse>("/me/integrations").catch(
-      () => null as IntegrationsResponse | null
-    )
+    apiFetch<IntegrationsResponse>("/me/integrations")
+      .then((d) => ({ ok: true, data: d }) as IntegrationsResult)
+      .catch(
+        (err) =>
+          ({
+            ok: false,
+            error: err instanceof Error ? err.message : String(err)
+          }) as IntegrationsResult
+      )
   ]);
-  const forecastsStatus =
-    integrations?.integrations.find((i) => i.capability === "forecasts") ??
-    null;
+
+  const integrationsError = integrationsResult.ok ? null : integrationsResult.error;
+  const forecastsStatus = integrationsResult.ok
+    ? integrationsResult.data.integrations.find(
+        (i) => i.capability === "forecasts"
+      ) ?? null
+    : null;
 
   return (
     <div className="space-y-6">
@@ -80,6 +95,7 @@ export default async function ForecastsPage({
       {data.items.length === 0 ? (
         <IntegrationDiagnostic
           status={forecastsStatus}
+          fetchError={integrationsError}
           triggerAction={async () => {
             "use server";
             await triggerForecastsRun();

@@ -3,6 +3,7 @@ import type { IntegrationStatusOut } from "@/lib/api";
 
 type Props = {
   status: IntegrationStatusOut | null;
+  fetchError?: string | null;
   triggerAction: () => Promise<void>;
 };
 
@@ -12,14 +13,46 @@ type Props = {
  * failed, run skipped, run succeeded but ingest yielded nothing — and
  * a Retry button that fires the kick task on demand.
  */
-export function IntegrationDiagnostic({ status, triggerAction }: Props) {
+export function IntegrationDiagnostic({
+  status,
+  fetchError,
+  triggerAction,
+}: Props) {
   if (!status) {
     return (
-      <Card>
-        <p className="text-sm text-neutral-600">
-          Could not load integration status. Reload the page or check the
-          API logs.
-        </p>
+      <Card title="Diagnostic — integration status unavailable">
+        <div className="rounded-md border border-red-200 bg-red-50 p-3">
+          <p className="text-sm font-medium text-red-900">
+            The API returned an error fetching integration status.
+          </p>
+          {fetchError && (
+            <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-red-200 bg-white p-2 font-mono text-[11px] text-red-800">
+              {fetchError}
+            </pre>
+          )}
+          <p className="mt-2 text-[11px] text-red-800">
+            Most likely causes:
+          </p>
+          <ul className="mt-1 list-disc pl-5 text-[11px] text-red-800">
+            <li>
+              Latest deploy hasn&rsquo;t completed yet — check{" "}
+              <code className="rounded bg-red-100 px-1">
+                railway status --service api
+              </code>
+              .
+            </li>
+            <li>
+              Alembic migration failed during boot — check{" "}
+              <code className="rounded bg-red-100 px-1">
+                railway logs --service api
+              </code>{" "}
+              for an exception.
+            </li>
+            <li>
+              Database connection issue (DATABASE_URL stale or unreachable).
+            </li>
+          </ul>
+        </div>
       </Card>
     );
   }
