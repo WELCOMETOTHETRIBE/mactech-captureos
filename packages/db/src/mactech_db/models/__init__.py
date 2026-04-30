@@ -20,12 +20,19 @@ from mactech_db.models.opportunity import IngestionState, OpportunityRaw
 from mactech_db.models.opportunity_brief import OpportunityBrief
 from mactech_db.models.opportunity_question import OpportunityQuestion
 from mactech_db.models.pursuit import PURSUIT_STAGES, Pursuit
+from mactech_db.models.pursuit_links import (
+    PursuitKeyPersonnel,
+    PursuitPastPerformance,
+    PursuitTeamingPartner,
+)
 from mactech_db.models.saved_search import SavedSearch
 from mactech_db.models.scoring import CapabilityStatement, OpportunityScore
 from mactech_db.models.solicitation_extraction import (
     EXTRACTION_STATUSES,
     REQUIREMENT_CATEGORIES,
     ComplianceMatrixItem,
+    EvaluationPassFailItem,
+    EvaluationScoredFactor,
     RequirementMatrixItem,
     SolicitationExtraction,
 )
@@ -44,6 +51,8 @@ __all__ = [
     "DRAFT_STATUSES",
     "DRAFT_TYPES",
     "EXTRACTION_STATUSES",
+    "EvaluationPassFailItem",
+    "EvaluationScoredFactor",
     "ExclusionsCache",
     "ForecastRaw",
     "Founder",
@@ -64,6 +73,9 @@ __all__ = [
     "PastPerformance",
     "ProposalDraft",
     "Pursuit",
+    "PursuitKeyPersonnel",
+    "PursuitPastPerformance",
+    "PursuitTeamingPartner",
     "REQUIREMENT_CATEGORIES",
     "RequirementMatrixItem",
     "SavedSearch",

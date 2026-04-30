@@ -19,11 +19,14 @@ the latest extraction run.
 from datetime import datetime
 from uuid import UUID
 
+from decimal import Decimal
+
 from sqlalchemy import (
     TIMESTAMP,
     Boolean,
     ForeignKey,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -90,6 +93,9 @@ class SolicitationExtraction(Base):
     requirements_count: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="0"
     )
+    evaluation_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
 
     # Provenance + cost tracking — mirrors OpportunityBrief.
     model: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -148,6 +154,91 @@ class ComplianceMatrixItem(Base):
         Boolean, nullable=False, server_default=text("false")
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sort_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class EvaluationPassFailItem(Base):
+    """A pass/fail evaluation factor from Section M (or equivalent).
+
+    The proposal must satisfy these or be eliminated from competition,
+    independent of any scored evaluation.
+    """
+
+    __tablename__ = "evaluation_pass_fail_items"
+
+    id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    extraction_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("solicitation_extractions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    opportunity_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("opportunities_raw.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    statement: Mapped[str] = mapped_column(Text, nullable=False)
+    source_citation: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    sort_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class EvaluationScoredFactor(Base):
+    """A scored evaluation factor or sub-factor from Section M.
+
+    ``weight`` is the relative weight as stated in Section M, when given;
+    if Section M is qualitative ("most important", "approximately equal"),
+    weight stays null and ``description`` carries the prose.
+    """
+
+    __tablename__ = "evaluation_scored_factors"
+
+    id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    extraction_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("solicitation_extractions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    opportunity_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("opportunities_raw.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    weight: Mapped[Decimal | None] = mapped_column(Numeric(6, 3), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_citation: Mapped[str | None] = mapped_column(String(255), nullable=True)
     sort_order: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="0"
     )

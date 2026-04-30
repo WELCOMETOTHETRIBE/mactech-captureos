@@ -12,7 +12,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID as PgUUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mactech_db.base import Base
@@ -52,6 +52,15 @@ class Pursuit(Base):
     )
     stage: Mapped[str] = mapped_column(String(16), nullable=False, default="lead")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # High-level capture strategy curated by the capture lead. ProposalOS
+    # imports these via the Capture Package and uses them as the spine
+    # of per-volume win-theme ghost copy.
+    win_themes: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    discriminators: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
