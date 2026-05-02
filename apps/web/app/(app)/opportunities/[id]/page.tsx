@@ -2,37 +2,26 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   apiFetch,
-  type AgencyIntelOut,
-  type AmendmentListOut,
   type BriefOut,
-  type ComplianceMatrixOut,
   type CyberSummaryOut,
   type DraftListResponse,
-  type EvaluationOut,
   type MeResponse,
   type OpportunityDetail,
   type PursuitCard as PursuitCardT,
   type PursuitStage,
   type QuestionListResponse,
   type QuestionOut,
-  type RequirementsMatrixOut,
-  type SolicitationExtractionOut,
-  type TermExplanationResponse,
-  type WebMentionsResponse
+  type TermExplanationResponse
 } from "@/lib/api";
 import { createPursuit, deletePursuit, updatePursuit } from "@/lib/pursuits";
 import { deleteOpportunityQuestion } from "@/lib/ask";
-import { AmendmentsPanel } from "@/components/amendments-panel";
 import { AskStreamingPanel } from "@/components/ask-streaming";
 import { CyberPostureCard } from "@/components/cyber-posture-card";
 import { StreamingDraftButton } from "@/components/draft-streaming";
-import { SolicitationPanel } from "@/components/solicitation-panel";
 import {
   deleteOpportunityBrief,
   generateOpportunityBrief
 } from "@/lib/brief";
-import { pullAgencyIntel } from "@/lib/agency-intel";
-import { refreshWebMentions } from "@/lib/web-mentions";
 import {
   Badge,
   Card,
@@ -111,75 +100,42 @@ export default async function OpportunityDetailPage({
     throw err;
   }
 
-  // Pursuit + me + drafts + Q&A + brief + agency intel + (optional)
-  // explanation run in parallel. Brief, questions, and agency intel
-  // legitimately 404/empty/timeout — caller swallows.
-  // Agency intel uses a short timeout: if the cache is cold the API will
-  // hit USASpending live (5-10s), and we don't want that to block page
-  // render. Cache hits return in <100ms; cold misses fall through to the
-  // "Pull agency intel" CTA which uses the explicit server action.
+  // Triage-view fetches: only what a capture lead needs to decide
+  // bid/no-bid in 30 seconds. Solicitation matrices, amendments, agency
+  // intel, web mentions, and Q&A history live on the pursuit detail
+  // page now (post-decision deep work).
   const [
     me,
     pursuit,
     drafts,
     questions,
     brief,
-    agencyIntel,
     explanation,
-    webMentions,
-    extraction,
-    compliance,
-    requirements,
-    evaluation,
-    cyberSummary,
-    amendmentsList
+    cyberSummary
   ] = await Promise.all([
-      apiFetch<MeResponse>("/me"),
-      apiFetch<PursuitCardT>(`/pursuits/by-opportunity/${id}`).catch(
-        () => null as PursuitCardT | null
-      ),
-      apiFetch<DraftListResponse>(`/opportunities/${id}/drafts`).catch(
-        () => ({ total: 0, items: [] }) as DraftListResponse
-      ),
-      apiFetch<QuestionListResponse>(`/opportunities/${id}/questions`).catch(
-        () => ({ total: 0, items: [], starters: {} }) as QuestionListResponse
-      ),
-      apiFetch<BriefOut>(`/opportunities/${id}/brief`).catch(
-        () => null as BriefOut | null
-      ),
-      apiFetch<AgencyIntelOut>(`/opportunities/${id}/agency-intel`, {
-        timeoutMs: 4_000
-      }).catch(() => null as AgencyIntelOut | null),
-      explainSlug
-        ? apiFetch<TermExplanationResponse>(
-            `/explain/${encodeURIComponent(explainSlug)}`,
-            { timeoutMs: 45_000 }
-          ).catch(() => null as TermExplanationResponse | null)
-        : Promise.resolve(null as TermExplanationResponse | null),
-      apiFetch<WebMentionsResponse>(
-        `/opportunities/${id}/web-mentions`
-      ).catch(
-        () => null as WebMentionsResponse | null
-      ),
-      apiFetch<SolicitationExtractionOut>(
-        `/opportunities/${id}/solicitation-extraction`
-      ).catch(() => null as SolicitationExtractionOut | null),
-      apiFetch<ComplianceMatrixOut>(
-        `/opportunities/${id}/compliance-matrix`
-      ).catch(() => null as ComplianceMatrixOut | null),
-      apiFetch<RequirementsMatrixOut>(
-        `/opportunities/${id}/requirements-matrix`
-      ).catch(() => null as RequirementsMatrixOut | null),
-      apiFetch<EvaluationOut>(`/opportunities/${id}/evaluation`).catch(
-        () => null as EvaluationOut | null
-      ),
-      apiFetch<CyberSummaryOut>(`/opportunities/${id}/cyber-summary`).catch(
-        () => null as CyberSummaryOut | null
-      ),
-      apiFetch<AmendmentListOut>(`/opportunities/${id}/amendments`).catch(
-        () => null as AmendmentListOut | null
-      )
-    ]);
+    apiFetch<MeResponse>("/me"),
+    apiFetch<PursuitCardT>(`/pursuits/by-opportunity/${id}`).catch(
+      () => null as PursuitCardT | null
+    ),
+    apiFetch<DraftListResponse>(`/opportunities/${id}/drafts`).catch(
+      () => ({ total: 0, items: [] }) as DraftListResponse
+    ),
+    apiFetch<QuestionListResponse>(`/opportunities/${id}/questions`).catch(
+      () => ({ total: 0, items: [], starters: {} }) as QuestionListResponse
+    ),
+    apiFetch<BriefOut>(`/opportunities/${id}/brief`).catch(
+      () => null as BriefOut | null
+    ),
+    explainSlug
+      ? apiFetch<TermExplanationResponse>(
+          `/explain/${encodeURIComponent(explainSlug)}`,
+          { timeoutMs: 45_000 }
+        ).catch(() => null as TermExplanationResponse | null)
+      : Promise.resolve(null as TermExplanationResponse | null),
+    apiFetch<CyberSummaryOut>(`/opportunities/${id}/cyber-summary`).catch(
+      () => null as CyberSummaryOut | null
+    )
+  ]);
 
   const opp = data.opportunity;
 
@@ -202,13 +158,13 @@ export default async function OpportunityDetailPage({
       </div>
 
       {/* Header strip — full width */}
-      <header className="rounded-md border border-neutral-200 bg-white p-5">
+      <header className="rounded-md border border-paper-200 bg-white p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-xs uppercase tracking-wider text-neutral-500">
               {opp.agency ?? "Agency unknown"}
             </p>
-            <h1 className="mt-1 text-xl font-semibold tracking-tight text-neutral-900">
+            <h1 className="mt-1 text-2xl font-medium italic font-serif tracking-tight text-neutral-900 leading-tight">
               {opp.title}
             </h1>
             <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -286,22 +242,6 @@ export default async function OpportunityDetailPage({
         opportunityId={opp.id}
         questions={questions}
         meFounderSlug={me.founder?.slug ?? null}
-      />
-
-      {/* Amendments — system-detected SAM changes since first ingest */}
-      <AmendmentsPanel amendments={amendmentsList} />
-
-      {/* Solicitation decoder — compliance + requirements matrices for ProposalOS */}
-      <SolicitationPanel
-        opportunityId={opp.id}
-        hasDescription={
-          data.description.fetch_status === "fetched" &&
-          !!data.description.text?.trim()
-        }
-        extraction={extraction}
-        compliance={compliance}
-        requirements={requirements}
-        evaluation={evaluation}
       />
 
       {/* Two-column main: description (with brief tab) left, incumbent + capability right */}
@@ -386,17 +326,6 @@ export default async function OpportunityDetailPage({
         </div>
       </div>
 
-      {/* Agency intel — full-width strip below the 2-col main */}
-      <AgencyIntelCard
-        opportunityId={opp.id}
-        agency={opp.agency}
-        naics={opp.naics_code}
-        intel={agencyIntel}
-      />
-
-      {/* Web mentions — Google results scoped to this opp via SerpAPI */}
-      <WebMentionsCard opportunityId={opp.id} mentions={webMentions} />
-
       {/* Score + rationale — full-width */}
       {data.score ? (
         <section className="rounded-md border border-neutral-200 bg-white p-5">
@@ -442,15 +371,17 @@ export default async function OpportunityDetailPage({
             )}
           </div>
 
-          <div className="mt-5 border-t border-neutral-200 pt-4">
-            <div className="flex items-baseline justify-between gap-3">
-              <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+          <details className="mt-5 border-t border-paper-200 pt-3 group">
+            <summary className="flex cursor-pointer items-baseline justify-between gap-3 list-none">
+              <p className="text-[11px] uppercase tracking-wider text-neutral-500 group-hover:text-neutral-800">
                 Score breakdown
+                <span className="ml-2 text-neutral-400 group-open:hidden">↓ Show</span>
+                <span className="ml-2 hidden text-neutral-400 group-open:inline">↑ Hide</span>
               </p>
               <p className="text-[11px] text-neutral-400">
-                Hover any component for the scoring rule.
+                Hover any component for the rule.
               </p>
-            </div>
+            </summary>
             <ul className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {Object.entries(data.score.breakdown).map(([k, v]) => {
                 const max = SCORE_COMPONENT_MAX[k];
@@ -460,7 +391,7 @@ export default async function OpportunityDetailPage({
                   <li
                     key={k}
                     title={help}
-                    className="rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 transition-colors hover:border-brand-300 hover:bg-white"
+                    className="rounded-md border border-paper-200 bg-paper-50 px-3 py-2 transition-colors hover:border-brand-300 hover:bg-white"
                   >
                     <div className="flex items-baseline justify-between gap-2">
                       <ExplainLink
@@ -495,7 +426,7 @@ export default async function OpportunityDetailPage({
                 );
               })}
             </ul>
-          </div>
+          </details>
         </section>
       ) : (
         <Card title="Score">
@@ -1270,343 +1201,3 @@ function BriefEmpty({
   );
 }
 
-/* ── Agency intel card ───────────────────────────────────────────── */
-
-function AgencyIntelCard({
-  opportunityId,
-  agency,
-  naics,
-  intel
-}: {
-  opportunityId: string;
-  agency: string | null;
-  naics: string | null;
-  intel: AgencyIntelOut | null;
-}) {
-  const action = pullAgencyIntel.bind(null, opportunityId);
-
-  if (!agency || !naics) {
-    return null; // Nothing to query without both fields.
-  }
-
-  return (
-    <section className="rounded-lg border border-neutral-200 bg-white p-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-brand-700">
-            Agency intel
-          </p>
-          <p className="mt-1 text-sm text-neutral-600">
-            How {agency.split(".")[0]} has spent under NAICS {naics} in the
-            last 12 months. Pulled from USASpending; cached 7 days.
-          </p>
-        </div>
-        {intel && (
-          <form action={action}>
-            <button
-              type="submit"
-              className="rounded-md px-2 py-1 text-[11px] text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
-              title="Re-fetch from USASpending. Takes 5–10 seconds."
-            >
-              ↻ Refresh
-            </button>
-          </form>
-        )}
-      </div>
-
-      {!intel ? (
-        <AgencyIntelEmpty action={action} />
-      ) : intel.lookup_failed ? (
-        <AgencyIntelFailure intel={intel} action={action} />
-      ) : intel.award_count === 0 ? (
-        <AgencyIntelNoMatches intel={intel} />
-      ) : (
-        <AgencyIntelBody intel={intel} />
-      )}
-    </section>
-  );
-}
-
-function AgencyIntelEmpty({
-  action
-}: {
-  action: () => Promise<void>;
-}) {
-  return (
-    <div className="mt-4 rounded-md border border-dashed border-neutral-300 bg-neutral-50 p-5 text-center">
-      <p className="text-sm font-medium text-neutral-800">
-        Agency intel not loaded yet
-      </p>
-      <p className="mt-2 text-sm text-neutral-600">
-        Click below to pull spending history from USASpending.gov for this
-        agency + NAICS combination. Takes 5–10 seconds the first time;
-        subsequent loads are instant for 7 days.
-      </p>
-      <form action={action} className="mt-4">
-        <button
-          type="submit"
-          className="rounded-md border border-brand-700 bg-brand-700 px-4 py-2 text-sm font-medium text-white hover:bg-brand-800"
-        >
-          Pull agency intel →
-        </button>
-      </form>
-    </div>
-  );
-}
-
-function AgencyIntelFailure({
-  intel,
-  action
-}: {
-  intel: AgencyIntelOut;
-  action: () => Promise<void>;
-}) {
-  return (
-    <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-      <p className="font-medium">USASpending lookup didn&rsquo;t resolve.</p>
-      <p className="mt-1 text-xs">
-        {intel.failure_note ??
-          "The agency name may not match a USASpending toptier exactly."}
-      </p>
-      <form action={action} className="mt-3">
-        <button
-          type="submit"
-          className="rounded-md border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-900 hover:border-amber-500"
-        >
-          Retry
-        </button>
-      </form>
-    </div>
-  );
-}
-
-function AgencyIntelNoMatches({ intel }: { intel: AgencyIntelOut }) {
-  return (
-    <p className="mt-4 text-sm text-neutral-600">
-      USASpending returned <strong className="text-neutral-900">0 awards</strong>{" "}
-      for {intel.agency_name} under NAICS {intel.naics_code} in the last{" "}
-      {intel.lookback_days} days. Either this agency hasn&rsquo;t bought
-      under this NAICS recently, or the agency name doesn&rsquo;t match a
-      USASpending toptier exactly.
-    </p>
-  );
-}
-
-function AgencyIntelBody({ intel }: { intel: AgencyIntelOut }) {
-  return (
-    <div className="mt-5 space-y-5">
-      {/* Top-line stats */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <IntelStat
-          label="Awards (12mo)"
-          value={intel.award_count.toLocaleString()}
-          hint={
-            intel.sample_size && intel.sample_size < intel.award_count
-              ? `top ${intel.sample_size} sampled`
-              : undefined
-          }
-        />
-        <IntelStat
-          label="Total obligated"
-          value={
-            intel.total_obligated != null
-              ? fmtMoney(intel.total_obligated)
-              : "—"
-          }
-          hint="across the sample"
-        />
-        <IntelStat
-          label="Average award"
-          value={
-            intel.avg_award_value != null ? fmtMoney(intel.avg_award_value) : "—"
-          }
-        />
-        <IntelStat
-          label="Median award"
-          value={
-            intel.median_award_value != null
-              ? fmtMoney(intel.median_award_value)
-              : "—"
-          }
-          hint="less skewed by outliers"
-        />
-      </div>
-
-      {/* Top recipients */}
-      {intel.top_recipients.length > 0 && (
-        <div>
-          <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">
-            Top recipients
-          </p>
-          <ol className="mt-2 space-y-1.5">
-            {intel.top_recipients.map((r, i) => (
-              <li
-                key={`${r.name}-${i}`}
-                className="flex items-baseline justify-between gap-3 text-sm"
-              >
-                <span className="flex min-w-0 items-baseline gap-2">
-                  <span className="text-neutral-400 tabular-nums">
-                    {i + 1}.
-                  </span>
-                  <span className="truncate font-medium text-neutral-900">
-                    {r.name}
-                  </span>
-                  <span className="shrink-0 text-[11px] text-neutral-500 tabular-nums">
-                    {r.award_count} {r.award_count === 1 ? "award" : "awards"}
-                  </span>
-                </span>
-                <span className="shrink-0 tabular-nums font-semibold text-neutral-800">
-                  {fmtMoney(r.total)}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
-
-      <p className="border-t border-neutral-100 pt-3 text-[11px] text-neutral-400">
-        Refreshed {fmtDate(intel.refreshed_at)} ·{" "}
-        {intel.is_fresh
-          ? `cache hit (${Math.round(intel.cache_age_hours)}h old)`
-          : "stale, refresh on next view"}{" "}
-        · Source: USASpending.gov
-      </p>
-    </div>
-  );
-}
-
-function IntelStat({
-  label,
-  value,
-  hint
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-}) {
-  return (
-    <div className="rounded-md border border-neutral-100 bg-neutral-50 p-3">
-      <p className="text-[10px] font-medium uppercase tracking-wide text-neutral-500">
-        {label}
-      </p>
-      <p className="mt-1 text-xl font-semibold tabular-nums text-neutral-900">
-        {value}
-      </p>
-      {hint && <p className="text-[10px] text-neutral-500">{hint}</p>}
-    </div>
-  );
-}
-
-/* ── Web mentions card (SerpAPI) ───────────────────────────────── */
-
-const KIND_LABEL: Record<string, string> = {
-  program: "Program",
-  incumbent: "Incumbent risk",
-  press: "Industry press",
-  agency_news: "Agency news"
-};
-
-function WebMentionsCard({
-  opportunityId,
-  mentions
-}: {
-  opportunityId: string;
-  mentions: WebMentionsResponse | null;
-}) {
-  const groups = mentions?.groups ?? [];
-  const hasKey = mentions?.has_serpapi_key ?? false;
-
-  return (
-    <section className="rounded-md border border-neutral-200 bg-white p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-[11px] uppercase tracking-wider text-neutral-500">
-            Web mentions
-          </p>
-          <h2 className="mt-1 text-base font-semibold text-neutral-900">
-            What the open web says
-          </h2>
-          <p className="mt-1 text-xs text-neutral-500">
-            Top Google results for this program, the incumbent (if known), and
-            recent agency NAICS news. Cached 7 days; press refresh to re-bill.
-          </p>
-        </div>
-        {hasKey ? (
-          <form action={refreshWebMentions}>
-            <input
-              type="hidden"
-              name="opportunity_id"
-              value={opportunityId}
-            />
-            <button
-              type="submit"
-              className="rounded-md border border-brand-700 bg-brand-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-800"
-            >
-              {groups.length === 0 ? "Pull mentions" : "Refresh"}
-            </button>
-          </form>
-        ) : (
-          <span className="text-xs text-neutral-400">
-            SERPAPI_KEY not configured
-          </span>
-        )}
-      </div>
-
-      {groups.length === 0 ? (
-        <p className="mt-4 text-sm text-neutral-500">
-          {hasKey
-            ? "No mentions cached yet. Click Pull mentions to run a query."
-            : "Set SERPAPI_KEY on the API service to enable this panel."}
-        </p>
-      ) : (
-        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-          {groups.map((g) => (
-            <div
-              key={g.kind}
-              className="rounded-md border border-neutral-200 bg-neutral-50 p-3"
-            >
-              <p className="text-[11px] uppercase tracking-wider text-neutral-500">
-                {KIND_LABEL[g.kind] ?? g.kind}
-                {g.is_stale ? (
-                  <span className="ml-2 text-amber-700">stale</span>
-                ) : null}
-              </p>
-              <p className="mt-1 truncate text-[11px] text-neutral-400">
-                {g.query}
-              </p>
-              {g.results.length === 0 ? (
-                <p className="mt-3 text-xs text-neutral-500">No results.</p>
-              ) : (
-                <ul className="mt-3 space-y-3">
-                  {g.results.slice(0, 5).map((r) => (
-                    <li key={r.position}>
-                      <a
-                        href={r.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm font-medium text-brand-800 hover:underline"
-                      >
-                        {r.title}
-                      </a>
-                      {r.displayed_link ? (
-                        <p className="text-[11px] text-neutral-500">
-                          {r.displayed_link}
-                          {r.date ? ` · ${r.date}` : ""}
-                        </p>
-                      ) : null}
-                      {r.snippet ? (
-                        <p className="mt-1 text-xs leading-snug text-neutral-700">
-                          {r.snippet}
-                        </p>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}

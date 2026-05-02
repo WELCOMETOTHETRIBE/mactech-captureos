@@ -3,13 +3,20 @@ import { notFound } from "next/navigation";
 
 import {
   apiFetch,
+  type AgencyIntelOut,
+  type AmendmentListOut,
   type AuditTrailOut,
   type BidDecision,
+  type ComplianceMatrixOut,
+  type EvaluationOut,
   type FoundersListResponse,
   type PastPerformanceList,
   type PursuitDetailOut,
   type PursuitStage,
+  type RequirementsMatrixOut,
+  type SolicitationExtractionOut,
   type TeamingPartnerList,
+  type WebMentionsResponse,
 } from "@/lib/api";
 import {
   deletePursuit,
@@ -20,8 +27,12 @@ import {
   updatePursuitBidDecision,
   updatePursuitWinStrategy,
 } from "@/lib/pursuits";
+import { AgencyIntelCard } from "@/components/agency-intel-card";
+import { AmendmentsPanel } from "@/components/amendments-panel";
 import { AuditTrailCard } from "@/components/audit-trail-card";
 import { BidDecisionForm } from "@/components/bid-decision-form";
+import { SolicitationPanel } from "@/components/solicitation-panel";
+import { WebMentionsCard } from "@/components/web-mentions-card";
 import {
   Badge,
   Card,
@@ -67,7 +78,20 @@ export default async function PursuitDetailPage(props: {
     throw err;
   }
 
-  const [pastPerformanceLib, foundersLib, teamingLib, auditTrail] = await Promise.all([
+  const opportunityId = detail.opportunity.id;
+  const [
+    pastPerformanceLib,
+    foundersLib,
+    teamingLib,
+    auditTrail,
+    extraction,
+    compliance,
+    requirements,
+    evaluation,
+    amendmentsList,
+    agencyIntel,
+    webMentions,
+  ] = await Promise.all([
     apiFetch<PastPerformanceList>("/past-performance").catch(
       () => ({ total: 0, items: [] }) as PastPerformanceList
     ),
@@ -80,9 +104,29 @@ export default async function PursuitDetailPage(props: {
     apiFetch<AuditTrailOut>(`/pursuits/${id}/audit`).catch(
       () => null as AuditTrailOut | null
     ),
+    apiFetch<SolicitationExtractionOut>(
+      `/opportunities/${opportunityId}/solicitation-extraction`
+    ).catch(() => null as SolicitationExtractionOut | null),
+    apiFetch<ComplianceMatrixOut>(
+      `/opportunities/${opportunityId}/compliance-matrix`
+    ).catch(() => null as ComplianceMatrixOut | null),
+    apiFetch<RequirementsMatrixOut>(
+      `/opportunities/${opportunityId}/requirements-matrix`
+    ).catch(() => null as RequirementsMatrixOut | null),
+    apiFetch<EvaluationOut>(`/opportunities/${opportunityId}/evaluation`).catch(
+      () => null as EvaluationOut | null
+    ),
+    apiFetch<AmendmentListOut>(
+      `/opportunities/${opportunityId}/amendments`
+    ).catch(() => null as AmendmentListOut | null),
+    apiFetch<AgencyIntelOut>(`/opportunities/${opportunityId}/agency-intel`, {
+      timeoutMs: 4_000,
+    }).catch(() => null as AgencyIntelOut | null),
+    apiFetch<WebMentionsResponse>(
+      `/opportunities/${opportunityId}/web-mentions`
+    ).catch(() => null as WebMentionsResponse | null),
   ]);
 
-  const opportunityId = detail.opportunity.id;
   const winStrategyAction = async (formData: FormData) => {
     "use server";
     const themesText = String(formData.get("win_themes") ?? "");
@@ -151,6 +195,7 @@ export default async function PursuitDetailPage(props: {
 
       <PageHeader
         eyebrow="Pursuit"
+        display
         title={detail.opportunity.title}
         subtitle={
           <span>
@@ -191,6 +236,17 @@ export default async function PursuitDetailPage(props: {
         />
       </div>
 
+      <AmendmentsPanel amendments={amendmentsList} />
+
+      <SolicitationPanel
+        opportunityId={opportunityId}
+        hasDescription
+        extraction={extraction}
+        compliance={compliance}
+        requirements={requirements}
+        evaluation={evaluation}
+      />
+
       <PastPerformanceSelector
         selected={detail.selected_past_performance}
         library={pastPerformanceLib.items}
@@ -208,6 +264,16 @@ export default async function PursuitDetailPage(props: {
         library={teamingLib.items}
         action={replaceTeamingPartnersAction}
       />
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <AgencyIntelCard
+          opportunityId={opportunityId}
+          agency={detail.opportunity.agency}
+          naics={detail.opportunity.naics_code}
+          intel={agencyIntel}
+        />
+        <WebMentionsCard opportunityId={opportunityId} mentions={webMentions} />
+      </div>
 
       <AuditTrailCard trail={auditTrail} />
 
