@@ -15,9 +15,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-neutral-50">
+    <div className="min-h-screen flex flex-col bg-paper-50">
       <div className="grid flex-1 grid-cols-[240px_1fr]">
-      <aside className="flex flex-col border-r border-neutral-200 bg-white">
+      <aside className="flex flex-col border-r border-paper-200 bg-white">
         <div className="px-5 py-5 border-b border-neutral-200">
           <p className="text-[10px] uppercase tracking-wider text-neutral-500">
             {me?.tenant.name ?? "MacTech"}

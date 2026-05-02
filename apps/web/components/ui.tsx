@@ -17,9 +17,11 @@ export function Card({
   className?: string;
   trailing?: ReactNode;
 }) {
+  // Hairline border, no shadow at rest. White card on warm-paper page bg
+  // gives just enough lift without the "every section is a card" noise.
   return (
     <section
-      className={`rounded-lg border border-neutral-200 bg-white p-6 ${className}`}
+      className={`rounded-md border border-paper-200 bg-white p-6 ${className}`}
     >
       {title && (
         <header className="flex items-center justify-between">
@@ -34,17 +36,59 @@ export function Card({
   );
 }
 
+/**
+ * Soft section — borderless content block, only spacing + an optional
+ * label. Use this instead of Card when the content doesn't need a
+ * visible frame (e.g., the hero strip on a detail page, or a list of
+ * items inside a parent Card). Reduces the "every block is a card"
+ * noise that's been creeping in.
+ */
+export function Section({
+  title,
+  trailing,
+  children,
+  className = ""
+}: {
+  title?: string;
+  trailing?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={className}>
+      {title && (
+        <header className="flex items-center justify-between border-b border-paper-200 pb-2">
+          <h2 className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+            {title}
+          </h2>
+          {trailing}
+        </header>
+      )}
+      <div className={title ? "mt-3" : ""}>{children}</div>
+    </section>
+  );
+}
+
 export function PageHeader({
   eyebrow,
   title,
   subtitle,
-  trailing
+  trailing,
+  display = false
 }: {
   eyebrow?: string;
   title: string;
   subtitle?: ReactNode;
   trailing?: ReactNode;
+  /** When true, render the title as italic serif — used for editorial /
+   * decision-oriented surfaces (opportunity, pursuit, capture package).
+   * Default false keeps the existing sans treatment for utility pages
+   * (settings, library admin, drafts list). */
+  display?: boolean;
 }) {
+  const titleClass = display
+    ? "mt-1 text-4xl font-medium italic tracking-tight text-neutral-900 font-serif leading-tight"
+    : "mt-1 text-3xl font-semibold tracking-tight text-neutral-900";
   return (
     <header className="flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0 flex-1">
@@ -53,9 +97,7 @@ export function PageHeader({
             {eyebrow}
           </p>
         )}
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight text-neutral-900">
-          {title}
-        </h1>
+        <h1 className={titleClass}>{title}</h1>
         {subtitle && (
           <div className="mt-2 text-base text-neutral-600">{subtitle}</div>
         )}
@@ -83,7 +125,7 @@ export function Kpi({
     red: "text-red-700"
   };
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white p-5">
+    <div className="rounded-md border border-paper-200 bg-white p-5">
       <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
         {label}
       </p>
