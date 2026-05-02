@@ -1,4 +1,4 @@
-import { Badge, Card, fmtDate } from "@/components/ui";
+import { Badge, Card, ExplainLink, Term, fmtDate } from "@/components/ui";
 import type { SamRegistrationStatus, TenantEligibilityOut } from "@/lib/api";
 
 const STATUS_TONE: Record<SamRegistrationStatus, "green" | "red" | "amber" | "neutral"> = {
@@ -166,9 +166,9 @@ function SetAsideRow({
       ) : (
         <div className="flex flex-wrap gap-1">
           {eligibility.set_aside_certifications.map((s) => (
-            <Badge key={s} tone="green">
-              {s}
-            </Badge>
+            <ExplainLink key={s} slug={`set_aside_cert:${s}`}>
+              <Badge tone="green">{s}</Badge>
+            </ExplainLink>
           ))}
         </div>
       )}
@@ -184,14 +184,14 @@ function CyberRow({
   const c = eligibility.cyber;
   if (c.sprs_score == null) {
     return (
-      <Row label="SPRS score">
+      <Row label={<Term kind="sprs" value="SPRS">SPRS score</Term>}>
         <span className="text-neutral-500">Not on file</span>
       </Row>
     );
   }
   const tone = c.sprs_score >= 80 ? "green" : c.sprs_score >= 0 ? "amber" : "red";
   return (
-    <Row label="SPRS score">
+    <Row label={<Term kind="sprs" value="SPRS">SPRS score</Term>}>
       <Badge tone={tone}>
         <span className="tabular-nums font-semibold">{c.sprs_score}</span>
         <span className="ml-1 text-[10px] opacity-70">/ {c.sprs_max}</span>
@@ -209,7 +209,7 @@ function Row({
   label,
   children,
 }: {
-  label: string;
+  label: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (

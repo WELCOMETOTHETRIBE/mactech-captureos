@@ -12,7 +12,9 @@ export function Card({
   className = "",
   trailing
 }: {
-  title?: string;
+  /** Title accepts a string or any inline node so we can wrap terms with
+   * ``<Term>``/``<ExplainLink>`` (e.g. "Compliance matrix · Section L"). */
+  title?: ReactNode;
   children: ReactNode;
   className?: string;
   trailing?: ReactNode;
@@ -49,7 +51,7 @@ export function Section({
   children,
   className = ""
 }: {
-  title?: string;
+  title?: ReactNode;
   trailing?: ReactNode;
   children: ReactNode;
   className?: string;
@@ -333,6 +335,45 @@ export function ExplainLink({
       {children}
       <span aria-hidden className="ml-1 text-[10px] text-brand-700">?</span>
     </Link>
+  );
+}
+
+/**
+ * Term — sugar over ExplainLink for inline jargon. Renders the term
+ * inline (no surrounding badge) with a small ? affordance. Use when
+ * the term IS the content (e.g., "FAR 52.204-21" inside a sentence,
+ * or "Section L" as a column header). For badge-shaped chips, wrap
+ * the existing badge in <ExplainLink slug=...> instead.
+ *
+ * Slug format mirrors the explain backend: kind:value. Common kinds:
+ *   - clause      e.g. clause:FAR 52.204-21 / clause:DFARS 252.204-7012
+ *   - cmmc        e.g. cmmc:Level 2
+ *   - section     e.g. section:L / section:M / section:SOW
+ *   - sprs        e.g. sprs:score
+ *   - cui / fci / itar
+ *   - uei / cage / fcl
+ *   - naics       e.g. naics:541512
+ *   - set_aside_cert  e.g. set_aside_cert:SDVOSB
+ */
+export function Term({
+  kind,
+  value,
+  children,
+  className = ""
+}: {
+  kind: string;
+  value: string;
+  /** Optional override for what's displayed. Defaults to ``value``. */
+  children?: ReactNode;
+  className?: string;
+}) {
+  const slug = `${kind}:${value}`;
+  return (
+    <ExplainLink slug={slug} className={className}>
+      <span className="border-b border-dotted border-brand-300/70">
+        {children ?? value}
+      </span>
+    </ExplainLink>
   );
 }
 

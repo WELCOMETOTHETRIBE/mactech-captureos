@@ -1,4 +1,4 @@
-import { Badge, Card, fmtDate } from "@/components/ui";
+import { Badge, Card, ExplainLink, Term, fmtDate } from "@/components/ui";
 import type { CyberSummaryOut } from "@/lib/api";
 
 export function CyberPostureCard({ summary }: { summary: CyberSummaryOut }) {
@@ -17,16 +17,18 @@ export function CyberPostureCard({ summary }: { summary: CyberSummaryOut }) {
         <SprsRow summary={summary} />
         {summary.cmmc_level_required && (
           <Row label="CMMC required">
-            <Badge tone="blue">{summary.cmmc_level_required}</Badge>
+            <ExplainLink slug={`cmmc:${summary.cmmc_level_required}`}>
+              <Badge tone="blue">{summary.cmmc_level_required}</Badge>
+            </ExplainLink>
           </Row>
         )}
         {summary.clauses_identified.length > 0 && (
           <Row label="Clauses cited">
             <div className="flex flex-wrap justify-end gap-1.5">
               {summary.clauses_identified.map((c) => (
-                <Badge key={c} tone="neutral">
-                  {c}
-                </Badge>
+                <ExplainLink key={c} slug={`clause:${c}`}>
+                  <Badge tone="neutral">{c}</Badge>
+                </ExplainLink>
               ))}
             </div>
           </Row>
@@ -36,9 +38,21 @@ export function CyberPostureCard({ summary }: { summary: CyberSummaryOut }) {
           summary.handles_itar) && (
           <Row label="Data sensitivity">
             <div className="flex flex-wrap justify-end gap-1.5">
-              {summary.handles_cui && <Badge tone="amber">CUI</Badge>}
-              {summary.handles_fci && <Badge tone="neutral">FCI</Badge>}
-              {summary.handles_itar && <Badge tone="red">ITAR</Badge>}
+              {summary.handles_cui && (
+                <ExplainLink slug="cui:CUI">
+                  <Badge tone="amber">CUI</Badge>
+                </ExplainLink>
+              )}
+              {summary.handles_fci && (
+                <ExplainLink slug="fci:FCI">
+                  <Badge tone="neutral">FCI</Badge>
+                </ExplainLink>
+              )}
+              {summary.handles_itar && (
+                <ExplainLink slug="itar:ITAR">
+                  <Badge tone="red">ITAR</Badge>
+                </ExplainLink>
+              )}
             </div>
           </Row>
         )}
@@ -132,7 +146,7 @@ function SprsRow({ summary }: { summary: CyberSummaryOut }) {
   const max = summary.posture.sprs_max;
   if (score == null) {
     return (
-      <Row label="SPRS score">
+      <Row label={<Term kind="sprs" value="SPRS">SPRS score</Term>}>
         <span className="text-neutral-500">
           Not on file. Sync from Codex.
         </span>
@@ -141,7 +155,7 @@ function SprsRow({ summary }: { summary: CyberSummaryOut }) {
   }
   const tone = score >= 80 ? "green" : score >= 0 ? "amber" : "red";
   return (
-    <Row label="SPRS score">
+    <Row label={<Term kind="sprs" value="SPRS">SPRS score</Term>}>
       <span className="inline-flex items-baseline gap-1">
         <Badge tone={tone}>
           <span className="tabular-nums font-semibold">{score}</span>
@@ -161,7 +175,7 @@ function Row({
   label,
   children,
 }: {
-  label: string;
+  label: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (

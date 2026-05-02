@@ -16,6 +16,7 @@ import {
   type RequirementsMatrixOut,
   type SolicitationExtractionOut,
   type TeamingPartnerList,
+  type TermExplanationResponse,
   type WebMentionsResponse,
 } from "@/lib/api";
 import {
@@ -31,6 +32,7 @@ import { AgencyIntelCard } from "@/components/agency-intel-card";
 import { AmendmentsPanel } from "@/components/amendments-panel";
 import { AuditTrailCard } from "@/components/audit-trail-card";
 import { BidDecisionForm } from "@/components/bid-decision-form";
+import { ExplainRail } from "@/components/explain-rail";
 import { SolicitationPanel } from "@/components/solicitation-panel";
 import { WebMentionsCard } from "@/components/web-mentions-card";
 import {
@@ -38,6 +40,7 @@ import {
   Card,
   PageHeader,
   Pillar,
+  Term,
   fmtDate,
   fmtMoney,
 } from "@/components/ui";
@@ -66,8 +69,10 @@ const STAGE_LABEL: Record<PursuitStage, string> = {
 
 export default async function PursuitDetailPage(props: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ explain?: string }>;
 }) {
-  const { id } = await props.params;
+  const [{ id }, sp] = await Promise.all([props.params, props.searchParams]);
+  const explainSlug = sp.explain?.trim() || null;
 
   let detail: PursuitDetailOut;
   try {
@@ -91,6 +96,7 @@ export default async function PursuitDetailPage(props: {
     amendmentsList,
     agencyIntel,
     webMentions,
+    explanation,
   ] = await Promise.all([
     apiFetch<PastPerformanceList>("/past-performance").catch(
       () => ({ total: 0, items: [] }) as PastPerformanceList
@@ -125,6 +131,12 @@ export default async function PursuitDetailPage(props: {
     apiFetch<WebMentionsResponse>(
       `/opportunities/${opportunityId}/web-mentions`
     ).catch(() => null as WebMentionsResponse | null),
+    explainSlug
+      ? apiFetch<TermExplanationResponse>(
+          `/explain/${encodeURIComponent(explainSlug)}`,
+          { timeoutMs: 45_000 }
+        ).catch(() => null as TermExplanationResponse | null)
+      : Promise.resolve(null as TermExplanationResponse | null),
   ]);
 
   const winStrategyAction = async (formData: FormData) => {
@@ -185,7 +197,14 @@ export default async function PursuitDetailPage(props: {
   };
 
   return (
-    <div className="space-y-6">
+    <div
+      className={
+        explainSlug
+          ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]"
+          : ""
+      }
+    >
+      <div className="min-w-0 space-y-6">
       <Link
         href="/pipeline"
         className="text-xs text-neutral-500 hover:text-neutral-800"
@@ -299,6 +318,15 @@ export default async function PursuitDetailPage(props: {
           </form>
         </div>
       </Card>
+      </div>
+
+      {explainSlug && (
+        <ExplainRail
+          slug={explainSlug}
+          explanation={explanation}
+          closeHref={`/pursuits/${id}`}
+        />
+      )}
     </div>
   );
 }
@@ -322,7 +350,11 @@ function PursuitMetaStrip({ detail }: { detail: PursuitDetailOut }) {
           )}
         </Meta>
         <Meta label="NAICS">
-          {detail.opportunity.naics_code ?? (
+          {detail.opportunity.naics_code ? (
+            <Term kind="naics" value={detail.opportunity.naics_code}>
+              {detail.opportunity.naics_code}
+            </Term>
+          ) : (
             <span className="text-neutral-400">—</span>
           )}
         </Meta>

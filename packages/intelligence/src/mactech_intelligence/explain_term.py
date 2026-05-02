@@ -36,6 +36,12 @@ _KIND_INTROS: dict[str, str] = {
         "business (SDVOSB, 8(a), HUBZone, WOSB, etc.) or for full-and-open "
         "competition."
     ),
+    "set_aside_cert": (
+        "A set-aside certification a tenant claims to hold (e.g., SDVOSB, "
+        "8(a), WOSB, HUBZone). Required to legitimately bid set-aside "
+        "opportunities reserved for that category. Certifications are issued "
+        "by SBA, the VA, or self-attested via SAM.gov."
+    ),
     "notice_type": (
         "A SAM.gov notice type. Notice type signals where in the procurement "
         "lifecycle the opportunity sits — Sources Sought (market research), "
@@ -50,6 +56,70 @@ _KIND_INTROS: dict[str, str] = {
     ),
     "agency": (
         "A federal agency or sub-agency that issues procurement notices."
+    ),
+    "clause": (
+        "A FAR (Federal Acquisition Regulation) or DFARS (Defense FAR "
+        "Supplement) clause cited in a federal solicitation. Clauses define "
+        "obligations the contractor accepts when awarded — cybersecurity "
+        "controls, reporting cadence, data-handling rules, flow-downs to "
+        "subcontractors, etc. The clause number is the primary key (e.g., "
+        "FAR 52.204-21, DFARS 252.204-7012)."
+    ),
+    "cmmc": (
+        "A Cybersecurity Maturity Model Certification (CMMC) level required "
+        "by a DoD solicitation. CMMC 2.0 has three levels: Level 1 (basic, "
+        "FAR 52.204-21 / FCI), Level 2 (advanced, NIST SP 800-171 / CUI, "
+        "third-party assessor for prioritized contracts), Level 3 (expert, "
+        "NIST SP 800-172 + DIBCAC assessment)."
+    ),
+    "section": (
+        "A section reference inside a federal solicitation. Section L is the "
+        "Instructions to Offerors (what the proposal must say); Section M is "
+        "the Evaluation Factors for Award (how the proposal is graded). "
+        "SOW = Statement of Work, PWS = Performance Work Statement, "
+        "SOO = Statement of Objectives, CDRL = Contract Data Requirements "
+        "List."
+    ),
+    "sprs": (
+        "Supplier Performance Risk System — DoD's database of self-reported "
+        "NIST SP 800-171 implementation scores. DFARS 252.204-7019 / 7020 "
+        "require contractors handling CUI to post a current SPRS score "
+        "(within 3 years). Scores range from -203 (worst) to +110 (full "
+        "implementation of all 110 controls)."
+    ),
+    "cui": (
+        "Controlled Unclassified Information — federal data that requires "
+        "safeguarding under government rules but isn't classified. Contracts "
+        "involving CUI trigger DFARS 252.204-7012 (cyber incident reporting), "
+        "NIST 800-171 controls, and CMMC Level 2."
+    ),
+    "fci": (
+        "Federal Contract Information — basic information not for public "
+        "release that's provided by or generated for the government. FAR "
+        "52.204-21 imposes 15 basic safeguards on systems handling FCI."
+    ),
+    "itar": (
+        "International Traffic in Arms Regulations — controls on export of "
+        "defense articles, services, and technical data. ITAR-restricted "
+        "work generally requires US-person staffing and registration with "
+        "the State Department's DDTC."
+    ),
+    "uei": (
+        "Unique Entity Identifier — the 12-character alphanumeric ID SAM.gov "
+        "assigns each registered entity. UEI replaced DUNS in April 2022 "
+        "and is required for any federal award."
+    ),
+    "cage": (
+        "Commercial and Government Entity code — a 5-character DLA-assigned "
+        "code identifying companies that supply the federal government. "
+        "Auto-issued during SAM.gov registration. Required for facility "
+        "clearances and most DoD contracts."
+    ),
+    "fcl": (
+        "Facility Clearance — DCSA-issued clearance authorizing a contractor "
+        "to access classified information at a specific level (Confidential, "
+        "Secret, Top Secret). Without an FCL at the required level, you "
+        "cannot legally bid solicitations that handle classified data."
     ),
     "term": (
         "A federal-contracting term encountered in the dashboard."
@@ -78,12 +148,28 @@ def _human_label(kind: str, value: str) -> str:
         return f"NAICS {value}"
     if kind == "set_aside":
         return f"Set-aside: {value}"
+    if kind == "set_aside_cert":
+        return f"{value} certification"
     if kind == "notice_type":
         return f"Notice type: {value.replace('_', ' ').title()}"
     if kind == "score_component":
         return f"Score component: {value.replace('_', ' ').title()}"
     if kind == "agency":
         return value
+    if kind == "clause":
+        return value  # e.g. "FAR 52.204-21" — already canonical
+    if kind == "cmmc":
+        return f"CMMC {value}" if not value.lower().startswith("cmmc") else value
+    if kind == "section":
+        # Capitalize known section names
+        upper = value.upper()
+        if upper in ("L", "M"):
+            return f"Section {upper}"
+        if upper in ("SOW", "PWS", "SOO", "CDRL"):
+            return upper
+        return value
+    if kind in ("sprs", "cui", "fci", "itar", "uei", "cage", "fcl"):
+        return kind.upper()
     return value
 
 

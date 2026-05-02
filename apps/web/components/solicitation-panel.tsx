@@ -1,4 +1,4 @@
-import { Badge, Card, fmtDate } from "@/components/ui";
+import { Badge, Card, Term, fmtDate } from "@/components/ui";
 import {
   generateSolicitationExtraction,
   deleteSolicitationExtraction,
@@ -43,8 +43,10 @@ export function SolicitationPanel({
             Solicitation decoder
           </p>
           <p className="mt-1 text-sm text-neutral-600">
-            Compliance matrix (Section L) + requirements matrix (SOW/PWS) extracted
-            by Claude. Feeds the Capture Package handoff to ProposalOS.
+            Compliance matrix (<Term kind="section" value="L">Section L</Term>) +
+            requirements matrix (<Term kind="section" value="SOW">SOW</Term>/
+            <Term kind="section" value="PWS">PWS</Term>) extracted by Claude.
+            Feeds the Capture Package handoff to ProposalOS.
           </p>
         </div>
         {extraction ? (
@@ -107,8 +109,11 @@ function StaleExtractionBanner({
             Matrices are stale — opportunity was amended after the last extraction.
           </p>
           <p className="mt-1 text-[11px] text-amber-800">
-            Re-run extraction to pull updated Section L / SOW / Section M
-            from the latest SAM payload.
+            Re-run extraction to pull updated{" "}
+            <Term kind="section" value="L">Section L</Term> /{" "}
+            <Term kind="section" value="SOW">SOW</Term> /{" "}
+            <Term kind="section" value="M">Section M</Term> from the latest
+            SAM payload.
           </p>
         </div>
         <form action={generateAction}>
@@ -144,8 +149,11 @@ function SolicitationEmpty({
     <div className="flex flex-col items-start gap-3 pt-4">
       <p className="text-sm text-neutral-600">
         Not generated yet. Claude will read the SAM description and produce a
-        compliance matrix (every &ldquo;shall&rdquo; in Section L) and a
-        requirements matrix (SOW/PWS obligations). Typical run takes 30–60s.
+        compliance matrix (every &ldquo;shall&rdquo; in{" "}
+        <Term kind="section" value="L">Section L</Term>) and a requirements
+        matrix (<Term kind="section" value="SOW">SOW</Term> /{" "}
+        <Term kind="section" value="PWS">PWS</Term> obligations). Typical run
+        takes 30–60s.
       </p>
       <form action={generateAction}>
         <button
@@ -220,7 +228,7 @@ function ComplianceMatrixTable({
     <section>
       <header className="mb-2 flex items-baseline justify-between">
         <h3 className="text-sm font-semibold text-neutral-900">
-          Compliance matrix · Section L instructions
+          Compliance matrix · <Term kind="section" value="L">Section L</Term> instructions
         </h3>
         <span className="text-[11px] text-neutral-500">
           {compliance.items.length}{" "}
@@ -309,7 +317,8 @@ function RequirementsMatrixTable({
     <section>
       <header className="mb-2 flex items-baseline justify-between">
         <h3 className="text-sm font-semibold text-neutral-900">
-          Requirements matrix · SOW / PWS obligations
+          Requirements matrix · <Term kind="section" value="SOW">SOW</Term> /{" "}
+          <Term kind="section" value="PWS">PWS</Term> obligations
         </h3>
         <span className="text-[11px] text-neutral-500">
           {requirements.items.length}{" "}
@@ -376,7 +385,7 @@ function EvaluationTables({ evaluation }: { evaluation: EvaluationOut | null }) 
     <section>
       <header className="mb-2 flex items-baseline justify-between">
         <h3 className="text-sm font-semibold text-neutral-900">
-          Evaluation factors · Section M
+          Evaluation factors · <Term kind="section" value="M">Section M</Term>
         </h3>
         <span className="text-[11px] text-neutral-500">
           {pass_fail_items.length} pass/fail · {scored_factors.length} scored

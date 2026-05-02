@@ -2,10 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CapturePackageDownloadButton } from "@/components/capture-package-download";
+import { ExplainRail } from "@/components/explain-rail";
 import {
   Badge,
   Card,
+  ExplainLink,
   PageHeader,
+  Term,
   fmtDate,
   fmtMoney,
 } from "@/components/ui";
@@ -23,14 +26,17 @@ import {
   type CPQAHistorySection,
   type CPRequirementsMatrixSection,
   type CPTeamingPartnersSection,
+  type TermExplanationResponse,
 } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
 export default async function CapturePackagePage(props: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ explain?: string }>;
 }) {
-  const { id } = await props.params;
+  const [{ id }, sp] = await Promise.all([props.params, props.searchParams]);
+  const explainSlug = sp.explain?.trim() || null;
 
   let pkg: CapturePackageOut;
   try {
@@ -44,8 +50,22 @@ export default async function CapturePackagePage(props: {
     throw err;
   }
 
+  const explanation = explainSlug
+    ? await apiFetch<TermExplanationResponse>(
+        `/explain/${encodeURIComponent(explainSlug)}`,
+        { timeoutMs: 45_000 }
+      ).catch(() => null)
+    : null;
+
   return (
-    <div className="space-y-6">
+    <div
+      className={
+        explainSlug
+          ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]"
+          : ""
+      }
+    >
+      <div className="min-w-0 space-y-6">
       <Link
         href="/pipeline"
         className="text-xs text-neutral-500 hover:text-neutral-800"
@@ -94,6 +114,15 @@ export default async function CapturePackagePage(props: {
       <QAHistoryCard section={pkg.qa_history} />
 
       <RawJsonCard pkg={pkg} />
+      </div>
+
+      {explainSlug && (
+        <ExplainRail
+          slug={explainSlug}
+          explanation={explanation}
+          closeHref={`/pursuits/${id}/capture-package`}
+        />
+      )}
     </div>
   );
 }
@@ -184,8 +213,16 @@ function OpportunityCard({ section }: { section: CPOpportunitySection }) {
           </Row>
         )}
         {section.agency && <Row label="Agency">{section.agency}</Row>}
-        {section.naics_code && <Row label="NAICS">{section.naics_code}</Row>}
-        {section.set_aside && <Row label="Set-aside">{section.set_aside}</Row>}
+        {section.naics_code && (
+          <Row label="NAICS">
+            <Term kind="naics" value={section.naics_code} />
+          </Row>
+        )}
+        {section.set_aside && (
+          <Row label="Set-aside">
+            <Term kind="set_aside" value={section.set_aside} />
+          </Row>
+        )}
         {section.contract_type && (
           <Row label="Contract type">{section.contract_type}</Row>
         )}
@@ -375,7 +412,9 @@ function CyberCard({ section }: { section: CPCyberSection }) {
         <div className="flex items-center gap-2">
           <Badge tone={tone}>{section.sufficiency}</Badge>
           {section.cmmc_level_required && (
-            <Badge tone="blue">requires {section.cmmc_level_required}</Badge>
+            <ExplainLink slug={`cmmc:${section.cmmc_level_required}`}>
+              <Badge tone="blue">requires {section.cmmc_level_required}</Badge>
+            </ExplainLink>
           )}
         </div>
         {section.sufficiency_notes && (
@@ -388,16 +427,16 @@ function CyberCard({ section }: { section: CPCyberSection }) {
             </p>
             <div className="mt-1 flex flex-wrap gap-1.5">
               {section.clauses_identified.map((c) => (
-                <Badge key={c} tone="neutral">
-                  {c}
-                </Badge>
+                <ExplainLink key={c} slug={`clause:${c}`}>
+                  <Badge tone="neutral">{c}</Badge>
+                </ExplainLink>
               ))}
             </div>
           </div>
         )}
         {section.posture_snapshot && (
           <p className="text-[11px] text-neutral-500">
-            Codex SPRS{" "}
+            Codex <Term kind="sprs" value="SPRS">SPRS</Term>{" "}
             <span className="font-semibold tabular-nums">
               {section.posture_snapshot.sprs_score ?? "—"}
             </span>
@@ -422,8 +461,9 @@ function GovernanceReadinessCard({
       {section.source === "stub" ? (
         <p className="text-sm text-neutral-600">
           GovernanceOS isn&rsquo;t wired up yet (Integration Contract #2).
-          Until then, readiness facts (DCAA accounting, FCL, set-aside
-          eligibility, E-Verify, reps & certs) live outside this package.
+          Until then, readiness facts (DCAA accounting,{" "}
+          <Term kind="fcl" value="FCL">FCL</Term>, set-aside eligibility,
+          E-Verify, reps & certs) live outside this package.
         </p>
       ) : (
         <dl className="grid grid-cols-1 gap-2 text-sm">
@@ -437,15 +477,17 @@ function GovernanceReadinessCard({
             </Row>
           )}
           {section.fcl_status && (
-            <Row label="FCL">{section.fcl_status}</Row>
+            <Row label={<Term kind="fcl" value="FCL">FCL</Term>}>
+              {section.fcl_status}
+            </Row>
           )}
           {section.set_asides_held.length > 0 && (
             <Row label="Set-asides held">
               <div className="flex flex-wrap justify-end gap-1.5">
                 {section.set_asides_held.map((s) => (
-                  <Badge key={s} tone="neutral">
-                    {s}
-                  </Badge>
+                  <ExplainLink key={s} slug={`set_aside_cert:${s}`}>
+                    <Badge tone="neutral">{s}</Badge>
+                  </ExplainLink>
                 ))}
               </div>
             </Row>
@@ -473,7 +515,11 @@ function ComplianceMatrixCard({
 }) {
   if (section.items.length === 0) {
     return (
-      <Card title="Compliance matrix · Section L">
+      <Card title={(
+        <>
+          Compliance matrix · <Term kind="section" value="L">Section L</Term>
+        </>
+      )}>
         <p className="text-sm text-neutral-600">
           Status: <Badge tone="neutral">{section.status}</Badge>. Generate the
           matrix on the opportunity detail page.
@@ -483,7 +529,12 @@ function ComplianceMatrixCard({
   }
   return (
     <Card
-      title={`Compliance matrix · Section L (${section.items.length})`}
+      title={(
+        <>
+          Compliance matrix · <Term kind="section" value="L">Section L</Term>{" "}
+          ({section.items.length})
+        </>
+      )}
       trailing={
         <span className="text-[11px] text-neutral-500">
           extracted {fmtDate(section.last_generated_at)}
@@ -546,7 +597,12 @@ function RequirementsMatrixCard({
 }) {
   if (section.items.length === 0) {
     return (
-      <Card title="Requirements matrix · SOW / PWS">
+      <Card title={(
+        <>
+          Requirements matrix · <Term kind="section" value="SOW">SOW</Term> /{" "}
+          <Term kind="section" value="PWS">PWS</Term>
+        </>
+      )}>
         <p className="text-sm text-neutral-600">
           Status: <Badge tone="neutral">{section.status}</Badge>. Generate the
           matrix on the opportunity detail page.
@@ -556,7 +612,12 @@ function RequirementsMatrixCard({
   }
   return (
     <Card
-      title={`Requirements matrix · SOW / PWS (${section.items.length})`}
+      title={(
+        <>
+          Requirements matrix · <Term kind="section" value="SOW">SOW</Term> /{" "}
+          <Term kind="section" value="PWS">PWS</Term> ({section.items.length})
+        </>
+      )}
       trailing={
         <span className="text-[11px] text-neutral-500">
           extracted {fmtDate(section.last_generated_at)}
@@ -766,7 +827,7 @@ function Row({
   label,
   children,
 }: {
-  label: string;
+  label: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
