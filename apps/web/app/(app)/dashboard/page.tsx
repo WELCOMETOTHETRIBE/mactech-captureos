@@ -3,8 +3,10 @@ import { cookies } from "next/headers";
 import { TenantEligibilityCard } from "@/components/tenant-eligibility-card";
 import {
   apiFetch,
+  type AgencyEventOut,
   type AgencyEventsResponse,
   type DashboardResponse,
+  type ForecastOut,
   type ForecastsResponse,
   type MeResponse,
   type TenantEligibilityOut
@@ -108,6 +110,7 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-8">
       <PageHeader
+        display
         eyebrow="This week"
         title={greeting}
         subtitle={
@@ -408,292 +411,28 @@ export default async function DashboardPage() {
         )}
       </section>
 
-      {/* Coming to SAM — top forecasts in your NAICS */}
-      {topForecasts.items.length > 0 && (
-        <section>
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-base font-semibold text-neutral-900">
-              Coming to SAM{" "}
-              <span className="font-normal text-neutral-500">
-                — top {Math.min(topForecasts.items.length, 6)} agency forecasts
-                in your NAICS, 30–180 days ahead of solicitation
-              </span>
-            </h2>
-            <Link
-              href="/forecasts"
-              className="text-sm font-medium text-brand-700 hover:underline"
-            >
-              See all forecasts →
-            </Link>
-          </div>
-          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {topForecasts.items.slice(0, 6).map((fc) => (
-              <Link
-                key={fc.id}
-                href="/forecasts"
-                className="block rounded-lg border border-neutral-200 bg-white p-4 transition-colors hover:border-brand-300 hover:shadow-sm"
-              >
-                <div className="flex items-baseline justify-between gap-2">
-                  <p className="text-[11px] uppercase tracking-wider text-neutral-500">
-                    {fc.agency ?? "agency"}
-                    {fc.naics_code ? ` · NAICS ${fc.naics_code}` : ""}
-                  </p>
-                  <span className="rounded-sm bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-800">
-                    score {fc.score}
-                  </span>
-                </div>
-                <p className="mt-1 line-clamp-2 text-sm font-medium text-neutral-900">
-                  {fc.title}
-                </p>
-                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-neutral-600">
-                  {fc.set_aside ? <span>{fc.set_aside}</span> : null}
-                  {fc.estimated_value_text ? (
-                    <span>{fc.estimated_value_text}</span>
-                  ) : null}
-                  {fc.expected_solicitation_date ? (
-                    <span className="text-amber-700">
-                      RFP{" "}
-                      {fc.expected_solicitation_date.slice(0, 7)}
-                    </span>
-                  ) : null}
-                </div>
-                {fc.incumbent_name ? (
-                  <p className="mt-2 line-clamp-1 text-[11px] text-amber-900">
-                    Incumbent: {fc.incumbent_name}
-                    {fc.incumbent_sec_ticker
-                      ? ` · ${fc.incumbent_sec_ticker}`
-                      : ""}
-                  </p>
-                ) : null}
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
+      {/* Coming up rail — three compact columns linking to dedicated
+          /forecasts, /events, /recompetes pages. Replaces four separate
+          full-width sections that were eating ~250 vertical lines on
+          first paint. */}
+      <ComingUpRail
+        forecasts={topForecasts.items.slice(0, 3)}
+        events={events.items.slice(0, 3)}
+        recompetes={[
+          ...myRecompetes.items.slice(0, 2),
+          ...sdvosbRecompetes.items
+            .filter(
+              (r) => !myRecompetes.items.find((m) => m.id === r.id)
+            )
+            .slice(0, 1),
+        ].slice(0, 3)}
+      />
 
-      {/* Where to be — upcoming events from /events feed */}
-      {events.items.length > 0 && (
-        <section>
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-base font-semibold text-neutral-900">
-              Where to be{" "}
-              <span className="font-normal text-neutral-500">
-                — next {Math.min(events.items.length, 4)} industry-day / pre-sol events
-              </span>
-            </h2>
-            <Link
-              href="/events"
-              className="text-sm font-medium text-brand-700 hover:underline"
-            >
-              See all →
-            </Link>
-          </div>
-          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-            {events.items.slice(0, 4).map((ev) => (
-              <a
-                key={ev.id}
-                href={ev.registration_url ?? ev.source_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block rounded-lg border border-neutral-200 bg-white p-4 transition-colors hover:border-brand-300 hover:shadow-sm"
-              >
-                <p className="text-[11px] uppercase tracking-wider text-neutral-500">
-                  {ev.starts_at
-                    ? new Date(ev.starts_at).toLocaleDateString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric"
-                      })
-                    : "Date TBD"}
-                  {ev.agency ? ` · ${ev.agency}` : ""}
-                </p>
-                <p className="mt-1 line-clamp-2 text-sm font-medium text-neutral-900">
-                  {ev.title}
-                </p>
-                {ev.location ? (
-                  <p className="mt-1 line-clamp-1 text-xs text-neutral-500">
-                    {ev.location}
-                  </p>
-                ) : null}
-                <p className="mt-2 text-xs font-medium text-brand-700">
-                  {ev.registration_url ? "Register →" : "Source →"}
-                </p>
-              </a>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Your recompetes — filtered to the calling founder's NAICS lane */}
-      {myRecompetes.items.length > 0 && (
-        <section>
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-base font-semibold text-neutral-900">
-              Your recompetes{" "}
-              <span className="font-normal text-neutral-500">
-                — incumbents in {data.you?.full_name.split(" ")[0]
-                  ? `${data.you?.full_name.split(" ")[0]}'s`
-                  : "your"}{" "}
-                NAICS lane
-              </span>
-            </h2>
-            <Link
-              href="/recompetes?mine=1"
-              className="text-sm font-medium text-brand-700 hover:underline"
-            >
-              See all your lane →
-            </Link>
-          </div>
-          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-            {myRecompetes.items.slice(0, 4).map((fc) => (
-              <Link
-                key={fc.id}
-                href="/recompetes?mine=1"
-                className="block rounded-lg border border-neutral-200 bg-white p-4 transition-colors hover:border-brand-300 hover:shadow-sm"
-              >
-                <div className="flex items-baseline justify-between gap-2">
-                  <p className="text-[11px] uppercase tracking-wider text-neutral-500">
-                    {fc.agency ?? "agency"}
-                    {fc.naics_code ? ` · NAICS ${fc.naics_code}` : ""}
-                  </p>
-                  <span className="rounded-sm bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-800">
-                    score {fc.score}
-                  </span>
-                </div>
-                <p className="mt-1 line-clamp-2 text-sm font-medium text-neutral-900">
-                  {fc.title}
-                </p>
-                <p className="mt-2 line-clamp-1 text-xs text-amber-900">
-                  Incumbent: {fc.incumbent_name}
-                  {fc.estimated_value_text ? ` · ${fc.estimated_value_text}` : ""}
-                  {fc.period_of_performance_end
-                    ? ` · POP ends ${fc.period_of_performance_end.slice(0, 7)}`
-                    : ""}
-                </p>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* SDVOSB-set-aside recompetes — surface explicitly even if not in your lane */}
-      {sdvosbRecompetes.items.length > 0 && (
-        <section>
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-base font-semibold text-neutral-900">
-              SDVOSB recompetes{" "}
-              <span className="font-normal text-neutral-500">
-                — set-aside opportunities matched to MacTech's certification
-              </span>
-            </h2>
-            <Link
-              href="/recompetes?set_aside=sdvosb"
-              className="text-sm font-medium text-brand-700 hover:underline"
-            >
-              See all SDVOSB →
-            </Link>
-          </div>
-          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-            {sdvosbRecompetes.items.slice(0, 4).map((fc) => (
-              <Link
-                key={fc.id}
-                href="/recompetes?set_aside=sdvosb"
-                className="block rounded-lg border border-neutral-200 bg-white p-4 transition-colors hover:border-brand-300 hover:shadow-sm"
-              >
-                <div className="flex items-baseline justify-between gap-2">
-                  <p className="text-[11px] uppercase tracking-wider text-neutral-500">
-                    {fc.agency ?? "agency"}
-                    {fc.naics_code ? ` · NAICS ${fc.naics_code}` : ""}
-                    {fc.assigned_founder_name ? (
-                      <span className="ml-1">
-                        · @{fc.assigned_founder_name.split(" ")[0]}
-                      </span>
-                    ) : null}
-                  </p>
-                  <span className="rounded-sm bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-800">
-                    score {fc.score}
-                  </span>
-                </div>
-                <p className="mt-1 line-clamp-2 text-sm font-medium text-neutral-900">
-                  {fc.title}
-                </p>
-                <p className="mt-2 line-clamp-1 text-xs text-amber-900">
-                  Incumbent: {fc.incumbent_name}
-                  {fc.estimated_value_text ? ` · ${fc.estimated_value_text}` : ""}
-                  {fc.period_of_performance_end
-                    ? ` · POP ends ${fc.period_of_performance_end.slice(0, 7)}`
-                    : ""}
-                </p>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Pillar cards */}
-      <section>
-        <h2 className="text-base font-semibold text-neutral-900">
-          Pillars{" "}
-          <span className="font-normal text-neutral-500">
-            — your team's coverage
-          </span>
-        </h2>
-        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-          {data.pillar_cards.map((p) => (
-            <Link
-              key={p.slug}
-              href={`/opportunities?assigned_founder=${p.slug}&score_min=60`}
-              className="block rounded-lg border border-neutral-200 bg-white p-5 transition-colors hover:border-brand-300 hover:shadow-sm"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <Pillar pillar={p.pillar} />
-                <Badge tone="neutral">@{p.slug}</Badge>
-              </div>
-              <p className="mt-3 text-sm font-medium text-neutral-900">
-                {p.full_name}
-              </p>
-              <p className="mt-2 text-3xl font-semibold tabular-nums text-neutral-900">
-                {p.high_score_count}
-              </p>
-              <p className="text-xs text-neutral-500">scored ≥ 60</p>
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      {/* Tenant vital signs — context, smaller */}
-      <section className="rounded-lg border border-dashed border-neutral-200 bg-neutral-50 p-4">
-        <p className="text-xs uppercase tracking-wide text-neutral-500">
-          Tenant feed
-        </p>
-        <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-neutral-700">
-          <span>
-            <strong className="tabular-nums text-neutral-900">
-              {data.kpis.opportunities_total.toLocaleString()}
-            </strong>{" "}
-            opportunities ingested
-          </span>
-          <span>
-            <strong className="tabular-nums text-neutral-900">
-              {data.kpis.opportunities_last_24h.toLocaleString()}
-            </strong>{" "}
-            new in last 24h
-          </span>
-          <span>
-            <strong className="tabular-nums text-neutral-900">
-              {data.kpis.scored_above_60.toLocaleString()}
-            </strong>{" "}
-            scored ≥ 60
-          </span>
-          <span>
-            <strong className="tabular-nums text-neutral-900">
-              {data.kpis.enriched_with_incumbent.toLocaleString()}
-            </strong>{" "}
-            with incumbent intel
-          </span>
-        </div>
-      </section>
-
+      {/* Removed in Sprint C: separate full-width sections for events,
+          your recompetes, SDVOSB recompetes, pillar cards, and tenant
+          feed. All consolidated into the ComingUpRail above; deep
+          views live on the dedicated /events, /recompetes,
+          /forecasts, /settings pages reachable from the sidebar. */}
       <footer className="flex flex-wrap items-center justify-between gap-2 pt-2 text-xs text-neutral-500">
         <span>
           Last refreshed {fmtDate(data.rendered_at)} · Ingestion every 2h ·
@@ -785,6 +524,172 @@ function Step({
       >
         {cta.label}
       </Link>
+    </li>
+  );
+}
+
+/* ── Coming up rail ──────────────────────────────────────────────── */
+
+/** Three-column compact rail replacing the four full-width sections
+ *  (Coming to SAM, Where to be, Your recompetes, SDVOSB recompetes)
+ *  that used to dominate the dashboard. Each column is a 3-item peek
+ *  with a "see all" link to the dedicated page in the sidebar. */
+function ComingUpRail({
+  forecasts,
+  events,
+  recompetes
+}: {
+  forecasts: ForecastOut[];
+  events: AgencyEventOut[];
+  recompetes: ForecastOut[];
+}) {
+  if (forecasts.length === 0 && events.length === 0 && recompetes.length === 0) {
+    return null;
+  }
+  return (
+    <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <ComingUpColumn
+        label="Coming to SAM"
+        sub="Forecasts in your NAICS, 30–180 days out"
+        seeAllHref="/forecasts"
+      >
+        {forecasts.length === 0 ? (
+          <ComingUpEmpty msg="No upcoming forecasts in your NAICS." />
+        ) : (
+          forecasts.map((f) => (
+            <ComingUpForecastRow key={f.id} fc={f} />
+          ))
+        )}
+      </ComingUpColumn>
+
+      <ComingUpColumn
+        label="Where to be"
+        sub="Industry days + pre-solicitation events"
+        seeAllHref="/events"
+      >
+        {events.length === 0 ? (
+          <ComingUpEmpty msg="No upcoming events captured." />
+        ) : (
+          events.map((ev) => (
+            <ComingUpEventRow key={ev.id} ev={ev} />
+          ))
+        )}
+      </ComingUpColumn>
+
+      <ComingUpColumn
+        label="Recompetes"
+        sub="Forecasts with named incumbents"
+        seeAllHref="/recompetes"
+      >
+        {recompetes.length === 0 ? (
+          <ComingUpEmpty msg="No recompetes in your NAICS yet." />
+        ) : (
+          recompetes.map((f) => (
+            <ComingUpForecastRow key={f.id} fc={f} showIncumbent />
+          ))
+        )}
+      </ComingUpColumn>
+    </section>
+  );
+}
+
+function ComingUpColumn({
+  label,
+  sub,
+  seeAllHref,
+  children
+}: {
+  label: string;
+  sub: string;
+  seeAllHref: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col rounded-md border border-paper-200 bg-white p-4">
+      <header className="flex items-baseline justify-between gap-2 border-b border-paper-200 pb-2">
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">
+            {label}
+          </p>
+          <p className="mt-0.5 text-[11px] text-neutral-400">{sub}</p>
+        </div>
+        <Link
+          href={seeAllHref}
+          className="text-[11px] font-medium text-brand-700 hover:underline"
+        >
+          See all →
+        </Link>
+      </header>
+      <ul className="mt-3 flex flex-col divide-y divide-paper-200">
+        {children}
+      </ul>
+    </div>
+  );
+}
+
+function ComingUpEmpty({ msg }: { msg: string }) {
+  return (
+    <li className="py-3 text-sm text-neutral-500">{msg}</li>
+  );
+}
+
+function ComingUpForecastRow({
+  fc,
+  showIncumbent = false
+}: {
+  fc: ForecastOut;
+  showIncumbent?: boolean;
+}) {
+  return (
+    <li className="py-2.5">
+      <Link
+        href={showIncumbent ? "/recompetes" : "/forecasts"}
+        className="block hover:bg-paper-50 -mx-2 px-2 py-1 rounded"
+      >
+        <p className="line-clamp-1 text-sm font-medium text-neutral-900">
+          {fc.title}
+        </p>
+        <p className="mt-0.5 line-clamp-1 text-[11px] text-neutral-500">
+          {fc.agency ?? "agency"}
+          {fc.naics_code ? ` · NAICS ${fc.naics_code}` : ""}
+          {fc.expected_solicitation_date
+            ? ` · RFP ${fc.expected_solicitation_date.slice(0, 7)}`
+            : ""}
+        </p>
+        {showIncumbent && fc.incumbent_name && (
+          <p className="mt-0.5 line-clamp-1 text-[11px] text-amber-800">
+            Incumbent: {fc.incumbent_name}
+          </p>
+        )}
+      </Link>
+    </li>
+  );
+}
+
+function ComingUpEventRow({ ev }: { ev: AgencyEventOut }) {
+  const dateLabel = ev.starts_at
+    ? new Date(ev.starts_at).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric"
+      })
+    : "TBD";
+  return (
+    <li className="py-2.5">
+      <a
+        href={ev.registration_url ?? ev.source_url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block hover:bg-paper-50 -mx-2 px-2 py-1 rounded"
+      >
+        <p className="line-clamp-1 text-sm font-medium text-neutral-900">
+          {ev.title}
+        </p>
+        <p className="mt-0.5 line-clamp-1 text-[11px] text-neutral-500">
+          {dateLabel}
+          {ev.agency ? ` · ${ev.agency}` : ""}
+          {ev.location ? ` · ${ev.location}` : ""}
+        </p>
+      </a>
     </li>
   );
 }
