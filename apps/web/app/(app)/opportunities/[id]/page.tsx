@@ -16,6 +16,7 @@ import {
 import { createPursuit, deletePursuit, updatePursuit } from "@/lib/pursuits";
 import { deleteOpportunityQuestion } from "@/lib/ask";
 import { AskStreamingPanel } from "@/components/ask-streaming";
+import { AnnotatedProse } from "@/components/annotated-prose";
 import { CyberPostureCard } from "@/components/cyber-posture-card";
 import { StreamingDraftButton } from "@/components/draft-streaming";
 import {
@@ -360,7 +361,7 @@ export default async function OpportunityDetailPage({
                   Why this matters
                 </p>
                 <p className="mt-1 text-sm leading-relaxed text-neutral-800">
-                  {data.score.why_it_matters}
+                  <AnnotatedProse text={data.score.why_it_matters} />
                 </p>
                 {data.score.why_it_matters_model && (
                   <p className="mt-2 text-[10px] text-neutral-400">
@@ -1069,7 +1070,7 @@ function BriefBody({ brief }: { brief: BriefOut }) {
           Scope
         </p>
         <p className="mt-1 text-base font-semibold leading-snug text-neutral-900">
-          {brief.scope_one_sentence}
+          <AnnotatedProse text={brief.scope_one_sentence} />
         </p>
       </div>
 
@@ -1146,7 +1147,9 @@ function BriefList({
               aria-hidden
               className={`mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full ${dotTones[tone]}`}
             />
-            <span className="text-neutral-800">{item}</span>
+            <span className="text-neutral-800">
+              <AnnotatedProse text={item} />
+            </span>
           </li>
         ))}
       </ul>

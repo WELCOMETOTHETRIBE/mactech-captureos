@@ -1,4 +1,5 @@
 import { Badge, Card, Term, fmtDate } from "@/components/ui";
+import { AnnotatedProse } from "@/components/annotated-prose";
 import {
   generateSolicitationExtraction,
   deleteSolicitationExtraction,
@@ -267,15 +268,17 @@ function ComplianceMatrixTable({
                   </span>
                 </td>
                 <td className="px-3 py-2 align-top text-neutral-800">
-                  {it.statement}
+                  <AnnotatedProse text={it.statement} />
                   {it.notes && (
                     <p className="mt-1 text-[11px] italic text-neutral-500">
-                      {it.notes}
+                      <AnnotatedProse text={it.notes} />
                     </p>
                   )}
                 </td>
                 <td className="px-3 py-2 align-top text-[11px] text-neutral-500">
-                  {it.section_l_citation ?? (
+                  {it.section_l_citation ? (
+                    <AnnotatedProse text={it.section_l_citation} />
+                  ) : (
                     <span className="text-neutral-400">—</span>
                   )}
                 </td>
@@ -357,10 +360,12 @@ function RequirementsMatrixTable({
                   </span>
                 </td>
                 <td className="px-3 py-2 align-top text-neutral-800">
-                  {it.statement}
+                  <AnnotatedProse text={it.statement} />
                 </td>
                 <td className="px-3 py-2 align-top text-[11px] text-neutral-500">
-                  {it.source_citation ?? (
+                  {it.source_citation ? (
+                    <AnnotatedProse text={it.source_citation} />
+                  ) : (
                     <span className="text-neutral-400">—</span>
                   )}
                 </td>
@@ -400,10 +405,12 @@ function EvaluationTables({ evaluation }: { evaluation: EvaluationOut | null }) 
             <ul className="divide-y divide-neutral-100">
               {pass_fail_items.map((it) => (
                 <li key={it.id} className="px-3 py-2 text-sm text-neutral-800">
-                  <p>{it.statement}</p>
+                  <p>
+                    <AnnotatedProse text={it.statement} />
+                  </p>
                   {it.source_citation && (
                     <p className="mt-1 text-[11px] text-neutral-500">
-                      {it.source_citation}
+                      <AnnotatedProse text={it.source_citation} />
                     </p>
                   )}
                 </li>
@@ -430,12 +437,12 @@ function EvaluationTables({ evaluation }: { evaluation: EvaluationOut | null }) 
                   </div>
                   {it.description && (
                     <p className="mt-1 text-[11px] text-neutral-600">
-                      {it.description}
+                      <AnnotatedProse text={it.description} />
                     </p>
                   )}
                   {it.source_citation && (
                     <p className="mt-1 text-[11px] text-neutral-500">
-                      {it.source_citation}
+                      <AnnotatedProse text={it.source_citation} />
                     </p>
                   )}
                 </li>

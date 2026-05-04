@@ -2,6 +2,7 @@ import { UserButton } from "@clerk/nextjs";
 import { apiFetch, type MeResponse } from "@/lib/api";
 import { SidebarNav } from "@/components/sidebar-nav";
 import { CmdK, CmdKTrigger } from "@/components/cmd-k";
+import { KeyboardShortcuts } from "@/components/keyboard-shortcuts";
 import { MacTechFooter } from "@/components/footer";
 import { Pillar } from "@/components/ui";
 
@@ -38,6 +39,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
 
         <SidebarNav />
+
+        {/* Keyboard shortcuts hint — discoverable affordance for the
+            global ? help modal. Static label, the modal opens via the
+            global keypress listener in <KeyboardShortcuts />. */}
+        <div className="px-5 pb-3">
+          <p className="text-[10px] text-neutral-400">
+            Press{" "}
+            <kbd className="rounded border border-neutral-200 bg-paper-50 px-1 py-0.5 text-[9px] font-medium text-neutral-600">
+              ?
+            </kbd>{" "}
+            for keyboard shortcuts
+          </p>
+        </div>
 
         <div className="mt-auto border-t border-neutral-200 px-5 py-4 text-xs">
           {me?.founder ? (
@@ -91,6 +105,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       {/* Global Cmd-K modal — single mount, listens for the shortcut
           anywhere in the app. */}
       <CmdK />
+
+      {/* Linear-style keyboard shortcuts: g+letter for go-to nav, ?
+          for the help modal. Mounts a single listener at the root. */}
+      <KeyboardShortcuts />
     </div>
   );
 }

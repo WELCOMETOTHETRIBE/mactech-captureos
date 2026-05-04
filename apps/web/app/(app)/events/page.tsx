@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { apiFetch, type AgencyEventsResponse } from "@/lib/api";
-import { Card, PageHeader, fmtDate } from "@/components/ui";
+import { Card, EmptyState, LinkButton, PageHeader, fmtDate } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -34,14 +34,29 @@ export default async function EventsPage() {
       />
 
       {data.items.length === 0 ? (
-        <Card>
-          <p className="text-sm text-neutral-500">
-            No upcoming events captured yet. The Apify daily beat (0500 ET)
-            populates this on completion. If this stays empty after 24
-            hours, check that <code>APIFY_API_TOKEN</code> and the
-            actor-level webhook are configured.
-          </p>
-        </Card>
+        <EmptyState
+          title="No upcoming industry days on the radar."
+          body={
+            <>
+              The daily Apify beat (0500 ET) populates this from DoD OSBP,
+              NIWC, AFCEA, GSA OSDBU, DHS S&amp;T, AFLCMC, and Army OSBP. If
+              this stays empty for &gt;24h, the integration may be down —
+              check the diagnostic on{" "}
+              <Link
+                href="/forecasts"
+                className="font-medium text-brand-700 hover:underline"
+              >
+                /forecasts
+              </Link>
+              .
+            </>
+          }
+          action={
+            <LinkButton href="/forecasts" variant="secondary">
+              Check forecasts feed →
+            </LinkButton>
+          }
+        />
       ) : (
         <ul className="space-y-3">
           {data.items.map((ev) => (

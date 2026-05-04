@@ -36,7 +36,28 @@ from mactech_intelligence.explain_term import PROMPT_VERSION, parse_slug
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["explain"])
 
-ALLOWED_KINDS = {"naics", "set_aside", "notice_type", "score_component", "agency"}
+# Kept in sync with mactech_intelligence.explain_term._KIND_INTROS. When
+# adding a new kind there, mirror it here or the route will 400.
+ALLOWED_KINDS = {
+    # Original (Phase 3 Week 10)
+    "naics",
+    "set_aside",
+    "notice_type",
+    "score_component",
+    "agency",
+    # Solicitation-decoder + cyber posture jargon (UX inline-helpers sprint)
+    "set_aside_cert",
+    "clause",
+    "cmmc",
+    "section",
+    "sprs",
+    "cui",
+    "fci",
+    "itar",
+    "uei",
+    "cage",
+    "fcl",
+}
 MAX_VALUE_LEN = 64
 
 

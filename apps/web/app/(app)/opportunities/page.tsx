@@ -11,6 +11,7 @@ import {
   fmtDate,
   fmtRelativeDays
 } from "@/components/ui";
+import { KeyboardList } from "@/components/keyboard-list";
 
 export const dynamic = "force-dynamic";
 
@@ -239,18 +240,66 @@ export default async function OpportunitiesListPage({
         <div className="space-y-3 lg:col-span-3">
           {data.items.length === 0 ? (
             <EmptyState
-              title="No opportunities match those filters."
-              body="Try clearing one of them, lowering the score threshold, or expanding the date window."
+              title={
+                activeFilters.length > 0
+                  ? "No opportunities match those filters."
+                  : "No opportunities have landed yet."
+              }
+              body={
+                activeFilters.length > 0 ? (
+                  <>
+                    Active filters:{" "}
+                    <span className="font-mono text-[11px]">
+                      {activeFilters.join(" · ")}
+                    </span>
+                    . Try clearing one, lowering the score threshold, or
+                    expanding the date window.
+                  </>
+                ) : (
+                  <>
+                    SAM.gov ingestion runs every 2h and scoring every 20m.
+                    The first feed for a brand-new tenant takes 3–10 minutes
+                    after onboarding completes. If you finished setup
+                    recently, give it a few minutes and refresh.
+                  </>
+                )
+              }
               action={
-                <Link
-                  href="/opportunities"
-                  className="text-sm text-blue-700 hover:underline"
-                >
-                  Clear filters
-                </Link>
+                activeFilters.length > 0 ? (
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <Link
+                      href="/opportunities"
+                      className="rounded-md border border-brand-700 bg-brand-700 px-3 py-2 text-sm font-medium text-white hover:bg-brand-800"
+                    >
+                      Clear all filters
+                    </Link>
+                    {(score_min !== "0" || score_max !== "100") && (
+                      <Link
+                        href={`/opportunities?${(() => {
+                          const p = new URLSearchParams(params);
+                          p.delete("score_min");
+                          p.delete("score_max");
+                          p.delete("page");
+                          return p.toString();
+                        })()}`}
+                        className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm font-medium text-neutral-800 hover:border-neutral-500"
+                      >
+                        Clear score filter
+                      </Link>
+                    )}
+                  </div>
+                ) : (
+                  <Link
+                    href="/dashboard"
+                    className="rounded-md border border-brand-700 bg-brand-700 px-3 py-2 text-sm font-medium text-white hover:bg-brand-800"
+                  >
+                    Back to dashboard
+                  </Link>
+                )
               }
             />
           ) : (
+            <KeyboardList>
             <ul className="space-y-3">
               {data.items.map((opp) => {
                 // Pick ONE contextual chip beyond the score, in priority order.
@@ -262,6 +311,7 @@ export default async function OpportunitiesListPage({
                   <li key={opp.id}>
                     <Link
                       href={`/opportunities/${opp.id}`}
+                      data-kb-row
                       className="group block rounded-lg border border-neutral-200 bg-white p-5 transition-colors hover:border-brand-300 hover:shadow-sm"
                     >
                       <div className="flex items-start justify-between gap-4">
@@ -334,6 +384,7 @@ export default async function OpportunitiesListPage({
                 );
               })}
             </ul>
+            </KeyboardList>
           )}
 
           {/* Pagination */}

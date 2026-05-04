@@ -2,6 +2,8 @@ import Link from "next/link";
 import { apiFetch, type ForecastsResponse, type MeResponse } from "@/lib/api";
 import {
   Card,
+  EmptyState,
+  LinkButton,
   NaicsBadge,
   PageHeader,
   Pillar,
@@ -188,12 +190,26 @@ export default async function RecompetesPage({
       </p>
 
       {data.items.length === 0 ? (
-        <Card>
-          <p className="text-sm text-neutral-500">
-            No recompetes match the current filters. Try widening the
-            set-aside scope, agency, or POP window.
-          </p>
-        </Card>
+        <EmptyState
+          title="No recompetes match those filters."
+          body={
+            <>
+              Recompetes are forecasts where the agency named the current
+              incumbent — the strongest signal that the work will repeat.
+              Try widening the set-aside scope, agency, or POP window above.
+            </>
+          }
+          action={
+            <div className="flex justify-center gap-2">
+              <LinkButton href="/recompetes" variant="primary">
+                Clear filters
+              </LinkButton>
+              <LinkButton href="/forecasts" variant="secondary">
+                Browse all forecasts
+              </LinkButton>
+            </div>
+          }
+        />
       ) : (
         <ul className="space-y-3">
           {data.items.map((fc) => (

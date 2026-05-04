@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { KeyboardList } from "@/components/keyboard-list";
 import { TenantEligibilityCard } from "@/components/tenant-eligibility-card";
+import { TermPopover } from "@/components/term-popover";
+import { TodaysMoves } from "@/components/todays-moves";
 import {
   apiFetch,
   type AgencyEventOut,
@@ -198,7 +201,13 @@ export default async function DashboardPage() {
         <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-3 text-sm">
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
             <span className="text-[11px] uppercase tracking-wider text-neutral-500">
-              SPRS · NIST 800-171
+              <TermPopover kind="sprs" value="score">
+                SPRS
+              </TermPopover>{" "}
+              ·{" "}
+              <TermPopover kind="clause" value="NIST SP 800-171">
+                NIST 800-171
+              </TermPopover>
             </span>
             {me.tenant.sprs_score !== null ? (
               <>
@@ -310,6 +319,22 @@ export default async function DashboardPage() {
         </Link>
       </section>
 
+      {/* Today's moves — distills the dashboard into 1–3 actions the
+          user should take right now. Sits at the top of the action
+          flow so the first thing the user sees on opening the app is
+          a checklist, not a wall of metrics. */}
+      <TodaysMoves
+        kpis={data.kpis}
+        you={data.you}
+        events={events.items}
+        recompetes={[
+          ...myRecompetes.items,
+          ...sdvosbRecompetes.items.filter(
+            (r) => !myRecompetes.items.find((m) => m.id === r.id)
+          ),
+        ]}
+      />
+
       {!howItWorksDismissed && <HowItWorks />}
 
       {/* Your top — the thing they came here to see */}
@@ -352,11 +377,13 @@ export default async function DashboardPage() {
             />
           </div>
         ) : (
+          <KeyboardList>
           <ul className="mt-4 space-y-3">
             {data.your_top.map((opp, i) => (
               <li key={opp.id}>
                 <Link
                   href={opp.detail_url}
+                  data-kb-row
                   className="block rounded-lg border border-neutral-200 bg-white p-5 transition-colors hover:border-brand-300 hover:shadow-sm"
                 >
                   <div className="flex items-start justify-between gap-4">
@@ -408,6 +435,7 @@ export default async function DashboardPage() {
               </li>
             ))}
           </ul>
+          </KeyboardList>
         )}
       </section>
 
@@ -543,18 +571,20 @@ function ComingUpRail({
   events: AgencyEventOut[];
   recompetes: ForecastOut[];
 }) {
-  if (forecasts.length === 0 && events.length === 0 && recompetes.length === 0) {
-    return null;
-  }
   return (
     <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <ComingUpColumn
         label="Coming to SAM"
         sub="Forecasts in your NAICS, 30–180 days out"
         seeAllHref="/forecasts"
+        count={forecasts.length}
       >
         {forecasts.length === 0 ? (
-          <ComingUpEmpty msg="No upcoming forecasts in your NAICS." />
+          <ComingUpEmpty
+            msg="Nothing forecasted yet."
+            ctaLabel="Check the full /forecasts feed"
+            ctaHref="/forecasts"
+          />
         ) : (
           forecasts.map((f) => (
             <ComingUpForecastRow key={f.id} fc={f} />
@@ -566,9 +596,14 @@ function ComingUpRail({
         label="Where to be"
         sub="Industry days + pre-solicitation events"
         seeAllHref="/events"
+        count={events.length}
       >
         {events.length === 0 ? (
-          <ComingUpEmpty msg="No upcoming events captured." />
+          <ComingUpEmpty
+            msg="No upcoming events on the radar."
+            ctaLabel="See past events captured"
+            ctaHref="/events"
+          />
         ) : (
           events.map((ev) => (
             <ComingUpEventRow key={ev.id} ev={ev} />
@@ -580,9 +615,14 @@ function ComingUpRail({
         label="Recompetes"
         sub="Forecasts with named incumbents"
         seeAllHref="/recompetes"
+        count={recompetes.length}
       >
         {recompetes.length === 0 ? (
-          <ComingUpEmpty msg="No recompetes in your NAICS yet." />
+          <ComingUpEmpty
+            msg="No recompetes flagged in your NAICS."
+            ctaLabel="Browse all recompetes"
+            ctaHref="/recompetes"
+          />
         ) : (
           recompetes.map((f) => (
             <ComingUpForecastRow key={f.id} fc={f} showIncumbent />
@@ -597,28 +637,37 @@ function ComingUpColumn({
   label,
   sub,
   seeAllHref,
+  count,
   children
 }: {
   label: string;
   sub: string;
   seeAllHref: string;
+  count: number;
   children: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col rounded-md border border-paper-200 bg-white p-4">
       <header className="flex items-baseline justify-between gap-2 border-b border-paper-200 pb-2">
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">
+          <p className="flex items-baseline gap-1.5 text-[11px] font-medium uppercase tracking-wide text-neutral-500">
             {label}
+            {count > 0 && (
+              <span className="rounded-sm bg-paper-100 px-1 text-[10px] tabular-nums text-neutral-600">
+                {count}
+              </span>
+            )}
           </p>
           <p className="mt-0.5 text-[11px] text-neutral-400">{sub}</p>
         </div>
-        <Link
-          href={seeAllHref}
-          className="text-[11px] font-medium text-brand-700 hover:underline"
-        >
-          See all →
-        </Link>
+        {count > 0 && (
+          <Link
+            href={seeAllHref}
+            className="text-[11px] font-medium text-brand-700 hover:underline"
+          >
+            See all →
+          </Link>
+        )}
       </header>
       <ul className="mt-3 flex flex-col divide-y divide-paper-200">
         {children}
@@ -627,9 +676,27 @@ function ComingUpColumn({
   );
 }
 
-function ComingUpEmpty({ msg }: { msg: string }) {
+function ComingUpEmpty({
+  msg,
+  ctaLabel,
+  ctaHref,
+}: {
+  msg: string;
+  ctaLabel?: string;
+  ctaHref?: string;
+}) {
   return (
-    <li className="py-3 text-sm text-neutral-500">{msg}</li>
+    <li className="py-4 text-sm">
+      <p className="text-neutral-600">{msg}</p>
+      {ctaHref && ctaLabel && (
+        <Link
+          href={ctaHref}
+          className="mt-1 inline-block text-[11px] font-medium text-brand-700 hover:underline"
+        >
+          {ctaLabel} →
+        </Link>
+      )}
+    </li>
   );
 }
 
@@ -640,21 +707,46 @@ function ComingUpForecastRow({
   fc: ForecastOut;
   showIncumbent?: boolean;
 }) {
+  // Days until the agency expects to issue the solicitation. The "when
+  // does the clock start?" answer is the most useful sub-line a busy
+  // BD lead can scan in a 3-row rail.
+  const daysToRfp = fc.expected_solicitation_date
+    ? Math.ceil(
+        (new Date(fc.expected_solicitation_date).getTime() - Date.now()) /
+          (1000 * 60 * 60 * 24)
+      )
+    : null;
+  const rfpLabel =
+    daysToRfp == null
+      ? "RFP date TBD"
+      : daysToRfp <= 0
+      ? "RFP imminent"
+      : daysToRfp <= 30
+      ? `RFP in ${daysToRfp}d`
+      : `RFP ~${Math.round(daysToRfp / 30)}mo`;
   return (
     <li className="py-2.5">
       <Link
         href={showIncumbent ? "/recompetes" : "/forecasts"}
         className="block hover:bg-paper-50 -mx-2 px-2 py-1 rounded"
       >
-        <p className="line-clamp-1 text-sm font-medium text-neutral-900">
-          {fc.title}
-        </p>
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="line-clamp-1 text-sm font-medium text-neutral-900">
+            {fc.title}
+          </p>
+          <span
+            className={`shrink-0 text-[10px] font-medium tabular-nums ${
+              daysToRfp != null && daysToRfp <= 30
+                ? "text-amber-700"
+                : "text-neutral-500"
+            }`}
+          >
+            {rfpLabel}
+          </span>
+        </div>
         <p className="mt-0.5 line-clamp-1 text-[11px] text-neutral-500">
           {fc.agency ?? "agency"}
           {fc.naics_code ? ` · NAICS ${fc.naics_code}` : ""}
-          {fc.expected_solicitation_date
-            ? ` · RFP ${fc.expected_solicitation_date.slice(0, 7)}`
-            : ""}
         </p>
         {showIncumbent && fc.incumbent_name && (
           <p className="mt-0.5 line-clamp-1 text-[11px] text-amber-800">
@@ -667,12 +759,29 @@ function ComingUpForecastRow({
 }
 
 function ComingUpEventRow({ ev }: { ev: AgencyEventOut }) {
-  const dateLabel = ev.starts_at
-    ? new Date(ev.starts_at).toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric"
-      })
-    : "TBD";
+  const days = ev.starts_at
+    ? Math.ceil(
+        (new Date(ev.starts_at).getTime() - Date.now()) /
+          (1000 * 60 * 60 * 24)
+      )
+    : null;
+  const dateLabel =
+    days == null
+      ? "TBD"
+      : days < 0
+      ? "passed"
+      : days === 0
+      ? "today"
+      : days === 1
+      ? "tomorrow"
+      : days <= 14
+      ? `${days}d`
+      : ev.starts_at
+      ? new Date(ev.starts_at).toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric"
+        })
+      : "TBD";
   return (
     <li className="py-2.5">
       <a
@@ -681,12 +790,22 @@ function ComingUpEventRow({ ev }: { ev: AgencyEventOut }) {
         rel="noopener noreferrer"
         className="block hover:bg-paper-50 -mx-2 px-2 py-1 rounded"
       >
-        <p className="line-clamp-1 text-sm font-medium text-neutral-900">
-          {ev.title}
-        </p>
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="line-clamp-1 text-sm font-medium text-neutral-900">
+            {ev.title}
+          </p>
+          <span
+            className={`shrink-0 text-[10px] font-medium tabular-nums ${
+              days != null && days >= 0 && days <= 7
+                ? "text-amber-700"
+                : "text-neutral-500"
+            }`}
+          >
+            {dateLabel}
+          </span>
+        </div>
         <p className="mt-0.5 line-clamp-1 text-[11px] text-neutral-500">
-          {dateLabel}
-          {ev.agency ? ` · ${ev.agency}` : ""}
+          {ev.agency ?? "agency"}
           {ev.location ? ` · ${ev.location}` : ""}
         </p>
       </a>
