@@ -76,7 +76,8 @@ export function PageHeader({
   title,
   subtitle,
   trailing,
-  display = false
+  display = false,
+  size = "default"
 }: {
   eyebrow?: string;
   title: string;
@@ -87,10 +88,23 @@ export function PageHeader({
    * Default false keeps the existing sans treatment for utility pages
    * (settings, library admin, drafts list). */
   display?: boolean;
+  /** "sm" tightens the title for conversational headers (the dashboard
+   * greeting). "default" is the standard 3xl treatment used on every
+   * other top-level page. */
+  size?: "default" | "sm";
 }) {
-  const titleClass = display
-    ? "mt-1 text-4xl font-medium italic tracking-tight text-neutral-900 font-serif leading-tight"
-    : "mt-1 text-3xl font-semibold tracking-tight text-neutral-900";
+  let titleClass: string;
+  if (display) {
+    titleClass =
+      size === "sm"
+        ? "mt-1 text-2xl font-medium italic tracking-tight text-neutral-900 font-serif leading-tight"
+        : "mt-1 text-4xl font-medium italic tracking-tight text-neutral-900 font-serif leading-tight";
+  } else {
+    titleClass =
+      size === "sm"
+        ? "mt-1 text-xl font-semibold tracking-tight text-neutral-900"
+        : "mt-1 text-3xl font-semibold tracking-tight text-neutral-900";
+  }
   return (
     <header className="flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0 flex-1">
@@ -101,7 +115,9 @@ export function PageHeader({
         )}
         <h1 className={titleClass}>{title}</h1>
         {subtitle && (
-          <div className="mt-2 text-base text-neutral-600">{subtitle}</div>
+          <div className={`${size === "sm" ? "mt-1" : "mt-2"} text-sm text-neutral-600`}>
+            {subtitle}
+          </div>
         )}
       </div>
       {trailing && <div className="shrink-0">{trailing}</div>}

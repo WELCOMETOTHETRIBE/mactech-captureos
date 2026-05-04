@@ -113,7 +113,7 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-8">
       <PageHeader
-        display
+        size="sm"
         eyebrow="This week"
         title={greeting}
         subtitle={
