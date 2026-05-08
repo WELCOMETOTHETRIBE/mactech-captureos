@@ -58,3 +58,7 @@ logs/
 minio-data/
 postgres-data/
 redis-data/
+
+# Claude Code workflow artifacts (binary screenshots; briefs are checked in)
+.claude/screenshots/
+.claude/settings.local.json

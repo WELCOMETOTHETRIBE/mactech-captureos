@@ -16,17 +16,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-paper-50">
+    <div className="min-h-screen flex flex-col bg-background">
       <div className="grid flex-1 grid-cols-[240px_1fr]">
-      <aside className="flex flex-col border-r border-paper-200 bg-white">
-        <div className="px-5 py-5 border-b border-neutral-200">
-          <p className="text-[10px] uppercase tracking-wider text-neutral-500">
+      <aside className="flex flex-col border-r border-border bg-card">
+        <div className="px-5 py-5 border-b border-border">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
             {me?.tenant.name ?? "MacTech"}
           </p>
-          <p className="text-base font-semibold tracking-tight text-neutral-900">
+          <p className="text-base font-semibold tracking-tight text-foreground">
             CaptureOS
           </p>
-          <p className="mt-1 text-[10px] text-neutral-400">
+          <p className="mt-1 text-[10px] text-muted-foreground">
             The operating system for defense contractors.
           </p>
         </div>
@@ -44,49 +44,49 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             global ? help modal. Static label, the modal opens via the
             global keypress listener in <KeyboardShortcuts />. */}
         <div className="px-5 pb-3">
-          <p className="text-[10px] text-neutral-400">
+          <p className="text-[10px] text-muted-foreground">
             Press{" "}
-            <kbd className="rounded border border-neutral-200 bg-paper-50 px-1 py-0.5 text-[9px] font-medium text-neutral-600">
+            <kbd className="rounded border border-border bg-background px-1 py-0.5 text-[9px] font-medium text-muted-foreground">
               ?
             </kbd>{" "}
             for keyboard shortcuts
           </p>
         </div>
 
-        <div className="mt-auto border-t border-neutral-200 px-5 py-4 text-xs">
+        <div className="mt-auto border-t border-border px-5 py-4 text-xs">
           {me?.founder ? (
             <>
-              <p className="font-medium text-neutral-800">
+              <p className="font-medium text-foreground">
                 {me.founder.full_name}
               </p>
-              <p className="text-neutral-500">{me.founder.title}</p>
+              <p className="text-muted-foreground">{me.founder.title}</p>
               <div className="mt-2">
                 <Pillar pillar={me.founder.pillar} />
               </div>
             </>
           ) : me ? (
             <>
-              <p className="font-medium text-neutral-800">{me.user_email}</p>
-              <p className="mt-1 text-neutral-500">
+              <p className="font-medium text-foreground">{me.user_email}</p>
+              <p className="mt-1 text-muted-foreground">
                 Tenant member — not yet linked to a founder profile.
               </p>
             </>
           ) : (
-            <p className="text-neutral-500">Loading session…</p>
+            <p className="text-muted-foreground">Loading session…</p>
           )}
         </div>
       </aside>
 
       <div className="flex flex-col">
-        <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-3">
-          <div className="flex items-center gap-3 text-sm text-neutral-600">
+        <header className="flex items-center justify-between border-b border-border bg-card px-6 py-3">
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
             {me?.tenant ? (
               <>
-                <span className="font-medium text-neutral-800">
+                <span className="font-medium text-foreground">
                   {me.tenant.name}
                 </span>
-                <span className="text-neutral-300">·</span>
-                <span className="text-xs uppercase tracking-wider text-neutral-500">
+                <span className="text-muted-foreground/60">·</span>
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
                   {me.tenant.plan}
                 </span>
               </>

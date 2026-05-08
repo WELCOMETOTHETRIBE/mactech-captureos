@@ -21,13 +21,14 @@ export function Card({
 }) {
   // Hairline border, no shadow at rest. White card on warm-paper page bg
   // gives just enough lift without the "every section is a card" noise.
+  // Token-driven so the same primitive re-skins across MacTech apps.
   return (
     <section
-      className={`rounded-md border border-paper-200 bg-white p-6 ${className}`}
+      className={`rounded-md border border-border bg-card p-6 ${className}`}
     >
       {title && (
         <header className="flex items-center justify-between">
-          <h2 className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+          <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {title}
           </h2>
           {trailing}
@@ -59,8 +60,8 @@ export function Section({
   return (
     <section className={className}>
       {title && (
-        <header className="flex items-center justify-between border-b border-paper-200 pb-2">
-          <h2 className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+        <header className="flex items-center justify-between border-b border-border pb-2">
+          <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {title}
           </h2>
           {trailing}
@@ -97,25 +98,25 @@ export function PageHeader({
   if (display) {
     titleClass =
       size === "sm"
-        ? "mt-1 text-2xl font-medium italic tracking-tight text-neutral-900 font-serif leading-tight"
-        : "mt-1 text-4xl font-medium italic tracking-tight text-neutral-900 font-serif leading-tight";
+        ? "mt-1 text-2xl font-medium italic tracking-tight text-foreground font-serif leading-tight"
+        : "mt-1 text-4xl font-medium italic tracking-tight text-foreground font-serif leading-tight";
   } else {
     titleClass =
       size === "sm"
-        ? "mt-1 text-xl font-semibold tracking-tight text-neutral-900"
-        : "mt-1 text-3xl font-semibold tracking-tight text-neutral-900";
+        ? "mt-1 text-xl font-semibold tracking-tight text-foreground"
+        : "mt-1 text-3xl font-semibold tracking-tight text-foreground";
   }
   return (
     <header className="flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0 flex-1">
         {eyebrow && (
-          <p className="text-xs font-medium uppercase tracking-wide text-brand-700">
+          <p className="text-xs font-medium uppercase tracking-wide text-primary">
             {eyebrow}
           </p>
         )}
         <h1 className={titleClass}>{title}</h1>
         {subtitle && (
-          <div className={`${size === "sm" ? "mt-1" : "mt-2"} text-sm text-neutral-600`}>
+          <div className={`${size === "sm" ? "mt-1" : "mt-2"} text-sm text-muted-foreground`}>
             {subtitle}
           </div>
         )}
@@ -136,15 +137,19 @@ export function Kpi({
   hint?: string;
   tone?: "neutral" | "brand" | "amber" | "red";
 }) {
+  // Tone names stay back-compat for existing callers, but map to the
+  // semantic token contract underneath: amber→warning, red→destructive,
+  // brand→primary. This is the §7.7 leverage point — same API, themable
+  // values.
   const valueTones: Record<string, string> = {
-    neutral: "text-neutral-900",
-    brand: "text-brand-700",
-    amber: "text-amber-700",
-    red: "text-red-700"
+    neutral: "text-foreground",
+    brand: "text-primary",
+    amber: "text-warning",
+    red: "text-destructive"
   };
   return (
-    <div className="rounded-md border border-paper-200 bg-white p-5">
-      <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+    <div className="rounded-md border border-border bg-card p-5">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </p>
       <p
@@ -152,7 +157,7 @@ export function Kpi({
       >
         {value}
       </p>
-      {hint && <p className="mt-1 text-xs text-neutral-500">{hint}</p>}
+      {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }
@@ -166,14 +171,19 @@ export function Badge({
   children: ReactNode;
   title?: string;
 }) {
+  // tone names remain back-compat for existing callers; map to semantic
+  // tokens where possible. blue/violet stay on raw Tailwind palettes
+  // because they carry pillar / informational meaning that we'll promote
+  // into pillar tokens in a follow-up pass (the chip layout is right; the
+  // color values are a future-pass concern).
   const tones: Record<string, string> = {
-    neutral: "bg-neutral-100 text-neutral-700 border-neutral-200",
+    neutral: "bg-muted text-muted-foreground border-border",
     blue: "bg-blue-50 text-blue-700 border-blue-100",
-    green: "bg-emerald-50 text-emerald-700 border-emerald-100",
-    amber: "bg-amber-50 text-amber-700 border-amber-100",
-    red: "bg-red-50 text-red-700 border-red-100",
+    green: "bg-success/10 text-success border-success/20",
+    amber: "bg-warning/10 text-warning border-warning/20",
+    red: "bg-destructive/10 text-destructive border-destructive/20",
     violet: "bg-violet-50 text-violet-700 border-violet-100",
-    brand: "bg-brand-50 text-brand-800 border-brand-200"
+    brand: "bg-primary/10 text-primary border-primary/20"
   };
   return (
     <span
@@ -209,10 +219,10 @@ export function ScoreBadge({
       : "Long shot";
   if (size === "lg") {
     const tones: Record<string, string> = {
-      brand: "bg-brand-50 text-brand-900 border-brand-200",
+      brand: "bg-primary/10 text-primary border-primary/20",
       blue: "bg-blue-50 text-blue-800 border-blue-200",
-      amber: "bg-amber-50 text-amber-800 border-amber-200",
-      neutral: "bg-neutral-100 text-neutral-700 border-neutral-200"
+      amber: "bg-warning/10 text-warning border-warning/20",
+      neutral: "bg-muted text-muted-foreground border-border"
     };
     return (
       <span
@@ -249,13 +259,13 @@ export function Button({
 } & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "type" | "className">) {
   const variants: Record<string, string> = {
     primary:
-      "border border-brand-700 bg-brand-700 text-white hover:bg-brand-800 hover:border-brand-800",
+      "border border-primary bg-primary text-primary-foreground hover:bg-primary/90 hover:border-primary",
     secondary:
-      "border border-neutral-300 bg-white text-neutral-800 hover:border-neutral-500",
+      "border border-input bg-card text-foreground hover:bg-accent hover:text-accent-foreground",
     ghost:
-      "border border-transparent text-neutral-700 hover:bg-neutral-100",
+      "border border-transparent text-foreground hover:bg-accent hover:text-accent-foreground",
     danger:
-      "border border-red-300 bg-white text-red-700 hover:bg-red-50 hover:border-red-400"
+      "border border-destructive/40 bg-card text-destructive hover:bg-destructive/10 hover:border-destructive"
   };
   return (
     <button
@@ -278,20 +288,28 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="rounded-md border border-dashed border-neutral-300 bg-white px-6 py-12 text-center">
-      <p className="text-sm font-medium text-neutral-900">{title}</p>
-      {body && <p className="mt-1 text-sm text-neutral-600">{body}</p>}
+    <div className="rounded-md border border-dashed border-border bg-card px-6 py-12 text-center">
+      <p className="text-sm font-medium text-foreground">{title}</p>
+      {body && <p className="mt-1 text-sm text-muted-foreground">{body}</p>}
       {action && <div className="mt-4">{action}</div>}
     </div>
   );
 }
 
 export function Pillar({ pillar }: { pillar: string }) {
-  const tones: Record<string, "blue" | "green" | "amber" | "violet"> = {
-    security: "blue",
-    infrastructure: "green",
-    quality: "amber",
-    governance: "violet"
+  // Pillar tones are first-class tokens (--pillar-security / -infrastructure
+  // / -quality / -governance) so the next MacTech app reuses them
+  // unchanged. The chip is a soft tint (color/15 background, color/90
+  // text, color/20 border) — same shape as the other Badge tones.
+  const classes: Record<string, string> = {
+    security:
+      "bg-pillar-security/15 text-pillar-security border-pillar-security/20",
+    infrastructure:
+      "bg-pillar-infrastructure/15 text-pillar-infrastructure border-pillar-infrastructure/20",
+    quality:
+      "bg-pillar-quality/15 text-pillar-quality border-pillar-quality/20",
+    governance:
+      "bg-pillar-governance/15 text-pillar-governance border-pillar-governance/20"
   };
   const help: Record<string, string> = {
     security:
@@ -303,10 +321,23 @@ export function Pillar({ pillar }: { pillar: string }) {
     governance:
       "Governance pillar (John Milso): commercial contracts, corporate governance, M&A diligence, risk."
   };
+  const cls = classes[pillar];
+  if (!cls) {
+    return (
+      <Badge tone="neutral" title={help[pillar]}>
+        {pillar}
+      </Badge>
+    );
+  }
   return (
-    <Badge tone={tones[pillar] ?? "neutral"} title={help[pillar]}>
+    <span
+      title={help[pillar]}
+      className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${cls}${
+        help[pillar] ? " cursor-help" : ""
+      }`}
+    >
       {pillar}
-    </Badge>
+    </span>
   );
 }
 
@@ -344,7 +375,7 @@ export function ExplainLink({
     <Link
       href={`?explain=${encodeURIComponent(slug)}`}
       scroll={false}
-      className={`inline-flex items-center rounded-md transition-colors hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${className}`}
+      className={`inline-flex items-center rounded-md transition-colors hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${className}`}
       aria-label="Explain this term in plain English"
       title="Click for a plain-English explanation"
     >
@@ -567,10 +598,10 @@ export function LinkButton({
 }) {
   const variants: Record<string, string> = {
     primary:
-      "border border-brand-700 bg-brand-700 text-white hover:bg-brand-800 hover:border-brand-800",
+      "border border-primary bg-primary text-primary-foreground hover:bg-primary/90 hover:border-primary",
     secondary:
-      "border border-neutral-300 bg-white text-neutral-800 hover:border-neutral-500",
-    ghost: "border border-transparent text-neutral-700 hover:bg-neutral-100"
+      "border border-input bg-card text-foreground hover:bg-accent hover:text-accent-foreground",
+    ghost: "border border-transparent text-foreground hover:bg-accent hover:text-accent-foreground"
   };
   const cls = `inline-flex items-center justify-center rounded-md px-3.5 py-2 text-sm font-medium transition-colors ${variants[variant]}`;
   if (external) {

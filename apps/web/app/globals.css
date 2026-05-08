@@ -2,6 +2,70 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Token contract ────────────────────────────────────────────────────────
+   HSL CSS variables — the cross-suite "gold copy" shape ported from vetted /
+   clearD. Same variable names everywhere; values differ per app. CaptureOS's
+   skin is warm-paper + brand-teal. Light-first only — no `.dark` block, on
+   purpose.
+
+   Pillar tokens are first-class so the four founder pillars (Quality,
+   Security, Infrastructure, Governance) carry meaning across components and
+   apps without string-keyed color maps.
+   ──────────────────────────────────────────────────────────────────────── */
+@layer base {
+  :root {
+    /* Page surfaces */
+    --background: 45 35% 97%;       /* paper-50  */
+    --foreground: 24 6% 12%;        /* near-black ink */
+
+    /* Card surfaces */
+    --card: 0 0% 100%;
+    --card-foreground: 24 6% 12%;
+
+    /* Popovers / floating UI */
+    --popover: 0 0% 100%;
+    --popover-foreground: 24 6% 12%;
+
+    /* Brand teal — primary action color */
+    --primary: 178 58% 30%;          /* brand-600 #207b78 */
+    --primary-foreground: 0 0% 100%;
+
+    /* Soft neutral surfaces (paper-100) */
+    --secondary: 45 25% 93%;
+    --secondary-foreground: 24 6% 12%;
+
+    --muted: 45 25% 93%;
+    --muted-foreground: 24 6% 38%;
+
+    /* Brand-tinted accent — for hover wash, info chips */
+    --accent: 178 30% 90%;
+    --accent-foreground: 178 58% 25%;
+
+    /* Semantic tone tokens (replaces ad-hoc tone="amber"/"red"/"green") */
+    --destructive: 0 70% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 145 55% 32%;
+    --warning: 32 90% 38%;
+
+    /* Lines + form elements */
+    --border: 45 18% 88%;            /* paper-200 */
+    --input: 45 18% 88%;
+    --ring: 178 58% 30%;             /* matches primary */
+
+    /* Pillar tokens — used by <Pillar/> and any pillar-aware UI */
+    --pillar-security: 215 60% 45%;
+    --pillar-infrastructure: 145 55% 32%;
+    --pillar-quality: 32 90% 38%;
+    --pillar-governance: 270 50% 55%;
+
+    /* Shape + typography */
+    --radius: 0.5rem;
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+}
+
 @layer base {
   /* Bump the rendered base body up to 15px so text-sm reads at a comfortable
      density for non-technical founders. text-xs and text-[11px] still scale
@@ -10,28 +74,40 @@
     font-size: 16px;
   }
   body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: var(--font-sans);
+    /* Tabular figures in body so numbers in tables / KPI grids align by default.
+       Display-serif headers explicitly opt out. */
+    font-variant-numeric: tabular-nums;
     font-size: 15px;
     line-height: 1.55;
-    color: #1f1f1f;
   }
   /* Visible focus rings — accessibility + we want users to feel the brand
-     accent on tab navigation. */
+     accent on tab navigation. Driven by --ring so the brand decision flows
+     through one token. */
   :focus-visible {
-    outline: 2px solid #207b78;
+    outline: 2px solid hsl(var(--ring));
     outline-offset: 2px;
     border-radius: 4px;
+  }
+  /* Editorial serif headers should display proportional figures, not the
+     mono-tabular default we set on body. */
+  .font-serif {
+    font-variant-numeric: normal;
   }
 }
 
 /* ─── Clerk SignIn / SignUp polish ──────────────────────────────────────── */
-/* Kill the browser autofill blue without breaking dark/light themes. */
+/* Kill the browser autofill blue without breaking our warm-paper card
+   background. Uses the card token so it tracks the theme. */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
 input:-webkit-autofill:active {
-  -webkit-text-fill-color: #f3f4f6 !important;
-  -webkit-box-shadow: 0 0 0 1000px #0A0A0A inset !important;
-  caret-color: #f3f4f6 !important;
+  -webkit-text-fill-color: hsl(var(--foreground)) !important;
+  -webkit-box-shadow: 0 0 0 1000px hsl(var(--card)) inset !important;
+  caret-color: hsl(var(--foreground)) !important;
   transition: background-color 9999s ease-in-out 0s !important;
 }
 /* "Secured by Clerk" branding is hidden via the dashboard toggle (Settings
