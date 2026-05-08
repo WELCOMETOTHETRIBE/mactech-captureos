@@ -12,7 +12,6 @@ import {
   type FoundersListResponse,
   type PastPerformanceList,
   type PursuitDetailOut,
-  type PursuitStage,
   type RequirementsMatrixOut,
   type SolicitationExtractionOut,
   type TeamingPartnerList,
@@ -36,36 +35,20 @@ import { ExplainRail } from "@/components/explain-rail";
 import { SolicitationPanel } from "@/components/solicitation-panel";
 import { WebMentionsCard } from "@/components/web-mentions-card";
 import {
+  BackLink,
   Badge,
+  Button,
   Card,
+  LinkButton,
   PageHeader,
   Pillar,
   Term,
   fmtDate,
   fmtMoney,
 } from "@/components/ui";
+import { STAGE_LABEL, STAGE_TONE } from "@/lib/pursuit-stages";
 
 export const dynamic = "force-dynamic";
-
-const STAGE_TONE: Record<PursuitStage, "neutral" | "blue" | "amber" | "violet" | "brand" | "green" | "red"> = {
-  lead: "neutral",
-  qualify: "blue",
-  pursue: "amber",
-  propose: "violet",
-  submit: "brand",
-  won: "green",
-  lost: "red",
-};
-
-const STAGE_LABEL: Record<PursuitStage, string> = {
-  lead: "Lead",
-  qualify: "Qualify",
-  pursue: "Pursue",
-  propose: "Propose",
-  submit: "Submit",
-  won: "Won",
-  lost: "Lost",
-};
 
 export default async function PursuitDetailPage(props: {
   params: Promise<{ id: string }>;
@@ -205,12 +188,7 @@ export default async function PursuitDetailPage(props: {
       }
     >
       <div className="min-w-0 space-y-6">
-      <Link
-        href="/pipeline"
-        className="text-xs text-neutral-500 hover:text-neutral-800"
-      >
-        ← Pipeline
-      </Link>
+      <BackLink href="/pipeline">Pipeline</BackLink>
 
       <PageHeader
         eyebrow="Pursuit"
@@ -226,18 +204,19 @@ export default async function PursuitDetailPage(props: {
         }
         trailing={
           <div className="flex flex-wrap items-center gap-2">
-            <Link
+            <LinkButton
               href={`/pursuits/${detail.id}/capture-package`}
-              className="rounded-md border border-brand-700 bg-brand-700 px-4 py-2 text-sm font-medium text-white hover:bg-brand-800"
+              variant="primary"
             >
               Capture Package →
-            </Link>
-            <Link
+            </LinkButton>
+            <LinkButton
               href={`/opportunities/${detail.opportunity.id}`}
-              className="rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-700 hover:border-neutral-500"
+              variant="secondary"
+              size="sm"
             >
               Opportunity →
-            </Link>
+            </LinkButton>
           </div>
         }
       />
@@ -309,12 +288,9 @@ export default async function PursuitDetailPage(props: {
             </p>
           </div>
           <form action={deleteAction}>
-            <button
-              type="submit"
-              className="rounded-md border border-red-300 px-3 py-2 text-xs font-medium text-red-700 hover:border-red-500 hover:bg-red-50"
-            >
+            <Button type="submit" variant="danger" size="sm">
               Delete pursuit
-            </button>
+            </Button>
           </form>
         </div>
       </Card>
@@ -338,9 +314,11 @@ function PursuitMetaStrip({ detail }: { detail: PursuitDetailOut }) {
     <Card>
       <dl className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
         <Meta label="Stage">
-          <Badge tone={STAGE_TONE[detail.stage]}>
-            {STAGE_LABEL[detail.stage]}
-          </Badge>
+          <Term kind="pursuit_stage" value={detail.stage}>
+            <Badge tone={STAGE_TONE[detail.stage]}>
+              {STAGE_LABEL[detail.stage]}
+            </Badge>
+          </Term>
         </Meta>
         <Meta label="Owner">
           {detail.owner_founder_slug ? (
@@ -401,12 +379,9 @@ function NotesEditor({
           className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
         />
         <div className="flex justify-end">
-          <button
-            type="submit"
-            className="rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800"
-          >
+          <Button type="submit" variant="primary" size="sm">
             Save notes
-          </button>
+          </Button>
         </div>
       </form>
     </Card>
@@ -469,12 +444,9 @@ function WinStrategyEditor({
           </label>
         </div>
         <div className="flex justify-end">
-          <button
-            type="submit"
-            className="rounded-md border border-brand-700 bg-brand-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-800"
-          >
+          <Button type="submit" variant="primary" size="sm">
             Save win strategy
-          </button>
+          </Button>
         </div>
       </form>
     </Card>
@@ -543,12 +515,9 @@ function PastPerformanceSelector({
             })}
           </ul>
           <div className="flex justify-end">
-            <button
-              type="submit"
-              className="rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800"
-            >
+            <Button type="submit" variant="primary" size="sm">
               Save selection
-            </button>
+            </Button>
           </div>
         </form>
       )}
@@ -606,12 +575,9 @@ function KeyPersonnelSelector({
             })}
           </ul>
           <div className="flex justify-end">
-            <button
-              type="submit"
-              className="rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800"
-            >
+            <Button type="submit" variant="primary" size="sm">
               Save selection
-            </button>
+            </Button>
           </div>
         </form>
       )}
@@ -689,12 +655,9 @@ function TeamingPartnerSelector({
             })}
           </ul>
           <div className="flex justify-end">
-            <button
-              type="submit"
-              className="rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800"
-            >
+            <Button type="submit" variant="primary" size="sm">
               Save selection
-            </button>
+            </Button>
           </div>
         </form>
       )}

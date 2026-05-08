@@ -1,101 +1,113 @@
 # Verification Report
-For change-log: 2026-05-08T13:30:00-07:00
-Iteration: 1
-Generated: 2026-05-08T20:12:58Z
+For change-log: 2026-05-08T22:30:00-07:00
+Iteration: 2
+Generated: 2026-05-08T22:55:00-07:00
 
 ## Verdict
 **SHIP**
 
-All 15 brief §10 success criteria are met or appropriately untestable. All four §11 auto-mode decisions (full-pass scope, vetted-mirror var names, `clearD` in APPS, pillar tokens promoted) are reflected in the implementation. No critical or serious accessibility violations attributable to project code. Visual surfaces match the brief's "warm-paper editorial / brand-teal" direction; no obsidian/copper residue remains in the targeted files.
+Every must-pass grep, contract check, and contrast spot-check named in the brief and the user's verification request passes. TypeScript clean (`tsc --noEmit` exit 0), build clean (`next build` exit 0). The only remaining "findings" are (a) Clerk third-party widget chrome contrast/landmark warnings outside our codebase, (b) a pre-existing `text-gray-500 "Apps"` label in the obsidian footer (Brief 1's locked decision — out of scope per §6), and (c) a small handful of legacy color literals in `components/` (not `app/(app)`) that the brief explicitly scoped out of this pass — Cmd-K is allow-listed in §5.1; `solicitation-panel.tsx` and `draft-streaming.tsx` are explicitly protected in §6.
 
-The only `serious` axe hits land on Next's error overlay (`#__next_error__`) when `/dashboard` is loaded without a Clerk session — that's the auth guard firing as designed, not a project bug. The contrast failures observed at runtime trace to Clerk's dev-mode floating widget (`Configure your application` button) and dev banner (`Development mode`), neither of which is shipped in production or authored by this PR.
+Authenticated pages 500 in the verifier's session because no Clerk JWT is available — same posture as the previous pass. Per the user's verification request these are flagged "Untestable (Clerk-gated)" rather than failed.
 
-## Success criteria evaluation
+---
+
+## Success criteria evaluation (research brief §7)
 
 | # | Criterion | Status | Evidence |
 |---|-----------|--------|----------|
-| 1 | `globals.css` defines all 18+ HSL CSS vars (background, foreground, card, primary, etc., +radius, +font-sans, +font-mono) | **Met** | `apps/web/app/globals.css:16-66`. Grep counts confirm all 28 required tokens (incl. four pillar tokens) defined exactly once each. |
-| 2 | `tailwind.config.ts` exposes vars as utilities (`bg-background`, `bg-primary`, `text-muted-foreground`, `border-border`, `ring-ring`, `bg-success`, `bg-warning`, `bg-pillar-*`) | **Met** | `apps/web/tailwind.config.ts:33-118`. Default `ringColor` reads `hsl(var(--ring))` (`tailwind.config.ts:112-117`). |
-| 3 | Zero arbitrary hex (`bg-[#`, `text-[#`, `border-[#`, `bg-[${VAR}]`) in sign-in, sign-up, footer, marketing landing, app layout, dashboard | **Met** | `grep -rE 'bg-\[#\|text-\[#\|border-\[#\|bg-\[\$\{\|text-\[\$\{\|border-\[\$\{' …` returns one hit (a documentation comment in `sign-in/[[...sign-in]]/page.tsx:10`), zero hits in actual class strings. |
-| 4 | Sign-in / sign-up render on warm-paper-50 background (no obsidian, no `bg-gradient-to-br from-[#04060a]`) | **Met** | `.claude/screenshots/1/sign-in-desktop.png`, `sign-up-desktop.png`. Warm-paper background with paper-100 sober left column. Brand-teal "Continue" button visible. |
-| 5 | Footer doesn't use `bg-[#0A0A0A]` — uses token-based class | **Met** | `apps/web/components/footer.tsx:26` — `className="bg-secondary border-t border-border text-muted-foreground text-xs"`. Visible in dashboard screenshots (paper-100 strip, hairline top border). |
-| 6 | `apps/web/lib/utils.ts` exports `cn(...inputs: ClassValue[])` (clsx + tailwind-merge) | **Met** | `apps/web/lib/utils.ts:10-12`. Imports `clsx`, `tailwind-merge`. Both packages now in `apps/web/package.json` deps. |
-| 7 | `components/ui/{button,badge,card}.tsx` exist shaped per shadcn (`forwardRef`, `cva`, `cn`) | **Met** | All three files exist: `button.tsx` uses `cva` + `forwardRef` + `Slot` (asChild support); `badge.tsx` uses `cva` + `forwardRef`; `card.tsx` uses `forwardRef` + `cn` (no variants by design — the Card subcomponent family pattern matches stock shadcn). |
-| 8 | `Kpi`, `Badge`, `Pillar` callers unchanged in shape; internal tones map references token classes | **Met** | Per change-log §7.7: `tone="amber"` resolves to `warning`, `red` → `destructive`, `green` → `success`, `brand` → `primary`. `Pillar` renders directly via `bg-pillar-{security\|infrastructure\|quality\|governance}/15` utilities. (Spot-check of `apps/web/components/ui.tsx` left intentionally read-only by verifier; the change-log claim is consistent with TS clean + dashboard rendering through the same token-driven Tailwind compile.) |
-| 9 | Contrast ≥4.5:1 body / ≥3:1 badges/KPIs on warm-paper backgrounds | **Met** | Token-pair calculations: `foreground` on `bg`: 15.76:1; `muted-foreground` on `bg`: 5.86:1; `muted-foreground` on `card`: 6.17:1; `muted-foreground` on `secondary`: 5.38:1; `primary` on `bg`: 4.91:1; `primary-foreground` on `primary`: 5.18:1; `success` on `bg`: 4.79:1; `warning` on `bg`: 4.00:1 (passes 3:1 badge bar; for any large body use this would be borderline — see Findings); `destructive` on `bg`: 5.58:1. |
-| 10 | Dashboard at 1440/1024/768/375 — no horizontal scroll; ComingUpRail collapses cleanly | **Untestable for `/dashboard` (Clerk-gated)** / **Met for measured pages** | `/`, `/sign-in`, `/sign-up` all show `horizontalScroll: false` at desktop (1440), tablet (768), and mobile (375) viewports. `/dashboard` cannot be reached without a Clerk session in this verification environment (apiFetch throws `apiFetch called without a Clerk session — guard the route` on render). The shell that wraps it (`(app)/layout.tsx`) uses `bg-background border-border bg-card text-foreground/muted-foreground` only — token-driven, so layout regressions are unlikely. |
-| 11 | `:focus-visible` outline visible on every primary action | **Met** | `globals.css:89-93` defines `outline: 2px solid hsl(var(--ring)); outline-offset: 2px` for `:focus-visible`. Run-time probe sampled 4/4 focusables on `/`, 3/3 on dashboard error overlay, 7/10 on sign-in (the 3 misses are Clerk-internal `tabindex="-1"` hidden fields and arrow elements — not project-authored interactives). |
-| 12 | Term/TermPopover/ExplainRail still function on opportunity / pursuit detail | **Untestable (Clerk-gated)** | Auth-required routes; not reachable in unauthenticated dev. Static check: `components/term-popover.tsx` and the `Term` definition in `components/ui.tsx` were not touched in this PR per change-log; TS clean. No regression expected. |
-| 13 | Footer `APPS` array still includes `clearD`, `CaptureOS`, `Compliance`, `Training`, `Quality` | **Met** | `apps/web/components/footer.tsx:11-17`. `clearD` is the first entry per §11.Q3. All five present in screenshot. |
-| 14 | No new `dark:` Tailwind variants | **Met** | `grep -r 'dark:' apps/web/app apps/web/components` → 0 hits. |
-| 15 | No emoji in non-error UI strings (heart/sparkle/rocket/check/warning emojis) | **Met** | `perl` Unicode-range scan against the seven changed files (`sign-in`, `sign-up`, `footer`, `page.tsx`, `(app)/layout.tsx`, `dashboard/page.tsx`, `ui.tsx`) returns zero matches in the BMP emoji + supplementary symbol ranges. Existing typographic glyphs (·, →, ↻, ✕) are unchanged. |
+| 7.1 | Single primary-action color in `app/(app)` JSX (no `bg-neutral-900` / `bg-amber-700` / `bg-emerald-600` / `bg-red-600` literals) | **Met** | `grep -nE "bg-neutral-900\|bg-amber-700\|bg-emerald-600\|bg-red-600" apps/web/app/(app) -r --include="*.tsx"` → 0 hits |
+| 7.2 | Every authenticated page mounts `<PageHeader>`; opp-detail uses `<PageHeader display>` + `<BackLink>` | **Met** | All 12 in-scope pages contain `<PageHeader`. `opportunities/[id]/page.tsx:154` mounts `<BackLink href="/opportunities">All opportunities</BackLink>` followed by `<PageHeader display eyebrow={agency} title={opp.title} subtitle={...} trailing={...}>` at line 160. |
+| 7.3 | `<BackLink>` exists as a primitive and is used on 3 detail pages | **Met** | `apps/web/components/ui.tsx:319` — `export function BackLink(`. Callsites: `opportunities/[id]/page.tsx:154`, `pursuits/[id]/page.tsx:191`, `drafts/[id]/page.tsx:66`. |
+| 7.4 | No emoji in any non-error UI string | **Met** | `find apps/web/app/(app) apps/web/components -type f \( -name "*.tsx" -o -name "*.ts" \) -print0 \| xargs -0 perl -ne 'print if /[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}]/'` → 0 hits. The 🚩 in `/recompetes` is gone (now `<Badge tone="red">distress signal {n}</Badge>` wrapped in `<TermPopover kind="incumbent_distress">`). |
+| 7.5 | Single `STAGE_TONE` / `STAGE_LABEL` source | **Met** (with documented deviation) | One `export const STAGE_TONE` and one `export const STAGE_LABEL` in `apps/web/lib/pursuit-stages.ts`. All other hits are `import { STAGE_TONE, STAGE_LABEL } from "@/lib/pursuit-stages"` or property reads. The architect placed it in `lib/pursuit-stages.ts` instead of `lib/pursuits.ts` (existing `lib/pursuits.ts` has `"use server"` directive). The user pre-cleared this deviation in the verification request. |
+| 7.6 | Every targeted page has ≥3 `<Term>` / `<TermPopover>` callsites | **Met** | pipeline 10, library 9, drafts 5, forecasts 6, recompetes 13, events 4, settings 8 — all ≥ 3. |
+| 7.7 | `<EmptyState>` on `/forecasts` and `/events`; `<IntegrationDiagnostic>` behind `<details>` | **Met** | `forecasts/page.tsx:216` mounts `<EmptyState>` first, then `<details>` admin diagnostic at `:240` with `<IntegrationDiagnostic>` at `:245`. `events/page.tsx:133` mounts `<EmptyState>`, `<details>` admin fold at `:156`. The internal-worker name leak (`mactech_workers.tasks.apify_industry_days`) is gone. |
+| 7.8 | Three hot pages free of legacy palette literals in JSX | **Met** | `grep -nE "bg-paper-\|border-paper-\|text-brand-\|bg-brand-\|border-brand-" apps/web/app/(app)/dashboard/page.tsx apps/web/app/(app)/pipeline/page.tsx 'apps/web/app/(app)/opportunities/[id]/page.tsx'` → 0 hits. |
+| 7.10 | Sidebar active-state uses tokens | **Met** | `apps/web/components/sidebar-nav.tsx:82`: `"block rounded-md border-l-2 border-primary bg-primary/10 px-3 py-2 text-sm text-foreground"`. No `bg-brand-50 / border-brand-700 / text-brand-900`. |
+| 7.11 | No `bg-[#xxxxxx]` literals introduced; no marketing-frame copy | **Met** | `grep -rnE 'bg-\[#\|text-\[#\|border-\[#' apps/web/app/(app) apps/web/components` → 0 hits. Voice spot-check on changed files reads sober/plainspoken. |
+| 7.12 | No `dark:` Tailwind variants introduced | **Met** | `grep -rnE 'dark:' apps/web/app apps/web/components --include="*.tsx" --include="*.css"` → 0 hits. |
+| 7.13 | `Term` taxonomy documented | **Could not test / Soft fail** | The change-log enumerates the new `kind`s (`pursuit_stage`, `draft_type`, `draft_status`, `pop`, `incumbent_distress`, `tenant_field`, `library_section`, `event_kind`, `score`) and notes the backend `/explain/{slug}` route auto-generates explanations, but did not commit a `docs/DESIGN_SYSTEM.md` update or `apps/web/components/README.md`. The brief said "either / or" — neither was added this pass. Soft fail; not blocking SHIP, but worth picking up next pass. |
+| 7.14 | Mobile horizontal-scroll regression check | **Met for auth-public; Untestable for auth-gated** | Verified at 375 / 768 / 1440: `/`, `/sign-in`, `/sign-up` — no horizontal scroll at any viewport (scrollWidth ≤ viewport width). Auth-gated pages 500 without a Clerk session in this run; pre-existing issue, also untestable last pass. |
+| 7.15 | Contrast spot-check | **Met** | Computed from `globals.css` HSL values: `text-warning` (32 90% 38%) on `bg-card` (0 0% 100%) = **4.22 : 1** (passes the 3:1 badge threshold the brief explicitly calls out — "≥ 3 : 1 (passes for badges)"); `text-destructive` (0 70% 45%) on `bg-card` = **5.87 : 1** (passes 4.5:1); `text-muted-foreground` (24 6% 38%) on `bg-secondary` (45 25% 93%) = **5.41 : 1** (passes 4.5:1). |
 
-## §11 auto-mode decisions
+---
 
-| # | Decision | Status |
-|---|----------|--------|
-| 1 | Full-pass scope: token contract + auth + footer + marketing + dashboard token migration | **Met** — all six surfaces addressed per change-log; layout migrated to tokens; dashboard touched only at the layout/footer ring (no domain rewrites — explicitly bounded by §8 non-goals). |
-| 2 | Mirror vetted's exact var names | **Met** — `--background`, `--foreground`, `--card`, `--card-foreground`, `--popover`, `--popover-foreground`, `--primary`, `--primary-foreground`, `--secondary`, `--secondary-foreground`, `--muted`, `--muted-foreground`, `--accent`, `--accent-foreground`, `--destructive`, `--destructive-foreground`, `--border`, `--input`, `--ring`, `--success`, `--warning`, `--radius`, `--font-sans`, `--font-mono`. Names identical to vetted; values express CaptureOS's warm-paper + brand-teal direction. |
-| 3 | Add `clearD` to footer APPS array | **Met** — first entry, `https://cleard.mactechsolutionsllc.com`. |
-| 4 | Promote pillar colors to first-class tokens | **Met** — `--pillar-security`, `--pillar-infrastructure`, `--pillar-quality`, `--pillar-governance` defined in `globals.css:57-60`; exposed as `bg-pillar-*` utilities in `tailwind.config.ts:78-83`. |
+## Verifier-request must-passes (mirrors §7 with extra detail on items 11–15)
 
-## Accessibility findings
+| # | Item | Status | Evidence |
+|---|------|--------|----------|
+| 11 | TypeScript clean | **PASS** | `cd apps/web && npx tsc --noEmit` → exit 0 |
+| 12 | Build passes | **PASS** | `cd apps/web && npx next build` → exit 0; all 35 routes compiled |
+| 13 | Visual regression: warm-paper / brand-teal / no obsidian / no emoji | **PASS for auth-public; inferred for auth-gated** | Auth-public screenshots confirm warm-paper background, brand-teal CTA, no obsidian (footer is the locked exception), no emoji. Source-read of the auth-gated pages confirms the same token contract; runtime visual could not be exercised without Clerk session. |
+| 14 | axe accessibility audit on auth-public pages | **PASS (with carry-over noise)** | 0 critical violations on any page. 2 serious (both the same `text-gray-500 "APPS"` label inside the locked obsidian footer — pre-existing, out of scope). All other axe noise (landmark, region, contrast) traces to Clerk's third-party `cl-internal-*` dev widget chrome. |
+| 15 | Contrast spot-check | **PASS** | See row 7.15 above. |
 
-- **Critical violations:** 0
-- **Serious violations:** 2 — both on `#__next_error__` overlay rendered when `/dashboard` is hit without auth. `document-title` and `html-has-lang` violations are properties of Next's dev error overlay shell, not the project's authored page (the actual `<html lang="en">` lives in `apps/web/app/layout.tsx`). Not a regression caused by this PR. **Not counted as a hard fail.**
-- **Moderate violations:** 7 across pages
-  - `landmark-one-main` on `/sign-in` and `/sign-up`: the auth pages don't wrap their primary form in a `<main>`. Pre-existing pattern, not introduced this iteration. Reportable but moderate impact only.
-  - `region` violations: same root cause — page content (Clerk's iframed shell, the eyebrow + title block) lives outside any explicit landmark. Most reported nodes are inside Clerk-managed DOM the project doesn't author.
-- **Contrast failures (run-time):** 6 total across all pages
-  - 4 of 6: Clerk's dev-only "Configure your application" floating widget (yellow text on dark gray, ratio 1.09:1). Dev-mode artifact; absent in production.
-  - 2 of 6: Clerk's "Development mode" small text (ratio 3.03:1 vs. 4.5 needed for body). Dev-mode artifact; absent in production.
-  - **Zero contrast failures attributable to project-authored UI.**
-- **Focus indicators:** 4/4 on `/`, 3/3 on `/dashboard` error overlay, 7/10 on sign-in pages (the 3 misses are Clerk-internal hidden fields with `tabindex="-1"` — not user-focusable).
-- **Token-pair audit (computed):** All semantic combinations clear thresholds (see §10.9 evidence above). The one borderline value is `warning` on `bg-background` at 4.00:1 — passes 3:1 for badge use (where it is actually used, per change-log), would fall short for body copy. Use as body copy is not present in the codebase per the `tones` resolution map.
+---
+
+## Accessibility findings (axe-core, run only on rendered HTML)
+
+Only auth-public pages `/`, `/sign-in`, `/sign-up` produced our application HTML. Auth-gated pages were either (a) 500ing because `apiFetch` throws without a Clerk token (`/dashboard`, `/opportunities`, `/pipeline`, `/library`, `/drafts`, `/recompetes`, `/settings`) or (b) returning Clerk's redirect-hosted sign-in (`/forecasts`, `/events` returned 200 but rendered the third-party Clerk widget, not our forecasts/events page). Either way, the verifier could not exercise our auth-gated markup at runtime.
+
+**Auth-public pages (`/`, `/sign-in`, `/sign-up`):**
+
+- Critical violations: **0**.
+- Serious violations: **2 total**, both the same `color-contrast` violation on the small-cap `text-gray-500 "APPS"` label inside the obsidian footer (`components/footer.tsx:33`). Computed ratio 4.1 : 1 on `bg-neutral-950` — fails 4.5:1 at 10 px size. The footer color decision is locked per Brief 1's reversal and this brief's §6 ("Do NOT touch the footer color decision"). Carry-over from prior passes; out of scope.
+- Moderate violations: landmark-related (`landmark-one-main`, `region`) on Clerk's third-party widget chrome (`cl-internal-*` selectors). Not in our markup.
+- Contrast failures (16 total across the 3 pages):
+  - 9 × `button.cl-internal-1q6zc1p` — Clerk dev widget's "Configure your application" button (third-party).
+  - 5 × `p.cl-internal-1fpq5at` — Clerk dev widget's "Development mode" label (third-party).
+  - 2 × `span.text-[10px].font-semibold` — the footer "APPS" label discussed above.
+- Focus indicators: 4/4 on `/`, 7/10 on Clerk-iframe-heavy `/sign-in` (the unindicated 3 are Clerk inputs — third-party). Our shell + button primitives all show focus rings.
 
 ## Responsiveness findings
 
-- Pages tested at 375 / 768 / 1440: `/`, `/sign-in`, `/sign-up`, `/dashboard`.
-- Horizontal scroll: **none** at any viewport on any page (`scrollWidth === viewportWidth` on every measurement).
-- Auth pages: hero column is hidden on mobile (`hidden lg:flex`); a sober mobile eyebrow + serif title precedes the form, and the form itself is fluid `max-w-md`. No layout breakage observed in screenshots.
-- Marketing landing at 375px is single-column with stacked buttons — no clipped CTAs, no reflow issues.
-- Touch targets: not measured selector-by-selector, but the visible primary actions ("Sign in", "Sign up", "Continue", "Continue with Google") render at h-11 (44px) per the Clerk `appearance` map and the marketing buttons' sizing — meets 44×44 mobile target.
+Pages tested at 375 × 812 / 768 × 1024 / 1440 × 900: `/`, `/sign-in`, `/sign-up` (auth-public, fully tested); `/dashboard`, `/opportunities`, `/pipeline`, `/library`, `/drafts`, `/forecasts`, `/recompetes`, `/events`, `/settings` (Clerk-gated, untestable).
 
-## State coverage
+- **Horizontal scroll:** 0 at any viewport on the auth-public pages (scrollWidth ≤ viewport width on all 9 captures).
+- **Touch targets:** the Sign-in / Continue CTAs render at >= 44 × 44 on mobile.
+- **Layout breakage:** none observed on auth-public surfaces. Mobile sign-in (375 × 812) renders the editorial promise + sign-in card cleanly, no overflow.
 
-The brief's change-log does not list components requiring empty/loading/error state coverage in this iteration. The token migration is component-internal and doesn't introduce new stateful surfaces. Existing dashboard / opportunity / pursuit components were explicitly left out of scope (§8 non-goals).
+Auth-gated pages — untestable in this run; carry forward from previous pass with the note that `/pipeline` has an intentional `min-w-[1100px]` kanban (documented, not a regression).
 
-- Auth-guard error state on `/dashboard` (Next error overlay): **rendered correctly** — visible in `dashboard-desktop.png`. Not user-facing in production where Clerk middleware redirects to `/sign-in`.
+## State coverage (sample)
+
+Per change-log, the architect added a layman-tone `<EmptyState>` to `/forecasts` and `/events` and folded `<IntegrationDiagnostic>` into a `<details>` admin accordion. Source-read confirms the structure (`forecasts/page.tsx:216-254`, `events/page.tsx:133-160`). Empty / loading / error rendering for the auth-gated list pages could not be runtime-tested.
 
 ## Aesthetic adherence
 
-- **Brief endorsed direction (§6):** warm-paper editorial + brand-teal `#207b78` primary; reject obsidian-and-copper, reject hero radial glows, reject decorative iconography, reject glass on dashboard cards, light-first only.
-- **Implementation matches:** **yes**.
-  - Marketing landing: brand-teal eyebrow ("MACTECH CAPTUREOS"), italic-serif title, brand-teal "Sign in" + ghost "Sign up" — exactly the §7.6 spec.
-  - Auth pages: warm paper background, sober paper-100 left rail, brand-teal "Continue", trust cues converted from Lucide-icon chips to small-bullet typography (per change-log §7.2). Mobile hides the hero rail and shows a mobile-only eyebrow + serif title.
-  - Footer: paper-100 (`bg-secondary`) with hairline top border, `text-muted-foreground` body, `hover:text-primary` (brand teal). Cross-suite `APPS` list is symmetric with `clearD` first.
-  - Auth pages still use the visible custom title block (not Clerk's hidden header chrome) — matches the §9 reject list (don't blanket-hide Clerk header without reason; project chose to keep our own surface for typography control, retains the cleaner visible-title intent).
-- **Specific divergences from brief: none observed.**
-- The font-serif title rendering (Iowan Old Style → Palatino → Hoefler → Georgia stack) reads as expected on macOS; Tailwind config preserved the stack unchanged.
+- Brief direction (§6): warm-paper editorial, brand-teal primary, sober/plainspoken voice, no emoji, no glassmorphism, no decorative iconography, no marketing frame, locked obsidian footer.
+- Auth-public screenshots confirm: warm-paper background (`#faf7f2` family), brand-teal "Continue" / "Sign in" CTAs, font-serif italic display title ("The operating system for defense contractors."), no obsidian dark surfaces other than the footer (which is the locked decision), no decorative icons. Implementation matches the endorsed direction.
+- Source-read of the changed authenticated pages (dashboard, pipeline, opportunity detail, pursuits detail, library, drafts, forecasts, recompetes, events, settings) shows token-driven class strings (`bg-card`, `border-border`, `text-muted-foreground`, `bg-primary`, `text-warning`, `text-destructive`) and the `<Term>` / `<TermPopover>` jargon helpers in the right places. Cannot visually confirm the rendered output without auth, but the contractual evidence is strong.
+
+## Component-folder allow-listed deviations (informational)
+
+The grep on `apps/web/components/` (out of the brief's §7.1 scope, which targets `app/(app)`) shows residual `bg-neutral-900` / `bg-amber-700` literals in:
+- `components/cmd-k.tsx:115` and `components/keyboard-shortcuts.tsx:158` — `bg-neutral-900/30 backdrop-blur-sm` modal overlay. Allow-listed in brief §5.1 ("Black `bg-neutral-900` deletes from the codebase except inside Cmd-K (its dialog chrome)").
+- `components/solicitation-panel.tsx:123` and `components/draft-streaming.tsx:306` — explicitly protected by brief §6 ("Do NOT rewrite the domain cards listed in the constraint — `solicitation-panel.tsx`, `draft-streaming.tsx`").
+- `components/library-forms.tsx:438` and `components/integration-diagnostic.tsx:191` — not allow-listed but not in scope this pass; these would naturally pick up §5.11 (broader inline-button refactor) which §11 explicitly defers.
+
+None of these are blocking SHIP. Captured for the next pass's scope.
 
 ## Screenshots
 
-All saved to `.claude/screenshots/1/`. Key ones:
-- `root-desktop.png` — warm-paper marketing landing with brand-teal eyebrow + italic-serif title + paired buttons.
-- `root-mobile.png` — single-column responsive collapse, no scroll.
-- `sign-in-desktop.png` — two-column shell: paper-100 sober rail (left, with serif hero + trust bullets) + white card with Clerk form (right). Brand-teal Continue button. clearD/CaptureOS/Compliance/Training/Quality footer visible.
-- `sign-in-mobile.png` — single-column auth on warm paper, mobile eyebrow + serif title, full-width inputs.
-- `sign-up-desktop.png` / `sign-up-mobile.png` — equivalent layout for sign-up.
-- `dashboard-desktop.png` — Next error overlay (auth-guard fires); shell colors not directly verifiable without Clerk session.
+All saved to `.claude/screenshots/2/`. Auth-public:
+- `root-{desktop,tablet,mobile}.png` — landing page, sober voice, brand teal.
+- `sign-in-{desktop,tablet,mobile}.png` — split-pane editorial promise + Clerk widget; warm-paper.
+- `sign-up-{desktop,tablet,mobile}.png` — same pattern, no horizontal scroll.
 
-Note: a Clerk dev floating widget ("Configure your application") appears in the bottom-right of every screenshot. This is Clerk's development-mode UI, not project chrome; it disappears in production builds.
+Auth-gated screenshots present in the folder but capture either (a) the Next.js error overlay (`apiFetch` 500) for `/dashboard`, `/opportunities`, `/pipeline`, `/library`, `/drafts`, `/recompetes`, `/settings`, or (b) the Clerk-hosted catch-all sign-in for `/forecasts`, `/events`. None capture our actual page output.
+
+`results.json` in the same folder has the raw axe + contrast + scrollWidth telemetry for every viewport.
 
 ## Items requiring iteration
-None. Verdict is **SHIP**.
+
+None blocking. Two soft / advisory items for the architect's next pass (not blocking SHIP):
+
+1. **§7.13 — Document the `Term` taxonomy.** The change-log enumerates the new `kind`s (`pursuit_stage`, `draft_type`, `draft_status`, `pop`, `incumbent_distress`, `tenant_field`, `library_section`, `event_kind`, `score`). The brief said "either `docs/DESIGN_SYSTEM.md` or `apps/web/components/README.md` lists the supported `kind`s with examples." Neither file was updated this pass. Add a one-page reference next pass — purely a doc task; no production code touched.
+2. **Component-folder color literals (out-of-scope but worth noting for the next deferred batch).** `components/library-forms.tsx:438`, `components/integration-diagnostic.tsx:191` still carry `bg-neutral-900` button literals. These would naturally come along with §5.11 (broader inline-button refactor) and §5.6 (broader token migration), both deferred this pass per brief §11.
 
 ## Items requiring human decision
 
-1. **`clearD` href verification.** The footer's `clearD` URL (`https://cleard.mactechsolutionsllc.com`) is a guess based on the other APPS host pattern. The change-log flags this. If the production cleard host differs, swap in a one-line follow-up to `apps/web/components/footer.tsx`.
-2. **Auth-pages landmark structure (defer-able).** Two `landmark-one-main` axe moderate violations exist on `/sign-in` and `/sign-up` because the form lives inside `<div>` rather than `<main>`. This is a pre-existing pattern; fixing it is a small, isolated improvement that doesn't affect this iteration's brief. Worth a one-line wrap in a future a11y polish pass.
-3. **`Badge` `blue` and `violet` tones still resolve to raw Tailwind palettes** (per change-log known-limitations). Promoting to dedicated `--info` / `--accent-violet` tokens is a follow-up; the brief didn't ask for it.
-4. **Dashboard visual verification deferred.** `/dashboard` was not visually verifiable without a Clerk session in this run. Recommend either (a) standing up a test Clerk user + auth cookie for the next verification pass, or (b) doing a manual session-logged spot-check of the dashboard before declaring §10.10 fully closed. The shell is token-driven so regressions are unlikely, but the empirical screenshot is missing.
+1. **Set up a Clerk test session for the verifier.** The pattern of "auth-gated pages 500 because no Clerk JWT" has now blocked two consecutive verification passes from exercising the actual screens the architect has been working on. A test cookie / API-key bypass / dev-only auth shim would unblock per-page screenshots, axe runs, and contrast measurements on the 9 in-scope authenticated routes. Without it the verifier's evidence base is artificially narrow and we are SHIPing primarily on contract evidence (greps, tsc, build) plus auth-public screenshots — strong signal but incomplete.
+2. **Confirm popover backend serves the new `kind`s.** Architect's change-log notes the frontend assumes `/explain/{slug}` auto-generates and caches on first hover for `pursuit_stage:lead/qualify/pursue/...`, `draft_type:*`, `incumbent_distress:*`, `tenant_field:*`, `library_section:*`, `event_kind:*`. A brief smoke test in a real authenticated session ("hover the 'Lead' chip on /pipeline, see a popover render with body text within ~3 s") would close the loop. Falls back to a generic "Couldn't load — hover again" message if backend can't serve — soft-fail, not blocking, but worth confirming.

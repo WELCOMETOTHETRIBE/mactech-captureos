@@ -21,12 +21,14 @@
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.3",
     "@types/node": "^22.7",
     "@types/react": "^18.3",
     "@types/react-dom": "^18.3",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.12",
     "eslint-config-next": "^16.2.0",
+    "playwright": "^1.59.1",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",
     "typescript": "^5.6"

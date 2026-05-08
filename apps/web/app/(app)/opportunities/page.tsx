@@ -462,8 +462,8 @@ function FacetFilter({
                 href={`/opportunities?${qs.toString()}`}
                 className={`flex items-center justify-between rounded-sm px-2 py-1 text-xs ${
                   active
-                    ? "bg-neutral-900 text-white"
-                    : "hover:bg-neutral-100 text-neutral-700"
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-accent text-foreground"
                 }`}
               >
                 <span className="truncate">{renderLabel(k)}</span>

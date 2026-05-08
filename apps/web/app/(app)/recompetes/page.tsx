@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { apiFetch, type ForecastsResponse, type MeResponse } from "@/lib/api";
 import {
+  Badge,
   Card,
   EmptyState,
   LinkButton,
@@ -11,6 +12,7 @@ import {
   fmtDate,
   fmtMoney
 } from "@/components/ui";
+import { TermPopover } from "@/components/term-popover";
 
 export const dynamic = "force-dynamic";
 
@@ -89,8 +91,8 @@ export default async function RecompetesPage({
 
   const chipClass = (active: boolean) =>
     active
-      ? "rounded-full border border-brand-700 bg-brand-700 px-3 py-1 text-xs font-medium text-white"
-      : "rounded-full border border-neutral-300 px-3 py-1 text-xs text-neutral-700 hover:border-neutral-500";
+      ? "rounded-full border border-primary bg-primary px-3 py-1 text-xs font-medium text-primary-foreground"
+      : "rounded-full border border-border px-3 py-1 text-xs text-foreground hover:border-foreground/40";
 
   return (
     <div className="space-y-6">
@@ -100,17 +102,21 @@ export default async function RecompetesPage({
         subtitle={
           <span>
             Every forecast where we know who currently holds the contract.
-            Sorted by fit score for your NAICS profile, urgency boosted by
-            POP-end proximity. Filter by agency, set-aside scope, or POP
-            window to focus on what matters this quarter.
+            Sorted by fit score for your{" "}
+            <TermPopover kind="naics" value="overview">NAICS</TermPopover>{" "}
+            profile, urgency boosted by{" "}
+            <TermPopover kind="pop" value="overview">POP</TermPopover>-end
+            proximity. Filter by agency,{" "}
+            <TermPopover kind="set_aside" value="overview">set-aside</TermPopover>{" "}
+            scope, or POP window to focus on what matters this quarter.
           </span>
         }
       />
 
       {/* Filter strip */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="mr-1 text-[11px] uppercase tracking-wider text-neutral-500">
-          Set-aside:
+        <span className="mr-1 text-[11px] uppercase tracking-wider text-muted-foreground">
+          <TermPopover kind="set_aside" value="overview">Set-aside</TermPopover>:
         </span>
         <Link href={buildHref({ set_aside: undefined })} className={chipClass(setAsideScope === "all")}>
           All
@@ -122,7 +128,7 @@ export default async function RecompetesPage({
           Small biz
         </Link>
 
-        <span className="ml-3 mr-1 text-[11px] uppercase tracking-wider text-neutral-500">
+        <span className="ml-3 mr-1 text-[11px] uppercase tracking-wider text-muted-foreground">
           Agency:
         </span>
         <Link href={buildHref({ agency: undefined })} className={chipClass(!agency)}>
@@ -135,8 +141,8 @@ export default async function RecompetesPage({
           DOE
         </Link>
 
-        <span className="ml-3 mr-1 text-[11px] uppercase tracking-wider text-neutral-500">
-          POP ends:
+        <span className="ml-3 mr-1 text-[11px] uppercase tracking-wider text-muted-foreground">
+          <TermPopover kind="pop" value="overview">POP</TermPopover> ends:
         </span>
         <Link href={buildHref({ pop: undefined })} className={chipClass(!popWindow)}>
           Any time
@@ -149,7 +155,7 @@ export default async function RecompetesPage({
 
         {myFounder ? (
           <>
-            <span className="ml-3 mr-1 text-[11px] uppercase tracking-wider text-neutral-500">
+            <span className="ml-3 mr-1 text-[11px] uppercase tracking-wider text-muted-foreground">
               Lane:
             </span>
             <Link
@@ -170,22 +176,22 @@ export default async function RecompetesPage({
 
       {/* Results */}
       {data.target_naics_filter ? (
-        <div className="text-xs text-neutral-500">
+        <div className="text-xs text-muted-foreground">
           Filtered to your {data.target_naics.length} target NAICS.{" "}
-          <Link href={buildHref({ all: "1" })} className="text-brand-700 hover:underline">
+          <Link href={buildHref({ all: "1" })} className="text-primary hover:underline">
             Show all NAICS
           </Link>
         </div>
       ) : data.target_naics.length > 0 ? (
-        <div className="text-xs text-neutral-500">
+        <div className="text-xs text-muted-foreground">
           Showing all NAICS.{" "}
-          <Link href={buildHref({ all: undefined })} className="text-brand-700 hover:underline">
+          <Link href={buildHref({ all: undefined })} className="text-primary hover:underline">
             Filter to your NAICS
           </Link>
         </div>
       ) : null}
 
-      <p className="text-xs text-neutral-400">
+      <p className="text-xs text-muted-foreground">
         {data.items.length} recompete{data.items.length === 1 ? "" : "s"}.
       </p>
 
@@ -217,7 +223,7 @@ export default async function RecompetesPage({
               <Card>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <p className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wider text-neutral-500">
+                    <p className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
                       <ScoreBadge score={fc.score} />
                       <span>
                         {fc.agency ?? "Unknown agency"}
@@ -229,37 +235,47 @@ export default async function RecompetesPage({
                         <Pillar pillar={fc.assigned_founder_pillar} />
                       ) : null}
                       {fc.assigned_founder_name ? (
-                        <span className="text-neutral-700">
+                        <span className="text-foreground">
                           @{fc.assigned_founder_name.split(" ")[0]}
                         </span>
                       ) : null}
                       {fc.matches_target_naics ? (
-                        <span className="rounded-sm bg-brand-50 px-1.5 py-0.5 font-semibold text-brand-800">
+                        <span className="rounded-sm bg-primary/10 px-1.5 py-0.5 font-semibold text-primary">
                           target NAICS
                         </span>
                       ) : null}
                     </p>
-                    <h3 className="mt-1 text-sm font-semibold text-neutral-900">
+                    <h3 className="mt-1 text-sm font-semibold text-foreground">
                       {fc.title}
                     </h3>
                     {fc.description ? (
-                      <p className="mt-2 line-clamp-2 text-sm leading-snug text-neutral-700">
+                      <p className="mt-2 line-clamp-2 text-sm leading-snug text-foreground">
                         {fc.description}
                       </p>
                     ) : null}
-                    <div className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    <div className="mt-2 rounded-md bg-warning/10 px-3 py-2 text-xs text-warning">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <strong>Incumbent:</strong> {fc.incumbent_name}
                         {fc.incumbent_sec_ticker ? (
-                          <span className="rounded-sm bg-neutral-200 px-1.5 py-0.5 font-mono text-[10px] text-neutral-800">
-                            {fc.incumbent_sec_ticker}
-                          </span>
+                          <TermPopover
+                            kind="incumbent_distress"
+                            value="sec_ticker"
+                          >
+                            <span className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground">
+                              {fc.incumbent_sec_ticker}
+                            </span>
+                          </TermPopover>
                         ) : null}
                         {fc.incumbent_distress_score !== null &&
                         fc.incumbent_distress_score > 0 ? (
-                          <span className="rounded-sm bg-rose-200 px-1.5 py-0.5 font-semibold text-[10px] text-rose-900">
-                            🚩 distress {fc.incumbent_distress_score}
-                          </span>
+                          <Badge tone="red">
+                            <TermPopover
+                              kind="incumbent_distress"
+                              value="score"
+                            >
+                              distress signal {fc.incumbent_distress_score}
+                            </TermPopover>
+                          </Badge>
                         ) : null}
                       </div>
                       {fc.incumbent_contract_number ? (
@@ -267,13 +283,15 @@ export default async function RecompetesPage({
                           Contract {fc.incumbent_contract_number}
                           {fc.period_of_performance_end ? (
                             <span className="ml-2">
-                              POP ends {fmtDate(fc.period_of_performance_end)}
+                              <TermPopover kind="pop" value="overview">POP</TermPopover>{" "}
+                              ends {fmtDate(fc.period_of_performance_end)}
                             </span>
                           ) : null}
                         </div>
                       ) : fc.period_of_performance_end ? (
                         <div className="mt-1 text-[11px]">
-                          POP ends {fmtDate(fc.period_of_performance_end)}
+                          <TermPopover kind="pop" value="overview">POP</TermPopover>{" "}
+                          ends {fmtDate(fc.period_of_performance_end)}
                         </div>
                       ) : null}
                       {fc.incumbent_total_obligations !== null &&
@@ -286,24 +304,41 @@ export default async function RecompetesPage({
                       ) : null}
                       {fc.incumbent_distress_summary ? (
                         <div className="mt-1 text-[11px]">
-                          SEC EDGAR: {fc.incumbent_distress_summary}
+                          <TermPopover
+                            kind="incumbent_distress"
+                            value="edgar"
+                          >
+                            SEC EDGAR
+                          </TermPopover>
+                          : {fc.incumbent_distress_summary}
                         </div>
                       ) : fc.incumbent_filings_last_90d !== null &&
                         fc.incumbent_filings_last_90d > 0 ? (
                         <div className="mt-1 text-[11px]">
-                          SEC EDGAR: {fc.incumbent_filings_last_90d} filing
+                          <TermPopover
+                            kind="incumbent_distress"
+                            value="edgar"
+                          >
+                            SEC EDGAR
+                          </TermPopover>
+                          : {fc.incumbent_filings_last_90d} filing
                           {fc.incumbent_filings_last_90d !== 1 ? "s" : ""} in
                           last 90 days
                         </div>
                       ) : null}
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-500">
+                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                       {fc.naics_code ? (
                         <span>
                           <NaicsBadge code={fc.naics_code} />
                         </span>
                       ) : null}
-                      {fc.set_aside ? <span>Set-aside: {fc.set_aside}</span> : null}
+                      {fc.set_aside ? (
+                        <span>
+                          <TermPopover kind="set_aside" value="overview">Set-aside</TermPopover>
+                          : {fc.set_aside}
+                        </span>
+                      ) : null}
                       {fc.contract_type ? (
                         <span>Type: {fc.contract_type}</span>
                       ) : null}
@@ -316,19 +351,20 @@ export default async function RecompetesPage({
                         </span>
                       ) : null}
                       {fc.expected_solicitation_date ? (
-                        <span className="text-amber-700">
-                          RFP expected: {fmtDate(fc.expected_solicitation_date)}
+                        <span className="text-warning">
+                          <TermPopover kind="clause" value="RFP">RFP</TermPopover>{" "}
+                          expected: {fmtDate(fc.expected_solicitation_date)}
                         </span>
                       ) : null}
                     </div>
                     {fc.poc_email || fc.poc_name ? (
-                      <p className="mt-2 text-xs text-neutral-500">
+                      <p className="mt-2 text-xs text-muted-foreground">
                         POC: {fc.poc_name ?? ""}
                         {fc.poc_name && fc.poc_email ? " · " : ""}
                         {fc.poc_email ? (
                           <a
                             href={`mailto:${fc.poc_email}`}
-                            className="text-brand-700 hover:underline"
+                            className="text-primary hover:underline"
                           >
                             {fc.poc_email}
                           </a>
@@ -341,7 +377,7 @@ export default async function RecompetesPage({
                       href={fc.source_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-neutral-500 hover:text-neutral-800"
+                      className="text-muted-foreground hover:text-foreground"
                     >
                       Source ({fc.source_host ?? "link"})
                     </a>

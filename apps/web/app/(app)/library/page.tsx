@@ -15,12 +15,14 @@ import {
   Badge,
   Card,
   EmptyState,
+  LinkButton,
   NaicsBadge,
   PageHeader,
   Pillar,
   fmtDate,
   fmtMoney
 } from "@/components/ui";
+import { TermPopover } from "@/components/term-popover";
 
 export const dynamic = "force-dynamic";
 
@@ -45,27 +47,59 @@ export default async function LibraryPage() {
       <PageHeader
         eyebrow="Capture library"
         title="Library"
-        subtitle="Capability statements, past performance, and teaming partners — the catalogue the Phase 3 proposal drafter cites when it generates Sources Sought and capability responses."
+        subtitle={
+          <>
+            <TermPopover kind="library_section" value="capability_statements">
+              Capability statements
+            </TermPopover>
+            ,{" "}
+            <TermPopover kind="library_section" value="past_performance">
+              past performance
+            </TermPopover>
+            , and{" "}
+            <TermPopover kind="library_section" value="teaming_partners">
+              teaming partners
+            </TermPopover>{" "}
+            — the catalogue the Phase 3 proposal drafter cites when it generates{" "}
+            <TermPopover kind="draft_type" value="sources_sought">
+              Sources Sought
+            </TermPopover>{" "}
+            and capability responses.
+          </>
+        }
       />
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <SummaryStat
           label="Statements"
           value={caps.total}
-          hint={`${fullyEmbedded} embedded for vector match`}
+          hint={
+            <>
+              {fullyEmbedded}{" "}
+              <TermPopover kind="library_section" value="embedded">
+                embedded
+              </TermPopover>{" "}
+              for vector match
+            </>
+          }
         />
         <SummaryStat
           label="Past performance"
           value={pastPerf.total}
-          hint="cited in capability responses"
+          hint={<>cited in capability responses</>}
         />
         <SummaryStat
           label="Teaming partners"
           value={partners.total}
-          hint={`${partners.active_count} active`}
+          hint={<>{partners.active_count} active</>}
         />
         <SummaryStat
-          label="NAICS coverage"
+          label={
+            <>
+              <TermPopover kind="naics" value="overview">NAICS</TermPopover>{" "}
+              coverage
+            </>
+          }
           value={
             new Set(
               [
@@ -74,31 +108,37 @@ export default async function LibraryPage() {
               ].filter(Boolean) as string[]
             ).size
           }
-          hint="distinct codes referenced"
+          hint={<>distinct codes referenced</>}
         />
       </div>
 
       {/* ─── Capability statements ─── */}
       <section id="capability-statements" className="scroll-mt-6 space-y-3">
         <SectionHeader
-          title="Capability statements"
+          title={
+            <TermPopover kind="library_section" value="capability_statements">
+              Capability statements
+            </TermPopover>
+          }
           count={caps.total}
           subtitle="Capability clusters MacTech can deliver. The opportunity-scoring engine ranks each new SAM notice against these via pgvector cosine similarity."
           action={
             <div className="flex flex-wrap gap-2">
-              <Link
+              <LinkButton
                 href="/library/capability-statements/import"
-                className="rounded-md border border-brand-300 bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-800 hover:border-brand-500"
+                variant="secondary"
+                size="sm"
                 title="Drop a capability deck PDF and Claude extracts the fields"
               >
                 ⬆ Import PDF
-              </Link>
-              <Link
+              </LinkButton>
+              <LinkButton
                 href="/library/capability-statements/new"
-                className="rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800"
+                variant="primary"
+                size="sm"
               >
                 + Add cluster
-              </Link>
+              </LinkButton>
             </div>
           }
         />
@@ -108,18 +148,18 @@ export default async function LibraryPage() {
             body="Capability clusters drive the opportunity-scoring engine. Add at least one before you'll see meaningful capability matches on opportunity detail pages."
             action={
               <div className="flex justify-center gap-2">
-                <Link
+                <LinkButton
                   href="/library/capability-statements/import"
-                  className="rounded-md border border-brand-300 bg-brand-50 px-3 py-2 text-sm font-medium text-brand-800 hover:border-brand-500"
+                  variant="secondary"
                 >
                   ⬆ Import from PDF
-                </Link>
-                <Link
+                </LinkButton>
+                <LinkButton
                   href="/library/capability-statements/new"
-                  className="rounded-md border border-neutral-900 bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+                  variant="primary"
                 >
                   + Add manually
-                </Link>
+                </LinkButton>
               </div>
             }
           />
@@ -197,24 +237,30 @@ export default async function LibraryPage() {
       {/* ─── Past performance ─── */}
       <section id="past-performance" className="scroll-mt-6 space-y-3">
         <SectionHeader
-          title="Past performance"
+          title={
+            <TermPopover kind="library_section" value="past_performance">
+              Past performance
+            </TermPopover>
+          }
           count={pastPerf.total}
           subtitle="Prior contract narratives the firm cites in capability responses. The Phase 3 proposal drafter will pull from here."
           action={
             <div className="flex flex-wrap gap-2">
-              <Link
+              <LinkButton
                 href="/library/past-performance/import"
-                className="rounded-md border border-brand-300 bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-800 hover:border-brand-500"
+                variant="secondary"
+                size="sm"
                 title="Drop a prior-engagement PDF and Claude extracts the fields"
               >
                 ⬆ Import PDF
-              </Link>
-              <Link
+              </LinkButton>
+              <LinkButton
                 href="/library/past-performance/new"
-                className="rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800"
+                variant="primary"
+                size="sm"
               >
                 + Add record
-              </Link>
+              </LinkButton>
             </div>
           }
         />
@@ -224,18 +270,18 @@ export default async function LibraryPage() {
             body="Add the prior engagements you'd cite in a capability response. Each row becomes a citation the proposal drafter can pull from."
             action={
               <div className="flex justify-center gap-2">
-                <Link
+                <LinkButton
                   href="/library/past-performance/import"
-                  className="rounded-md border border-brand-300 bg-brand-50 px-3 py-2 text-sm font-medium text-brand-800 hover:border-brand-500"
+                  variant="secondary"
                 >
                   ⬆ Import from PDF
-                </Link>
-                <Link
+                </LinkButton>
+                <LinkButton
                   href="/library/past-performance/new"
-                  className="rounded-md border border-neutral-900 bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+                  variant="primary"
                 >
                   + Add manually
-                </Link>
+                </LinkButton>
               </div>
             }
           />
@@ -326,16 +372,21 @@ export default async function LibraryPage() {
       {/* ─── Teaming partners ─── */}
       <section id="teaming-partners" className="scroll-mt-6 space-y-3">
         <SectionHeader
-          title="Teaming partners"
+          title={
+            <TermPopover kind="library_section" value="teaming_partners">
+              Teaming partners
+            </TermPopover>
+          }
           count={partners.total}
           subtitle="Relationship roster for multi-vendor pursuits. Active partners surface in the proposal drafter's teaming suggestions."
           action={
-            <Link
+            <LinkButton
               href="/library/teaming-partners/new"
-              className="rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800"
+              variant="primary"
+              size="sm"
             >
               + Add partner
-            </Link>
+            </LinkButton>
           }
         />
         {partners.items.length === 0 ? (
@@ -343,12 +394,12 @@ export default async function LibraryPage() {
             title="No teaming partners yet."
             body="Add the primes/subs you'd team with on multi-vendor pursuits. Capabilities + NAICS codes drive automatic suggestions on opportunity detail pages."
             action={
-              <Link
+              <LinkButton
                 href="/library/teaming-partners/new"
-                className="rounded-md border border-neutral-900 bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+                variant="primary"
               >
                 + Add the first partner
-              </Link>
+              </LinkButton>
             }
           />
         ) : (
@@ -489,20 +540,20 @@ function SectionHeader({
   subtitle,
   action
 }: {
-  title: string;
+  title: React.ReactNode;
   count: number;
-  subtitle?: string;
+  subtitle?: React.ReactNode;
   action?: React.ReactNode;
 }) {
   return (
-    <header className="flex flex-wrap items-end justify-between gap-3 border-b border-neutral-200 pb-2">
+    <header className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-2">
       <div>
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-neutral-700">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-foreground">
           {title}{" "}
-          <span className="text-neutral-400 font-normal normal-case">({count})</span>
+          <span className="text-muted-foreground font-normal normal-case">({count})</span>
         </h2>
         {subtitle && (
-          <p className="mt-1 max-w-2xl text-xs text-neutral-500">{subtitle}</p>
+          <p className="mt-1 max-w-2xl text-xs text-muted-foreground">{subtitle}</p>
         )}
       </div>
       {action}
@@ -515,17 +566,17 @@ function SummaryStat({
   value,
   hint
 }: {
-  label: string;
+  label: React.ReactNode;
   value: number;
-  hint?: string;
+  hint?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-md border border-neutral-200 bg-white p-4">
-      <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+    <div className="rounded-md border border-border bg-card p-4">
+      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
         {label}
       </p>
       <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
-      {hint && <p className="mt-1 text-[11px] text-neutral-500">{hint}</p>}
+      {hint && <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p>}
     </div>
   );
 }

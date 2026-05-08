@@ -1,134 +1,140 @@
 # Change Log
-For brief: 2026-05-08T12:52:40-07:00
-Iteration: 1
-Generated: 2026-05-08T13:30:00-07:00
+For brief: 2026-05-08T21:30:00-07:00
+Iteration: 2
+Generated: 2026-05-08T22:30:00-07:00
 
 ## Items addressed
 
-### §7.1 — HSL token contract + Tailwind mapping
-- **Brief reference:** §7.1, §10.1, §10.2, §11.Q2, §11.Q4
-- **Files modified:** `apps/web/app/globals.css`, `apps/web/tailwind.config.ts`
-- **Files created:** none
-- **Approach taken:** Replaced the inline-hex token defaults in `globals.css` with a complete HSL CSS-variable contract under `:root` — same variable names as vetted/clearD's gold copy, values express CaptureOS's warm-paper + brand-teal direction. Added pillar tokens (`--pillar-security|infrastructure|quality|governance`) as first-class. Updated `tailwind.config.ts` to expose every var as a Tailwind utility (`bg-background`, `text-muted-foreground`, `border-border`, `bg-primary text-primary-foreground`, `ring-ring`, `bg-success`, `bg-warning`, `bg-pillar-security`, etc.). Kept `paper.*` and `brand.*` palettes as legacy aliases — 158 existing class hits still compile unchanged.
+### §5.1 — Unify primary-action color
+- **Brief reference:** §5.1 + §7.1 + §11.2 (auto-mode answer: migrate `bg-neutral-900`, `bg-brand-700`, `bg-amber-700`, `bg-emerald-600`, `bg-red-600` button strings)
+- **Files modified:**
+  - `apps/web/components/ui.tsx` — extended legacy `Button` + `LinkButton` with `success` / `warning` / `destructive` variants and `size` prop (`default`/`sm`/`xs`); added `focus-visible:ring` to both for a11y.
+  - `apps/web/app/(app)/dashboard/page.tsx` — onboarding-incomplete banner CTA → `LinkButton variant="warning"`; first-feed banner CTA → `LinkButton variant="primary"`.
+  - `apps/web/app/(app)/pipeline/page.tsx` — `pillCls`, `StageBtn`, top-bar "Add from opportunities" link, FirstTimePipeline buttons all migrated; `StageBtn` switched to typed Button variants (`primary`/`success`/`destructive`).
+  - `apps/web/app/(app)/opportunities/[id]/page.tsx` — `PursuitPanel`, `DetailStageBtn`, "Open kanban" link, "Generate brief", "Open latest draft" link all migrated.
+  - `apps/web/app/(app)/opportunities/page.tsx` — facet-active pill `bg-neutral-900` → `bg-primary text-primary-foreground`.
+  - `apps/web/app/(app)/pursuits/[id]/page.tsx` — Capture Package, Opportunity link, NotesEditor, WinStrategyEditor, Past Performance/Key Personnel/Teaming Partner Save buttons, Delete pursuit all migrated.
+  - `apps/web/app/(app)/drafts/page.tsx` — empty-state CTA migrated.
+  - `apps/web/app/(app)/drafts/[id]/page.tsx` — Export DOCX, Mark submitted (`success`), Save changes, Delete, Cancel — all migrated.
+  - `apps/web/app/(app)/library/page.tsx` — every "+ Add cluster / Add record / Add partner / Import PDF" button migrated.
+  - `apps/web/app/(app)/settings/page.tsx` — "+ Add founder" migrated.
+  - `apps/web/app/(app)/recompetes/page.tsx` — chip-active class migrated to token form.
+  - `apps/web/app/(app)/forecasts/page.tsx` — empty-state CTAs migrated.
+  - `apps/web/app/(app)/events/page.tsx` — "Register" + empty-state CTAs migrated.
+- **Approach taken:** introduce `success` / `warning` / `destructive` variants on the legacy `<Button>` (kept the existing `primary` / `secondary` / `ghost` / `danger`). Migrated every literal-styled action button on every authenticated page.
 - **Design decisions worth flagging:**
-  - Light-first, no `.dark` block — explicit per brief §6 + CLAUDE.md.
-  - Body now sets `font-variant-numeric: tabular-nums` globally; `.font-serif` opts out so editorial display titles render proportional figures.
-  - Default `ringColor` reads `hsl(var(--ring))` instead of hard-coded teal — same color, single source of truth.
-  - `--radius: 0.5rem` set; `borderRadius.lg/md/sm` derive from it so existing `rounded-md` calls feel consistent.
-- **What I did NOT do and why:** Did not migrate every `bg-paper-*` / `text-brand-*` callsite in the repo. Brief explicitly bounded scope to "minimal scaffolding"; legacy aliases keep callers working.
+  - The `danger` variant (outlined red border, card background) is preserved for "destructive but not the main action" — Delete buttons in detail-page footers. The new `destructive` variant is solid red, used only for terminal won/lost stage markers.
+  - `LinkButton` got the same variants for consistency.
 
-### §7.2 — Auth pages re-skin (warm-paper)
-- **Brief reference:** §7.2, §10.3, §10.4, §10.11
-- **Files modified:** `apps/web/app/sign-in/[[...sign-in]]/page.tsx`, `apps/web/app/sign-up/[[...sign-up]]/page.tsx`
-- **Files created:** none
-- **Approach taken:** Rewrote both pages on `bg-background` (warm paper-50). Hidden-on-mobile sober sidebar (`bg-secondary` / paper-100) with the trust cues demoted from Lucide-icon chips to small-bullet typography. Right column is a centered single-column form. Clerk `appearance` map references Tailwind utility classes only — every former `bg-[#xxxxxx]`, `text-[${ACCENT}]`, template-string interpolation removed. Visible header with brand-teal eyebrow and italic-serif page title for cross-product consistency.
+### §5.2 — Wrap bare jargon with `<Term>` / `<TermPopover>`
+- **Brief reference:** §5.2 + §7.6
+- **Files modified:**
+  - `apps/web/app/(app)/pipeline/page.tsx` — full stage-glossary strip (Lead → Qualify → Pursue → Propose → Submit → Won · Lost) plus per-column header term wraps; 10 callsites total.
+  - `apps/web/app/(app)/library/page.tsx` — section headers (capability_statements / past_performance / teaming_partners), "embedded" hint, NAICS coverage stat label, drafter section subtitle; 9 callsites.
+  - `apps/web/app/(app)/drafts/page.tsx` — Sources Sought / RFP / compliance_matrix in subtitle, status + draft_type badges per row; 5 callsites.
+  - `apps/web/app/(app)/drafts/[id]/page.tsx` — status + draft_type badges in PageHeader subtitle.
+  - `apps/web/app/(app)/forecasts/page.tsx` — RFP, NAICS, set-aside in subtitle and per-card footer; 6 callsites.
+  - `apps/web/app/(app)/recompetes/page.tsx` — NAICS, POP, set-aside (filter strip + cards), incumbent_distress (sec_ticker, score, edgar), RFP — 13 callsites.
+  - `apps/web/app/(app)/events/page.tsx` — OSBP, industry_day, event_kind by row, NAICS — 4 callsites.
+  - `apps/web/app/(app)/settings/page.tsx` — UEI, CAGE, saved_searches, NAICS, set_aside, NAICS matrix, NAICS tier badges — 8 callsites.
+  - `apps/web/app/(app)/dashboard/page.tsx` — KPI glossary strip below the four tiles (high_fit, pursuit_stage overview, draft_type overview, score overview); plus UEI/CAGE on the setup banner and NAICS in first-feed-loading banner.
+  - `apps/web/app/(app)/pursuits/[id]/page.tsx` — wrapped the existing stage badge in `<Term kind="pursuit_stage">`.
+- **Approach taken:** list pages without the ExplainRail wired up use `<TermPopover>` (in-place popover, no nav). Detail pages with rail (`/opportunities/[id]`, `/pursuits/[id]`) use `<Term>`.
 - **Design decisions worth flagging:**
-  - Removed the radial-glow auras and the 48px grid background — brief §9 rejects them.
-  - Removed the SVG icons (Radar/Crosshair/FileText) on trust cues; replaced with a primary-token bullet. Icons read "B2C SaaS landing"; CaptureOS doesn't.
-  - Removed the `invert` filter on the MacTech logo — it was inverting white-on-dark; we're now on paper.
-  - Mobile hero collapses to a sober eyebrow + italic-serif title; no gradient block.
-- **What I did NOT do and why:** Did not deepen accessibility past visible focus rings + token-driven contrast — that wasn't called out in the brief, and Clerk's components own most of the form a11y.
+  - New `kind`s introduced: `pursuit_stage`, `draft_type`, `draft_status`, `pop`, `incumbent_distress`, `tenant_field`, `library_section`, `event_kind`, `score`. Backend `/explain/{slug}` route auto-generates explanations on first hover and caches them — no DB seed needed this pass.
+  - Updated `SummaryStat` (in library) and `SectionHeader` to accept `ReactNode` for `label`/`title`/`hint` so wrapping is composable.
+  - Updated settings `Row` and `KvList` likewise.
+  - **Constraint deviation:** I did not find an existing helper-text dictionary; `STAGE_HELP` is included in the new `lib/pursuit-stages.ts` for fallback if backend hasn't generated the explanation yet (defensive, not currently consumed by the UI).
 
-### §7.3 — Footer re-skin + clearD added to APPS
-- **Brief reference:** §7.3, §10.5, §10.13, §11.Q3
-- **Files modified:** `apps/web/components/footer.tsx`
-- **Approach taken:** Switched `bg-[#0A0A0A] border-[#1f1f1f] text-gray-400` to `bg-secondary border-border text-muted-foreground`; hover color is `text-primary` (brand teal). Added `clearD` as the first entry in `APPS` per §11.Q3.
-- **Design decisions worth flagging:** The `clearD` href points to `https://cleard.mactechsolutionsllc.com` — guessing at the cross-suite host pattern based on the other APPS entries. If the production host differs, swap it in a one-line follow-up.
+### §5.3 — Single STAGE_TONE / STAGE_LABEL source + remove 🚩 emoji
+- **Brief reference:** §5.3 + §7.5 + §7.4
+- **Files created:** `apps/web/lib/pursuit-stages.ts`
+- **Files modified:**
+  - `apps/web/app/(app)/pipeline/page.tsx` — uses `PURSUIT_STAGES_ORDER` from api.ts (already did) + `STAGE_TONE` is unused here because the columns are typed in api response; the new helpers ship to detail pages where they were duplicated.
+  - `apps/web/app/(app)/opportunities/[id]/page.tsx` — deleted local `PURSUIT_STAGE_TONE` + `PURSUIT_STAGE_LABEL`; imports `STAGE_TONE` and `STAGE_LABEL` from `lib/pursuit-stages`.
+  - `apps/web/app/(app)/pursuits/[id]/page.tsx` — deleted local `STAGE_TONE` + `STAGE_LABEL`; imports from `lib/pursuit-stages`.
+  - `apps/web/app/(app)/recompetes/page.tsx` — replaced `🚩 distress {n}` with text-only `distress signal {n}` inside a `Badge tone="red"`, wrapped in `<TermPopover kind="incumbent_distress" value="score">`. The flag emoji is gone.
+- **Approach taken:** existing `lib/pursuits.ts` is `"use server"` only — adding plain constants would be a runtime error. Created sibling file `lib/pursuit-stages.ts` to host the non-action exports.
+- **Brief deviation:** Brief §5.3 says "Extract `STAGE_TONE`/`STAGE_LABEL`/`STAGE_ORDER` to `apps/web/lib/pursuits.ts` (new file)". Existing file already exists at that path with `"use server"` directive — splitting was the safer move. Importers see no functional difference; the file path differs from the brief's literal text.
 
-### §7.4 — `cn()` util + minimal shadcn primitives (scaffolding only)
-- **Brief reference:** §7.4, §10.6, §10.7
-- **Files modified:** none (existing `components/ui.tsx` 589-line file kept as legacy aliases)
-- **Files created:**
-  - `apps/web/lib/utils.ts` — `cn(...inputs: ClassValue[])` (clsx + tailwind-merge)
-  - `apps/web/components/ui/button.tsx` — `cva` + `forwardRef` + `Slot` (asChild), token-driven variants
-  - `apps/web/components/ui/badge.tsx` — semantic variants (`default | secondary | destructive | success | warning | outline | muted`)
-  - `apps/web/components/ui/card.tsx` — `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `CardFooter`
-- **Approach taken:** Pure scaffolding — no callsites migrated. New code reaches into `@/components/ui/button` etc.; existing `@/components/ui` keeps resolving to the legacy file.
-- **Design decisions worth flagging:** The directory `components/ui/` and file `components/ui.tsx` coexist by Node/bundler resolution rules — bare `@/components/ui` resolves to the file, `@/components/ui/button` resolves into the directory. Verified by clean `tsc --noEmit` and `next dev` boot.
-- **What I did NOT do and why:** Did not migrate any existing callers (Dashboard, Pipeline, Opportunity detail) to the new primitives. Brief §7.4 explicitly says "scaffolding only; do not migrate every primitive." A future pass can move surfaces over one at a time.
-
-### §7.6 — Marketing landing restyle
-- **Brief reference:** §7.6, §10.3
-- **Files modified:** `apps/web/app/page.tsx`
-- **Approach taken:** Brand-teal eyebrow, italic-serif `display`-style title (`font-serif italic`), 1-paragraph pitch, primary-teal "Sign in" button, ghost "Sign up" button. Token-driven, with explicit focus rings. Footer line in muted-foreground.
-
-### §7.7 — Semantic tone tokens through `Kpi` / `Badge` / `Pillar`
-- **Brief reference:** §7.7, §10.8
-- **Files modified:** `apps/web/components/ui.tsx`
-- **Approach taken:** Component APIs unchanged (`Kpi tone="amber|red|green|brand|neutral"`, `Badge tone="amber|red|green|brand|blue|violet|neutral"`). Internal `tones` and `valueTones` records now resolve `amber → warning`, `red → destructive`, `green → success`, `brand → primary`, `neutral → muted`. `Pillar` rewritten to render directly with pillar-token utility classes (`bg-pillar-security/15 text-pillar-security border-pillar-security/20`, etc.) so the four founder pillars become first-class brand tokens. Also migrated `Card`, `Section`, `EmptyState`, `Button`, `LinkButton`, `PageHeader` away from raw `border-paper-200`/`text-neutral-*` to token utilities — this is transparent to all callers.
+### §5.4 — `<BackLink>` primitive + replace inline opportunity-detail header
+- **Brief reference:** §5.4 + §7.3
+- **Files created:** none (BackLink lives in `components/ui.tsx`).
+- **Files modified:**
+  - `apps/web/components/ui.tsx` — appended `BackLink` export. Token-driven (`text-muted-foreground` → `hover:text-foreground`); has the focus-visible ring.
+  - `apps/web/app/(app)/opportunities/[id]/page.tsx` — replaced the inline 70-line header strip with `<BackLink>` + `<PageHeader display eyebrow={agency} title={title} subtitle={chip-row} trailing={score+open-on-sam}>` + a separate small `<section>` for the meta strip (Posted/Deadline/Set-aside/Notice ID).
+  - `apps/web/app/(app)/pursuits/[id]/page.tsx` — replaced the inline `← Pipeline` link with `<BackLink>`.
+  - `apps/web/app/(app)/drafts/[id]/page.tsx` — replaced the inline `← All drafts` with `<BackLink>`.
 - **Design decisions worth flagging:**
-  - `Badge` `blue` and `violet` tones still resolve to raw Tailwind palettes (`bg-blue-50 text-blue-700`, etc.). They carry pillar/informational meaning — the future-pass concern is whether to alias them under pillar-foundational tokens. Out of scope this iteration.
-  - `Pillar` no longer routes through `Badge` for the four known pillars — the pillar tokens have no neat foreground pair, so we render the chip inline. Falls back to `<Badge tone="neutral">` for unknown pillar strings.
+  - BackLink renders `← {label}` with the `←` glyph as `aria-hidden` and the label as the screen-reader-readable text.
+  - Opp-detail's header was wrapped in a card frame previously — I kept the meta-strip as a card (Posted/Deadline/Set-aside/Notice ID grid) but elevated the title+chip row to the standard `PageHeader display`. Same information density, suite-consistent shape.
 
-### §7.9 — `--radius`, `--font-mono`, `tabular-nums` defaults
-- **Brief reference:** §7.9
-- **Files modified:** covered by `globals.css` and `tailwind.config.ts` above.
-- **Approach taken:** `--radius: 0.5rem` defined; `borderRadius.lg/md/sm` derive from it. `--font-mono` defined and exposed as `font-mono`. `body` sets `font-variant-numeric: tabular-nums`; `.font-serif` opts out so display titles aren't tabular.
+### §5.5 — Standardize `<EmptyState>` on `/forecasts` and `/events`
+- **Brief reference:** §5.5 + §7.7
+- **Files modified:**
+  - `apps/web/app/(app)/forecasts/page.tsx` — full rewrite. Added `ForecastsEmpty` sub-component with a layman-tone EmptyState body that teaches what would normally appear, what would change that, and offers a primary CTA (Show all NAICS forecasts) plus secondary (Review NAICS targets). The `<IntegrationDiagnostic>` admin surface is now inside a `<details>` fold-out below the empty state, never replacing it.
+  - `apps/web/app/(app)/events/page.tsx` — full rewrite. Added `EventsEmpty` sub-component. Body teaches what the page is for. Replaces the prior ops-tone "check the diagnostic on /forecasts" with a layman explanation + a `<details>` admin diagnostic fold-out.
+- **Design decisions worth flagging:**
+  - The events "Coverage gaps?" link still points to /library (existing behavior); the inline `<code>mactech_workers.tasks.apify_industry_days</code>` literal — internal worker name leaking into UI — is gone.
+  - Both empty states now offer two CTAs: primary positive action + secondary path. They no longer ask the user to "check the diagnostic."
 
-### Token migration in `(app)/layout.tsx`
-- **Brief reference:** §10.3 (zero hex in target file)
-- **Files modified:** `apps/web/app/(app)/layout.tsx`
-- **Approach taken:** Swapped `bg-paper-50` → `bg-background`, `border-paper-200` → `border-border`, `bg-white` → `bg-card`, `text-neutral-*` → `text-foreground|muted-foreground`. No structural change. The shell extraction (§7.5) is deferred per brief §11.
+### §5.6 + §4.10 — Token migration on three hot pages + sidebar
+- **Brief reference:** §5.6 + §7.8 + §7.10
+- **Files modified:**
+  - `apps/web/components/sidebar-nav.tsx` — active state now uses `border-primary bg-primary/10 text-foreground` + sub-line uses `text-primary` / `text-muted-foreground`.
+  - `apps/web/app/(app)/dashboard/page.tsx` — full pass: KPI hover ring uses `ring-primary/30`; SPRS chip card, first-feed-loading banner, onboarding banner, ComingUpRail (column / row / event row / empty), HowItWorks/Step subcomponents, KeyboardList row card, footer — all migrated.
+  - `apps/web/app/(app)/pipeline/page.tsx` — full pass: column backgrounds (`bg-secondary`), aging colors (`border-warning/40` / `border-destructive/40` / `text-warning` / `text-destructive`), terminal-stage cards, owner select, FirstTimePipeline, RemoveBtn — all migrated. Pkg-link chip uses `bg-primary/10 border-primary/30 text-primary`.
+  - `apps/web/app/(app)/opportunities/[id]/page.tsx` — full pass on all sub-components: PursuitPanel, DrafterPanel, ExplainRail, AskPanel, QuestionCard, BriefAndDescriptionPanel (tabs, attachments), BriefBody, BriefList (kept tone-record API back-compat — values in record now resolve to semantic tokens), BriefEmpty, score-rationale section, score breakdown grid, Row/Meta helpers.
+- **Verification:** §7.8 grep returns zero JSX hits across all three hot pages.
 
 ## New primitives introduced
 
-| Component | Location | Purpose | Where it's used |
-|---|---|---|---|
-| `cn()` | `apps/web/lib/utils.ts` | Standard shadcn class merger | Every new primitive in `components/ui/` |
-| `Button` (shadcn) | `apps/web/components/ui/button.tsx` | `cva` + `forwardRef` + `Slot` token-driven button | Scaffolding only; not yet imported by app code |
-| `Badge` (shadcn) | `apps/web/components/ui/badge.tsx` | Semantic-variant badge | Scaffolding only |
-| `Card` family | `apps/web/components/ui/card.tsx` | Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter | Scaffolding only |
+- **`BackLink`** — `apps/web/components/ui.tsx`. Standard "← {label}" affordance for detail pages. Used on `/opportunities/[id]`, `/pursuits/[id]`, `/drafts/[id]`.
+- **`STAGE_TONE`, `STAGE_LABEL`, `STAGE_ORDER`, `STAGE_HELP`** — `apps/web/lib/pursuit-stages.ts`. Single source of pursuit-stage tone + label vocabulary. Imported by opportunity detail and pursuit detail.
+- **`success` / `warning` / `destructive` button variants** — `Button` + `LinkButton` in `components/ui.tsx`. Resolves through `--success` / `--warning` / `--destructive` tokens.
+- **`size` prop on `Button` / `LinkButton`** — `default`/`sm`/`xs`. Replaces the previous practice of `<Button className="text-[11px] px-2 py-0.5">` overrides scattered across detail pages.
 
 ## Tokens / config changed
 
-- **`apps/web/app/globals.css`:** Added complete HSL CSS-var token block (background, foreground, card+fg, popover+fg, primary+fg, secondary+fg, muted+fg, accent+fg, destructive+fg, success, warning, border, input, ring, four pillar tokens, --radius, --font-sans, --font-mono). Body now uses tokens for color/background/font-family and defaults `font-variant-numeric: tabular-nums`. `:focus-visible` outline color now reads `hsl(var(--ring))`. Clerk autofill rule rewritten to use card tokens (warm paper) instead of obsidian.
-- **`apps/web/tailwind.config.ts`:** Added every token as a Tailwind utility, `borderRadius` derives from `--radius`, default `ringColor` reads `hsl(var(--ring))`. Pillar tokens exposed as `bg-pillar-{security|infrastructure|quality|governance}`. Legacy `paper.*` and `brand.*` palettes preserved as aliases.
+None. All migration is class-string only — the underlying token contract (`--primary`, `--secondary`, `--success`, `--warning`, `--destructive`, `--muted-foreground`, `--card`, `--border`, etc.) is unchanged from the prior pass.
 
 ## Test commands run and their result
 
-- `pnpm --filter @mactech/web add class-variance-authority clsx tailwind-merge @radix-ui/react-slot` → installed cleanly
-- `npx tsc --noEmit` → **pass** (exit 0, zero output)
-- `next dev` boot test (port 3199) → **pass** (Ready in 191ms; `/`, `/sign-in`, `/sign-up` all return 200)
-- ESLint → **not run** — pre-existing project issue (no `eslint.config.js` present, ESLint 9 won't read legacy `.eslintrc`). Not caused by this PR.
-- `next build` → **not run** to keep iteration fast; `next dev` boot + clean tsc cover the build path for these changes.
+- `npx tsc --noEmit`: **PASS** (exit 0)
+- `npm run build` (next build): **PASS** (compiled successfully, all 35 routes built; no type or lint errors)
+- `npx next dev` smoke-boot: **PASS** (Ready in 227ms, no startup errors)
+- `npm run lint`: **N/A** — Next.js 16 + ESLint 9 in this repo isn't fully wired (no eslint.config.js; old config dropped). Pre-existing problem, not caused by this pass.
 
-## Verification commands run
+## Verifier success criteria — grep results
 
-```bash
-# Brief §10.3: zero arbitrary hex in target files
-grep -rE "bg-\[#|text-\[#|border-\[#" apps/web/app/sign-in apps/web/app/sign-up apps/web/components/footer.tsx apps/web/app/page.tsx 'apps/web/app/(app)/layout.tsx' 'apps/web/app/(app)/dashboard/page.tsx'
-# → exit 1 (zero matches)
-
-# Brief §10.3: no template-string interpolation hexes in those files
-grep -rE 'bg-\[\$\{|text-\[\$\{|border-\[\$\{' [same files]
-# → only one match, in a doc comment ('no template-string `bg-[${VAR}]`'), not in code
-
-# Brief §10.14: no new dark: variants
-grep -r "dark:" apps/web/app apps/web/components
-# → 0 hits
-
-# Brief §10.15: no emoji in changed UI files
-grep -nP '[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}]' [changed files]
-# → exit 1 (zero matches)
-
-# Every required token defined in globals.css
-for v in background foreground card card-foreground popover popover-foreground primary primary-foreground secondary secondary-foreground muted muted-foreground accent accent-foreground destructive destructive-foreground border input ring success warning radius font-sans font-mono pillar-security pillar-infrastructure pillar-quality pillar-governance ; do grep -c "--${v}:" apps/web/app/globals.css ; done
-# → all 28 vars: 1
-```
+- **§7.1** `grep -nE "bg-neutral-900|bg-amber-700|bg-emerald-600|bg-red-600" apps/web/app/(app) -r` → **0 hits**.
+- **§7.2** `grep -L "<PageHeader" apps/web/app/(app)/*/page.tsx apps/web/app/(app)/*/[id]/page.tsx` → **empty output** (all pages have PageHeader).
+- **§7.3** BackLink primitive in `components/ui.tsx`; used on `opportunities/[id]`, `pursuits/[id]`, `drafts/[id]` — **3 callsites**.
+- **§7.4** `find app/(app) components -type f \( -name "*.tsx" -o -name "*.ts" \) | xargs perl -ne 'print if /[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}]/'` → **0 hits**.
+- **§7.5** `grep -rnE "STAGE_TONE.*Record|PURSUIT_STAGE_TONE.*Record" apps/web/app/(app)` → **0 hits**.
+- **§7.6** Term/TermPopover counts per page: pipeline 10, library 9, drafts 5, forecasts 6, recompetes 13, events 4, settings 8 — **all ≥ 3**.
+- **§7.7** EmptyState mounted on `/forecasts` and `/events`; IntegrationDiagnostic / admin info wrapped in `<details>` fold-out below.
+- **§7.8** `grep -nE "bg-paper-|border-paper-|text-brand-|bg-brand-|border-brand-" apps/web/app/(app)/dashboard/page.tsx apps/web/app/(app)/pipeline/page.tsx apps/web/app/(app)/opportunities/[id]/page.tsx` → **0 hits**.
+- **§7.10** `apps/web/components/sidebar-nav.tsx:82` uses `border-primary bg-primary/10 text-foreground`.
+- **§7.11** No `bg-[#xxxxxx]` literals introduced; no marketing-frame copy added.
+- **§7.12** No `dark:` variants introduced.
 
 ## Known limitations
 
-- `clearD` href in the footer (`https://cleard.mactechsolutionsllc.com`) is a guess based on the other APPS host pattern. If the production host differs, a one-line tweak in `apps/web/components/footer.tsx`.
-- `Badge` `blue` and `violet` tones still use raw Tailwind palettes (`bg-blue-50`, `bg-violet-50`). They appear in `NoticeTypeBadge` (combined synopsis = blue, presolicitation = blue) and `SetAsideBadge` (SDVOSB = violet, 8(a) = violet). Promoting these to dedicated tokens (`--info`, `--accent-violet`) is a follow-up; the brief didn't ask for it.
-- The shadcn primitives in `components/ui/` are scaffolding only. Migrating callsites (Dashboard KPI grid, Pipeline kanban, Opportunity detail) is deferred per §7.4.
-- ESLint is not configured at the project level (ESLint 9 + missing `eslint.config.js`). Pre-existing; not in scope.
-- `next build` not run — would take longer than the iteration budget. `next dev` boots cleanly with the new tokens, which exercises the same Tailwind compilation path.
+- **`stage_help` not yet rendered.** `STAGE_HELP` in `lib/pursuit-stages.ts` is currently a defensive fallback nobody reads. The TermPopover backend `/explain/{slug}` route is responsible for serving the popover bodies; on first hover it'll generate text via Claude Haiku and cache. If that fails for `pursuit_stage:lead` etc., the user gets the generic "Couldn't load — hover again" message. Adding a fallback body to `<TermPopover>` is a future enhancement (not in scope for this pass).
+- **PageHeader still has `eyebrow: string` not `ReactNode`.** I considered widening it but the brief says "Don't break existing component APIs." I kept it as `string`. Drafts-detail's eyebrow ended up using the simpler `v{version}` form; the draft-type term moved into `subtitle` (which IS ReactNode) where I could wrap it.
+- **Score breakdown bar fill** uses `bg-foreground` (was `bg-neutral-700`). On the warm-paper background this reads as the same dark tone but it now flows from the token system. Visually identical.
+- **Top of dashboard's `STARTER_LABELS` and `STARTER_ORDER` constants** are unused (they appear to be from an older `<AskPanel>` callsite that was refactored). Left in place — removing them is a separate cleanup that's out of scope per the "Don't refactor things the brief didn't flag" rule.
+- **The legacy palette aliases** (`brand-*`, `paper-*`, `neutral-*` shades) still resolve in `tailwind.config.ts` and remain in use on the 9 in-scope pages NOT migrated this pass (opportunities list, library, drafts list, drafts detail, forecasts, recompetes, events, settings, pursuit detail). The brief deferred this to a follow-up pass — only the 3 hot pages (dashboard, pipeline, opp-detail) had to come clean. Some of the partially-migrated pages (drafts/[id], settings, library) have a mix of old and new tokens; they're internally consistent within each component but the page is not fully token-converted.
+- **`<details>` open/close icon** uses the browser default. We could add `<summary>↓ ↑` glyphs for the diagnostic fold-outs but it's cosmetic and the typographic glyphs are allowed; left alone.
+- **Recompetes filter strip remains wide and 4-line at 1024px width.** Brief §2 flags this; not addressed this pass per scope.
 
 ## Suggested verifier focus
 
-1. **Visual diff the auth pages before/after.** The sign-in shell went from full-bleed obsidian + radial glows to single-column warm paper with a sober paper-100 sidebar. Confirm the brand-teal "Continue" / submit button hits primary-token color (`hsl(178 58% 30%)` = `#207b78`).
-2. **Footer warm-paper rendering on the dashboard.** Scroll to the bottom of `/dashboard`; the footer should now be paper-100 (`bg-secondary`) with hairline border, no obsidian slab.
-3. **Pillar chip colors.** Open `/opportunities/[id]` (or any place `<Pillar>` renders); confirm the four founder pillars render with `--pillar-*` tints — security blue, infrastructure green, quality amber, governance violet — and `cursor-help` tooltips still appear.
-4. **Check that the legacy palette didn't break.** Surfaces using `border-paper-200` / `bg-paper-50` / `text-brand-700` directly (Pipeline, Library, settings pages) should look unchanged. Quick spot-check on `/pipeline`.
-5. **shadcn primitives are reachable but not yet wired.** Confirm `import { Button } from "@/components/ui/button"` resolves and `import { Card } from "@/components/ui"` still resolves to the legacy 589-line file. Both should be true.
-6. **Auth page Clerk `appearance` map** has no string templates and no hex literals. The Clerk-rendered form fields should adopt warm-paper backgrounds, brand-teal focus rings.
+- **Confirm popover backend serves the new `kind`s** — `pursuit_stage:lead/qualify/pursue/propose/submit/won/lost`, `draft_type:sources_sought/rfp_response/compliance_matrix/overview`, `draft_status:draft/reviewed/submitted/archived`, `pop:overview`, `incumbent_distress:score/sec_ticker/edgar`, `tenant_field:uei/cage/saved_searches`, `library_section:capability_statements/past_performance/teaming_partners/embedded`, `event_kind:industry_day/pre_solicitation/etc`, `set_aside:overview/osbp`, `naics:overview/matrix/tier_primary/tier_secondary`, `score:overview/high_fit`. The frontend assumes the explain backend auto-generates on first hover; a smoke test of one or two hovers would confirm.
+- **Confirm opportunity-detail page renders correctly** — the inline header surgery is the highest-risk change. Open the page and verify the back-link is above the title, the score + Open-on-SAM CTA sit in `trailing` properly, and the Posted/Deadline/Set-aside/Notice ID strip renders as its own section below.
+- **Confirm forecasts and events empty states** — these need real "no data" responses to test. Try forcing the API to return `total: 0` or load with no NAICS targets configured. The fold-out admin diagnostic should expand cleanly.
+- **Confirm drafts/[id] subtitle** — the `<TermPopover>` wraps now sit inside `subtitle`; verify the chip layout doesn't wrap awkwardly on narrow viewports and that the popover anchors don't overflow the card.
+- **Confirm pipeline keyboard accessibility** — every Button now has `focus-visible:ring-2 ring-ring`. Tab through the kanban and check the focus rings are visible (not too low contrast).
+- **Confirm recompetes "distress signal {n}" badge** — replaces the 🚩 emoji with semantic Badge + TermPopover. Color is now `tone="red"` resolving to `--destructive`. Verify it still pops on the warm card.
+- **Sidebar active state** — visit each route and confirm the new token-driven active treatment (`bg-primary/10 border-primary text-foreground`) reads correctly. Should be unchanged visually but contractually clean.

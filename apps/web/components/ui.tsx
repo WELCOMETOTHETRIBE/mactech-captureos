@@ -244,16 +244,34 @@ export function ScoreBadge({
 /**
  * Single-button primitive. Use this for actions; LinkButton is for navigation.
  * `primary` is the brand-teal CTA, used at most once per surface.
+ *
+ * Semantic variants:
+ *   - `success` — Won / Mark submitted / etc. Resolves through `--success`.
+ *   - `warning` — Amber-toned attention button. Resolves through `--warning`.
+ *   - `destructive` — Lost / Delete / Mark lost. Resolves through `--destructive`.
+ *
+ * `danger` is the older outlined-destructive treatment (keeps a card
+ * background, only the border + text are red). Use `destructive` for
+ * solid-red won/lost markers.
  */
 export function Button({
   children,
   variant = "secondary",
+  size = "default",
   type = "button",
   className = "",
   ...rest
 }: {
   children: ReactNode;
-  variant?: "primary" | "secondary" | "ghost" | "danger";
+  variant?:
+    | "primary"
+    | "secondary"
+    | "ghost"
+    | "danger"
+    | "success"
+    | "warning"
+    | "destructive";
+  size?: "default" | "sm" | "xs";
   type?: "button" | "submit" | "reset";
   className?: string;
 } & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "type" | "className">) {
@@ -265,16 +283,54 @@ export function Button({
     ghost:
       "border border-transparent text-foreground hover:bg-accent hover:text-accent-foreground",
     danger:
-      "border border-destructive/40 bg-card text-destructive hover:bg-destructive/10 hover:border-destructive"
+      "border border-destructive/40 bg-card text-destructive hover:bg-destructive/10 hover:border-destructive",
+    success:
+      "border border-success bg-success text-primary-foreground hover:bg-success/90 hover:border-success",
+    warning:
+      "border border-warning bg-warning text-primary-foreground hover:bg-warning/90 hover:border-warning",
+    destructive:
+      "border border-destructive bg-destructive text-primary-foreground hover:bg-destructive/90 hover:border-destructive"
+  };
+  const sizes: Record<string, string> = {
+    default: "px-3.5 py-2 text-sm",
+    sm: "px-3 py-1.5 text-xs",
+    xs: "px-2 py-0.5 text-[11px]"
   };
   return (
     <button
       type={type}
-      className={`inline-flex items-center justify-center rounded-md px-3.5 py-2 text-sm font-medium transition-colors ${variants[variant]} ${className}`}
+      className={`inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${sizes[size]} ${variants[variant]} ${className}`}
       {...rest}
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * Standardized back-link affordance for detail pages. Sits above the
+ * `<PageHeader>` and gives the user a consistent "← {label}" return
+ * path. Before this primitive existed, every detail page rolled its
+ * own — three different shapes for three structurally identical surfaces.
+ *
+ * Token-driven: `text-muted-foreground` at rest, `text-foreground` on
+ * hover. Always small (text-xs).
+ */
+export function BackLink({
+  href,
+  children
+}: {
+  href: string;
+  children: ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+    >
+      <span aria-hidden>←</span>
+      <span>{children}</span>
+    </Link>
   );
 }
 
@@ -589,30 +645,58 @@ export function LinkButton({
   href,
   children,
   variant = "secondary",
-  external = false
+  size = "default",
+  external = false,
+  title
 }: {
   href: string;
   children: ReactNode;
-  variant?: "primary" | "secondary" | "ghost";
+  variant?:
+    | "primary"
+    | "secondary"
+    | "ghost"
+    | "success"
+    | "warning"
+    | "destructive";
+  size?: "default" | "sm" | "xs";
   external?: boolean;
+  title?: string;
 }) {
   const variants: Record<string, string> = {
     primary:
       "border border-primary bg-primary text-primary-foreground hover:bg-primary/90 hover:border-primary",
     secondary:
       "border border-input bg-card text-foreground hover:bg-accent hover:text-accent-foreground",
-    ghost: "border border-transparent text-foreground hover:bg-accent hover:text-accent-foreground"
+    ghost:
+      "border border-transparent text-foreground hover:bg-accent hover:text-accent-foreground",
+    success:
+      "border border-success bg-success text-primary-foreground hover:bg-success/90 hover:border-success",
+    warning:
+      "border border-warning bg-warning text-primary-foreground hover:bg-warning/90 hover:border-warning",
+    destructive:
+      "border border-destructive bg-destructive text-primary-foreground hover:bg-destructive/90 hover:border-destructive"
   };
-  const cls = `inline-flex items-center justify-center rounded-md px-3.5 py-2 text-sm font-medium transition-colors ${variants[variant]}`;
+  const sizes: Record<string, string> = {
+    default: "px-3.5 py-2 text-sm",
+    sm: "px-3 py-1.5 text-xs",
+    xs: "px-2 py-0.5 text-[11px]"
+  };
+  const cls = `inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${sizes[size]} ${variants[variant]}`;
   if (external) {
     return (
-      <a href={href} target="_blank" rel="noreferrer" className={cls}>
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        className={cls}
+        title={title}
+      >
         {children}
       </a>
     );
   }
   return (
-    <Link href={href} className={cls}>
+    <Link href={href} className={cls} title={title}>
       {children}
     </Link>
   );

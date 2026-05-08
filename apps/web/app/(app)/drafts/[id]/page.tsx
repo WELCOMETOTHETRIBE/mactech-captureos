@@ -7,11 +7,15 @@ import {
   updateDraftContent
 } from "@/lib/drafts";
 import {
+  BackLink,
   Badge,
+  Button,
+  LinkButton,
   NoticeTypeBadge,
   PageHeader,
   fmtDate
 } from "@/components/ui";
+import { TermPopover } from "@/components/term-popover";
 import { StreamingRegeneratePanel } from "@/components/draft-streaming";
 
 export const dynamic = "force-dynamic";
@@ -59,58 +63,58 @@ export default async function DraftDetailPage({
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <Link
-          href="/drafts"
-          className="text-xs text-neutral-500 hover:text-neutral-800"
-        >
-          ← All drafts
-        </Link>
+        <BackLink href="/drafts">All drafts</BackLink>
         <Link
           href={`/opportunities/${draft.opportunity.id}`}
-          className="text-xs text-neutral-500 hover:text-neutral-800"
+          className="text-xs text-muted-foreground hover:text-foreground"
         >
           Source opportunity →
         </Link>
       </div>
 
       <PageHeader
-        eyebrow={`v${draft.version} · ${draft.draft_type.replaceAll("_", " ")}`}
+        eyebrow={`v${draft.version}`}
         title={draft.title}
         subtitle={
-          <span className="inline-flex items-center gap-2">
-            <Badge tone={STATUS_TONE[draft.status]}>
-              {STATUS_LABEL[draft.status]}
-            </Badge>
+          <span className="inline-flex flex-wrap items-center gap-2">
+            <TermPopover kind="draft_status" value={draft.status}>
+              <Badge tone={STATUS_TONE[draft.status]}>
+                {STATUS_LABEL[draft.status]}
+              </Badge>
+            </TermPopover>
+            <TermPopover kind="draft_type" value={draft.draft_type}>
+              <Badge tone="violet">
+                {draft.draft_type.replaceAll("_", " ")}
+              </Badge>
+            </TermPopover>
             {draft.opportunity.notice_type && (
               <NoticeTypeBadge type={draft.opportunity.notice_type} />
             )}
-            <span className="text-neutral-500">·</span>
+            <span className="text-muted-foreground">·</span>
             <span>{draft.opportunity.title}</span>
           </span>
         }
         trailing={
           <div className="flex flex-wrap items-center gap-2">
-            <a
+            <LinkButton
               href={`/drafts/${draft.id}/export.docx`}
-              className="rounded-md border border-brand-700 bg-brand-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-800"
+              variant="primary"
+              size="sm"
               title="Download this draft as a Microsoft Word document"
             >
               ⬇ Export DOCX
-            </a>
+            </LinkButton>
             {allowedStatuses.map((s) => (
               <form key={s} action={setDraftStatus}>
                 <input type="hidden" name="id" value={draft.id} />
                 <input type="hidden" name="status" value={s} />
-                <button
+                <Button
                   type="submit"
-                  className={
-                    s === "submitted"
-                      ? "rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
-                      : "rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:border-neutral-500"
-                  }
+                  variant={s === "submitted" ? "success" : "secondary"}
+                  size="sm"
                 >
                   Mark {STATUS_LABEL[s].toLowerCase()}
-                </button>
+                </Button>
               </form>
             ))}
             <form action={deleteDraft}>
@@ -121,13 +125,9 @@ export default async function DraftDetailPage({
                 value={draft.opportunity.id}
               />
               <input type="hidden" name="redirect_to" value="/drafts" />
-              <button
-                type="submit"
-                className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs text-neutral-500 hover:border-red-300 hover:text-red-700"
-                title="Delete this draft permanently"
-              >
+              <Button type="submit" variant="danger" size="sm" title="Delete this draft permanently">
                 Delete
-              </button>
+              </Button>
             </form>
           </div>
         }
@@ -138,47 +138,41 @@ export default async function DraftDetailPage({
         <section className="lg:col-span-2">
           <form action={updateAction} className="space-y-3">
             <label className="block">
-              <span className="block text-[11px] uppercase tracking-wider text-neutral-500">
+              <span className="block text-[11px] uppercase tracking-wider text-muted-foreground">
                 Title
               </span>
               <input
                 name="title"
                 defaultValue={draft.title}
-                className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm shadow-sm focus:border-neutral-500 focus:outline-none"
+                className="mt-1 w-full rounded-md border border-border bg-card px-3 py-2 text-sm shadow-sm focus:border-foreground/40 focus:outline-none"
               />
             </label>
             <label className="block">
-              <span className="block text-[11px] uppercase tracking-wider text-neutral-500">
+              <span className="block text-[11px] uppercase tracking-wider text-muted-foreground">
                 Draft content (markdown)
               </span>
               <textarea
                 name="content"
                 defaultValue={draft.content}
                 rows={36}
-                className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-3 font-mono text-[13px] leading-relaxed shadow-sm focus:border-neutral-500 focus:outline-none"
+                className="mt-1 w-full rounded-md border border-border bg-card px-3 py-3 font-mono text-[13px] leading-relaxed shadow-sm focus:border-foreground/40 focus:outline-none"
               />
             </label>
             <div className="flex items-center justify-end gap-2">
-              <Link
-                href="/drafts"
-                className="rounded-md border border-neutral-300 px-3 py-2 text-sm hover:border-neutral-500"
-              >
+              <LinkButton href="/drafts" variant="secondary">
                 Cancel
-              </Link>
-              <button
-                type="submit"
-                className="rounded-md border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
-              >
+              </LinkButton>
+              <Button type="submit" variant="primary">
                 Save changes
-              </button>
+              </Button>
             </div>
           </form>
         </section>
 
         {/* Side panel — generation metadata + regenerate form */}
         <aside className="space-y-4">
-          <div className="rounded-md border border-neutral-200 bg-white p-4">
-            <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+          <div className="rounded-md border border-border bg-card p-4">
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
               Generation metadata
             </p>
             <dl className="mt-3 space-y-2 text-xs">
@@ -189,7 +183,7 @@ export default async function DraftDetailPage({
                 <Row label="Parent">
                   <Link
                     href={`/drafts/${draft.parent_draft_id}`}
-                    className="text-blue-700 hover:underline"
+                    className="text-primary hover:underline"
                   >
                     v{draft.version - 1}
                   </Link>
@@ -198,7 +192,7 @@ export default async function DraftDetailPage({
               {draft.created_by && (
                 <Row label="Author">
                   {draft.created_by.full_name}{" "}
-                  <span className="text-neutral-500">
+                  <span className="text-muted-foreground">
                     @{draft.created_by.slug}
                   </span>
                 </Row>
@@ -220,11 +214,11 @@ export default async function DraftDetailPage({
             </dl>
           </div>
 
-          <div className="rounded-md border border-neutral-200 bg-white p-4">
-            <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+          <div className="rounded-md border border-border bg-card p-4">
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
               Regenerate
             </p>
-            <p className="mt-2 text-xs text-neutral-600">
+            <p className="mt-2 text-xs text-muted-foreground">
               Run the drafter again with the same context. Optionally add custom
               instructions — the new version will be a child of this one.
             </p>
@@ -245,7 +239,7 @@ export default async function DraftDetailPage({
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex justify-between gap-3">
-      <dt className="text-[11px] uppercase tracking-wider text-neutral-500">
+      <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">
         {label}
       </dt>
       <dd className="text-right">{children}</dd>

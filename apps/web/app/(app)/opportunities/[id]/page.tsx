@@ -24,20 +24,22 @@ import {
   generateOpportunityBrief
 } from "@/lib/brief";
 import {
+  BackLink,
   Badge,
+  Button,
   Card,
   ExplainLink,
   LinkButton,
   NaicsBadge,
   NoticeTypeBadge,
   PageHeader,
-  Pillar,
   ScoreBadge,
   SetAsideBadge,
   fmtDate,
   fmtMoney,
   fmtRelativeDays
 } from "@/components/ui";
+import { STAGE_LABEL, STAGE_TONE } from "@/lib/pursuit-stages";
 
 export const dynamic = "force-dynamic";
 
@@ -149,55 +151,48 @@ export default async function OpportunityDetailPage({
       }
     >
       <div className="min-w-0 space-y-6">
-      <div>
-        <Link
-          href="/opportunities"
-          className="text-xs text-neutral-500 hover:text-neutral-800"
-        >
-          ← All opportunities
-        </Link>
-      </div>
+      <BackLink href="/opportunities">All opportunities</BackLink>
 
-      {/* Header strip — full width */}
-      <header className="rounded-md border border-paper-200 bg-white p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs uppercase tracking-wider text-neutral-500">
-              {opp.agency ?? "Agency unknown"}
-            </p>
-            <h1 className="mt-1 text-2xl font-medium italic font-serif tracking-tight text-neutral-900 leading-tight">
-              {opp.title}
-            </h1>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              {opp.notice_type ? (
-                <ExplainLink
-                  slug={`notice_type:${opp.notice_type
-                    .toLowerCase()
-                    .replace(/\s+/g, "_")
-                    .slice(0, 60)}`}
-                >
-                  <NoticeTypeBadge type={opp.notice_type} />
-                </ExplainLink>
-              ) : (
+      {/* Header — uses the standard PageHeader display variant so this
+          page's "top" matches every other detail page in the suite. The
+          chip row + score + open-on-SAM CTA collapse into the subtitle
+          and trailing slots respectively. */}
+      <PageHeader
+        display
+        eyebrow={opp.agency ?? "Agency unknown"}
+        title={opp.title}
+        subtitle={
+          <div className="flex flex-wrap items-center gap-2">
+            {opp.notice_type ? (
+              <ExplainLink
+                slug={`notice_type:${opp.notice_type
+                  .toLowerCase()
+                  .replace(/\s+/g, "_")
+                  .slice(0, 60)}`}
+              >
                 <NoticeTypeBadge type={opp.notice_type} />
-              )}
-              {opp.set_aside ? (
-                <ExplainLink slug={`set_aside:${opp.set_aside}`}>
-                  <SetAsideBadge code={opp.set_aside} />
-                </ExplainLink>
-              ) : (
+              </ExplainLink>
+            ) : (
+              <NoticeTypeBadge type={opp.notice_type} />
+            )}
+            {opp.set_aside ? (
+              <ExplainLink slug={`set_aside:${opp.set_aside}`}>
                 <SetAsideBadge code={opp.set_aside} />
-              )}
-              {opp.naics_code && (
-                <ExplainLink slug={`naics:${opp.naics_code}`}>
-                  <NaicsBadge code={opp.naics_code} />
-                </ExplainLink>
-              )}
-              {opp.solicitation_number && (
-                <Badge tone="neutral">Sol# {opp.solicitation_number}</Badge>
-              )}
-            </div>
+              </ExplainLink>
+            ) : (
+              <SetAsideBadge code={opp.set_aside} />
+            )}
+            {opp.naics_code && (
+              <ExplainLink slug={`naics:${opp.naics_code}`}>
+                <NaicsBadge code={opp.naics_code} />
+              </ExplainLink>
+            )}
+            {opp.solicitation_number && (
+              <Badge tone="neutral">Sol# {opp.solicitation_number}</Badge>
+            )}
           </div>
+        }
+        trailing={
           <div className="flex shrink-0 items-center gap-3">
             {data.score && <ScoreBadge score={data.score.score} />}
             {opp.sam_link && (
@@ -206,8 +201,13 @@ export default async function OpportunityDetailPage({
               </LinkButton>
             )}
           </div>
-        </div>
-        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 text-sm">
+        }
+      />
+
+      {/* Meta strip — moved out of the header so PageHeader stays
+          focused on title + chips + CTA. */}
+      <section className="rounded-md border border-border bg-card p-5">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 text-sm">
           <Meta label="Posted" value={fmtDate(opp.posted_at)} />
           <Meta
             label="Deadline"
@@ -217,7 +217,7 @@ export default async function OpportunityDetailPage({
             label="Set-aside"
             value={
               opp.set_aside_description ?? opp.set_aside ?? (
-                <span className="text-neutral-400">unrestricted</span>
+                <span className="text-muted-foreground">unrestricted</span>
               )
             }
           />
@@ -226,7 +226,7 @@ export default async function OpportunityDetailPage({
             value={<span className="break-all font-mono text-xs">{opp.notice_id}</span>}
           />
         </div>
-      </header>
+      </section>
 
       {/* Pursuit / pipeline status strip */}
       <PursuitPanel
@@ -259,7 +259,7 @@ export default async function OpportunityDetailPage({
           <Card title="Incumbent intelligence">
             {data.incumbent && data.incumbent.name ? (
               <>
-                <p className="text-base font-semibold text-neutral-900">
+                <p className="text-base font-semibold text-foreground">
                   {data.incumbent.name}
                 </p>
                 <dl className="mt-3 grid grid-cols-1 gap-2 text-sm">
@@ -287,7 +287,7 @@ export default async function OpportunityDetailPage({
                       ) : (
                         <span className="inline-flex items-center gap-2">
                           <Badge tone="green">clean</Badge>
-                          <span className="text-xs text-neutral-500">
+                          <span className="text-xs text-muted-foreground">
                             {fmtDate(data.incumbent.exclusions.checked_at)}
                           </span>
                         </span>
@@ -297,7 +297,7 @@ export default async function OpportunityDetailPage({
                 </dl>
               </>
             ) : (
-              <p className="text-sm text-neutral-600">
+              <p className="text-sm text-muted-foreground">
                 No incumbent identified yet.{" "}
                 {data.enrichment_notes ?? "Enrichment may still be pending."}
               </p>
@@ -306,19 +306,19 @@ export default async function OpportunityDetailPage({
 
           <Card title="MacTech capability matches">
             {data.capability_matches.length === 0 ? (
-              <p className="text-sm text-neutral-600">
+              <p className="text-sm text-muted-foreground">
                 No capability statements ranked. Either embeddings haven&rsquo;t populated
                 yet or similarity is below threshold.
               </p>
             ) : (
               <ul className="space-y-3">
                 {data.capability_matches.slice(0, 4).map((m) => (
-                  <li key={m.id} className="border-b border-neutral-100 pb-3 last:border-b-0 last:pb-0">
+                  <li key={m.id} className="border-b border-border pb-3 last:border-b-0 last:pb-0">
                     <div className="flex items-baseline justify-between gap-2">
-                      <p className="text-sm font-semibold text-neutral-900">{m.title}</p>
+                      <p className="text-sm font-semibold text-foreground">{m.title}</p>
                       <Badge tone="blue">sim {m.similarity.toFixed(2)}</Badge>
                     </div>
-                    <p className="mt-1 line-clamp-3 text-xs text-neutral-600">{m.summary}</p>
+                    <p className="mt-1 line-clamp-3 text-xs text-muted-foreground">{m.summary}</p>
                   </li>
                 ))}
               </ul>
@@ -329,42 +329,42 @@ export default async function OpportunityDetailPage({
 
       {/* Score + rationale — full-width */}
       {data.score ? (
-        <section className="rounded-md border border-neutral-200 bg-white p-5">
+        <section className="rounded-md border border-border bg-card p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
                 Score
               </p>
               <div className="mt-1 flex items-baseline gap-2">
-                <p className="text-4xl font-semibold tabular-nums text-neutral-900">
+                <p className="text-4xl font-semibold tabular-nums text-foreground">
                   {data.score.score}
                 </p>
-                <p className="text-sm text-neutral-500">/ 100</p>
+                <p className="text-sm text-muted-foreground">/ 100</p>
               </div>
               {data.score.assigned_founder_slug && (
-                <p className="mt-2 text-xs text-neutral-500">
+                <p className="mt-2 text-xs text-muted-foreground">
                   Assigned to{" "}
-                  <span className="font-medium text-neutral-800">
+                  <span className="font-medium text-foreground">
                     @{data.score.assigned_founder_slug}
                   </span>
                 </p>
               )}
               {data.score.scored_at && (
-                <p className="mt-1 text-[11px] text-neutral-400">
+                <p className="mt-1 text-[11px] text-muted-foreground">
                   Scored {fmtDate(data.score.scored_at)}
                 </p>
               )}
             </div>
             {data.score.why_it_matters && (
               <div className="min-w-0 flex-1 lg:max-w-xl">
-                <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
                   Why this matters
                 </p>
-                <p className="mt-1 text-sm leading-relaxed text-neutral-800">
+                <p className="mt-1 text-sm leading-relaxed text-foreground">
                   <AnnotatedProse text={data.score.why_it_matters} />
                 </p>
                 {data.score.why_it_matters_model && (
-                  <p className="mt-2 text-[10px] text-neutral-400">
+                  <p className="mt-2 text-[10px] text-muted-foreground">
                     via {data.score.why_it_matters_model}
                   </p>
                 )}
@@ -372,14 +372,14 @@ export default async function OpportunityDetailPage({
             )}
           </div>
 
-          <details className="mt-5 border-t border-paper-200 pt-3 group">
+          <details className="mt-5 border-t border-border pt-3 group">
             <summary className="flex cursor-pointer items-baseline justify-between gap-3 list-none">
-              <p className="text-[11px] uppercase tracking-wider text-neutral-500 group-hover:text-neutral-800">
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground group-hover:text-foreground">
                 Score breakdown
-                <span className="ml-2 text-neutral-400 group-open:hidden">↓ Show</span>
-                <span className="ml-2 hidden text-neutral-400 group-open:inline">↑ Hide</span>
+                <span className="ml-2 text-muted-foreground group-open:hidden">↓ Show</span>
+                <span className="ml-2 hidden text-muted-foreground group-open:inline">↑ Hide</span>
               </p>
-              <p className="text-[11px] text-neutral-400">
+              <p className="text-[11px] text-muted-foreground">
                 Hover any component for the rule.
               </p>
             </summary>
@@ -392,34 +392,34 @@ export default async function OpportunityDetailPage({
                   <li
                     key={k}
                     title={help}
-                    className="rounded-md border border-paper-200 bg-paper-50 px-3 py-2 transition-colors hover:border-brand-300 hover:bg-white"
+                    className="rounded-md border border-border bg-secondary px-3 py-2 transition-colors hover:border-primary/40 hover:bg-card"
                   >
                     <div className="flex items-baseline justify-between gap-2">
                       <ExplainLink
                         slug={`score_component:${k}`}
                         className="-mx-1 px-1"
                       >
-                        <span className="text-xs text-neutral-700">
+                        <span className="text-xs text-foreground">
                           {SCORE_COMPONENT_LABELS[k] ?? k}
                         </span>
                       </ExplainLink>
-                      <span className="tabular-nums text-sm font-medium text-neutral-900">
+                      <span className="tabular-nums text-sm font-medium text-foreground">
                         {v}
                         {max && (
-                          <span className="text-[10px] text-neutral-400"> / {max}</span>
+                          <span className="text-[10px] text-muted-foreground"> / {max}</span>
                         )}
                       </span>
                     </div>
                     {max && (
-                      <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-neutral-200">
+                      <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-muted">
                         <div
-                          className="h-full rounded-full bg-neutral-700"
+                          className="h-full rounded-full bg-foreground"
                           style={{ width: `${pct}%` }}
                         />
                       </div>
                     )}
                     {help && (
-                      <p className="mt-1.5 line-clamp-2 text-[10px] leading-snug text-neutral-500">
+                      <p className="mt-1.5 line-clamp-2 text-[10px] leading-snug text-muted-foreground">
                         {help}
                       </p>
                     )}
@@ -431,7 +431,7 @@ export default async function OpportunityDetailPage({
         </section>
       ) : (
         <Card title="Score">
-          <p className="text-sm text-neutral-600">
+          <p className="text-sm text-muted-foreground">
             Not scored yet. The scoring engine runs every 20 minutes — once embeddings and
             enrichment land, this opportunity will appear with a score breakdown and a
             Claude-written rationale.
@@ -450,7 +450,7 @@ export default async function OpportunityDetailPage({
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex justify-between gap-3">
-      <dt className="text-[11px] uppercase tracking-wider text-neutral-500">{label}</dt>
+      <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</dt>
       <dd className="text-right">{children}</dd>
     </div>
   );
@@ -459,31 +459,11 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 function Meta({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[11px] uppercase tracking-wider text-neutral-500">{label}</p>
+      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</p>
       <p className="mt-0.5">{value}</p>
     </div>
   );
 }
-
-const PURSUIT_STAGE_TONE: Record<PursuitStage, "neutral" | "blue" | "amber" | "violet" | "green" | "red"> = {
-  lead: "neutral",
-  qualify: "blue",
-  pursue: "blue",
-  propose: "amber",
-  submit: "violet",
-  won: "green",
-  lost: "red"
-};
-
-const PURSUIT_STAGE_LABEL: Record<PursuitStage, string> = {
-  lead: "Lead",
-  qualify: "Qualify",
-  pursue: "Pursue",
-  propose: "Propose",
-  submit: "Submit",
-  won: "Won",
-  lost: "Lost"
-};
 
 function PursuitPanel({
   opportunityId,
@@ -496,13 +476,13 @@ function PursuitPanel({
 }) {
   if (!pursuit) {
     return (
-      <section className="rounded-md border border-dashed border-neutral-300 bg-white p-4">
+      <section className="rounded-md border border-dashed border-border bg-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
               Capture pipeline
             </p>
-            <p className="mt-1 text-sm text-neutral-700">
+            <p className="mt-1 text-sm text-foreground">
               Not in the pipeline yet. Add it to start tracking the pursuit.
             </p>
           </div>
@@ -516,12 +496,9 @@ function PursuitPanel({
               });
             }}
           >
-            <button
-              type="submit"
-              className="rounded-md border border-neutral-900 bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-800"
-            >
+            <Button type="submit" variant="primary">
               Add to pipeline →
-            </button>
+            </Button>
           </form>
         </div>
       </section>
@@ -529,33 +506,33 @@ function PursuitPanel({
   }
 
   return (
-    <section className="rounded-md border border-neutral-200 bg-white p-4">
+    <section className="rounded-md border border-border bg-card p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
               Capture pipeline
             </p>
-            <Badge tone={PURSUIT_STAGE_TONE[pursuit.stage]}>
-              {PURSUIT_STAGE_LABEL[pursuit.stage]}
+            <Badge tone={STAGE_TONE[pursuit.stage]}>
+              {STAGE_LABEL[pursuit.stage]}
             </Badge>
-            <span className="text-[11px] text-neutral-500 tabular-nums">
+            <span className="text-[11px] text-muted-foreground tabular-nums">
               {pursuit.days_in_stage}d in stage
             </span>
           </div>
-          <p className="mt-2 text-sm text-neutral-700">
+          <p className="mt-2 text-sm text-foreground">
             Owner:{" "}
             {pursuit.owner_founder_slug ? (
               <span className="font-medium">
                 {pursuit.owner_founder_name ?? pursuit.owner_founder_slug}{" "}
-                <span className="text-neutral-500">@{pursuit.owner_founder_slug}</span>
+                <span className="text-muted-foreground">@{pursuit.owner_founder_slug}</span>
               </span>
             ) : (
-              <span className="italic text-neutral-500">unassigned</span>
+              <span className="italic text-muted-foreground">unassigned</span>
             )}
           </p>
           {pursuit.notes && (
-            <p className="mt-2 max-w-2xl whitespace-pre-wrap text-sm leading-relaxed text-neutral-700">
+            <p className="mt-2 max-w-2xl whitespace-pre-wrap text-sm leading-relaxed text-foreground">
               {pursuit.notes}
             </p>
           )}
@@ -564,17 +541,14 @@ function PursuitPanel({
           <DetailStageButtons pursuit={pursuit} />
           <Link
             href={`/pursuits/${pursuit.id}/capture-package`}
-            className="rounded-md border border-brand-300 bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-800 hover:bg-brand-100"
+            className="rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/15"
             title="Snapshot of everything CaptureOS knows about this pursuit — handoff to ProposalOS"
           >
             Capture Package →
           </Link>
-          <Link
-            href="/pipeline"
-            className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:border-neutral-500"
-          >
+          <LinkButton href="/pipeline" variant="secondary" size="sm">
             Open kanban →
-          </Link>
+          </LinkButton>
           <form
             action={async () => {
               "use server";
@@ -584,13 +558,9 @@ function PursuitPanel({
               });
             }}
           >
-            <button
-              type="submit"
-              className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs text-neutral-500 hover:border-red-300 hover:text-red-700"
-              title="Remove from pipeline"
-            >
+            <Button type="submit" variant="danger" size="sm" title="Remove from pipeline">
               Remove
-            </button>
+            </Button>
           </form>
         </div>
       </div>
@@ -617,23 +587,23 @@ function DetailStageButtons({ pursuit }: { pursuit: PursuitCardT }) {
         <DetailStageBtn
           pursuit={pursuit}
           stage={order[idx - 1]}
-          label={`← ${PURSUIT_STAGE_LABEL[order[idx - 1]]}`}
-          variant="ghost"
+          label={`← ${STAGE_LABEL[order[idx - 1]]}`}
+          variant="secondary"
         />
       )}
       {canAdvance && (
         <DetailStageBtn
           pursuit={pursuit}
           stage={order[idx + 1]}
-          label={`${PURSUIT_STAGE_LABEL[order[idx + 1]]} →`}
+          label={`${STAGE_LABEL[order[idx + 1]]} →`}
           variant="primary"
         />
       )}
       {canFinish && pursuit.stage !== "won" && (
-        <DetailStageBtn pursuit={pursuit} stage="won" label="Won" variant="green" />
+        <DetailStageBtn pursuit={pursuit} stage="won" label="Won" variant="success" />
       )}
       {canFinish && pursuit.stage !== "lost" && (
-        <DetailStageBtn pursuit={pursuit} stage="lost" label="Lost" variant="red" />
+        <DetailStageBtn pursuit={pursuit} stage="lost" label="Lost" variant="destructive" />
       )}
     </div>
   );
@@ -648,17 +618,8 @@ function DetailStageBtn({
   pursuit: PursuitCardT;
   stage: PursuitStage;
   label: string;
-  variant: "ghost" | "primary" | "green" | "red";
+  variant: "secondary" | "primary" | "success" | "destructive";
 }) {
-  const cls =
-    variant === "primary"
-      ? "rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800"
-      : variant === "green"
-      ? "rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
-      : variant === "red"
-      ? "rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700"
-      : "rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:border-neutral-500";
-
   return (
     <form
       action={async () => {
@@ -670,9 +631,9 @@ function DetailStageBtn({
         });
       }}
     >
-      <button type="submit" className={cls}>
+      <Button type="submit" variant={variant} size="sm">
         {label}
-      </button>
+      </Button>
     </form>
   );
 }
@@ -690,18 +651,18 @@ function DrafterPanel({
     noticeType?.toLowerCase().includes("sources sought") ?? false;
 
   return (
-    <section className="rounded-md border border-neutral-200 bg-white p-5">
+    <section className="rounded-md border border-border bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+          <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
             Proposal drafter
             {isSourcesSought && (
-              <span className="ml-2 inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+              <span className="ml-2 inline-flex items-center rounded-md border border-warning/20 bg-warning/10 px-1.5 py-0.5 text-[10px] font-medium text-warning">
                 recommended for this notice
               </span>
             )}
           </p>
-          <p className="mt-1 max-w-2xl text-sm text-neutral-700">
+          <p className="mt-1 max-w-2xl text-sm text-foreground">
             {drafts.total === 0
               ? isSourcesSought
                 ? "This is a Sources Sought notice — perfect for the AI drafter. Generate a starting response using your capability statements, past performance, and active teaming partners."
@@ -710,12 +671,9 @@ function DrafterPanel({
           </p>
         </div>
         {drafts.items.length > 0 && (
-          <Link
-            href={`/drafts/${drafts.items[0].id}`}
-            className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:border-neutral-500"
-          >
+          <LinkButton href={`/drafts/${drafts.items[0].id}`} variant="secondary" size="sm">
             Open latest draft →
-          </Link>
+          </LinkButton>
         )}
       </div>
 
@@ -729,11 +687,11 @@ function DrafterPanel({
         </div>
       ) : (
         <>
-          <ul className="mt-4 space-y-2 border-t border-neutral-100 pt-3">
+          <ul className="mt-4 space-y-2 border-t border-border pt-3">
             {drafts.items.slice(0, 5).map((d) => (
               <li
                 key={d.id}
-                className="flex items-center justify-between gap-3 rounded-md border border-neutral-100 px-3 py-2 text-xs"
+                className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-xs"
               >
                 <div className="flex min-w-0 items-center gap-2">
                   <Badge tone="violet">v{d.version}</Badge>
@@ -742,12 +700,12 @@ function DrafterPanel({
                   </Badge>
                   <Link
                     href={`/drafts/${d.id}`}
-                    className="truncate text-neutral-800 hover:underline"
+                    className="truncate text-foreground hover:underline"
                   >
                     {d.title}
                   </Link>
                 </div>
-                <span className="shrink-0 tabular-nums text-[10px] text-neutral-400">
+                <span className="shrink-0 tabular-nums text-[10px] text-muted-foreground">
                   {fmtDate(d.created_at)}
                 </span>
               </li>
@@ -777,19 +735,19 @@ function ExplainRail({
 }) {
   return (
     <aside className="lg:sticky lg:top-6 lg:self-start" aria-label="Explain">
-      <div className="rounded-lg border border-brand-200 bg-brand-50 p-5">
+      <div className="rounded-lg border border-primary/20 bg-primary/10 p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-brand-700">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-primary">
               Explain this
             </p>
-            <h3 className="mt-1 text-base font-semibold text-neutral-900">
+            <h3 className="mt-1 text-base font-semibold text-foreground">
               {explanation?.label ?? slug}
             </h3>
           </div>
           <Link
             href={`/opportunities/${oppId}`}
-            className="shrink-0 rounded-md p-1 text-neutral-500 hover:bg-white hover:text-neutral-800"
+            className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-card hover:text-foreground"
             aria-label="Close explanation"
             title="Close"
           >
@@ -799,10 +757,10 @@ function ExplainRail({
 
         {explanation ? (
           <>
-            <p className="mt-4 text-sm font-semibold leading-relaxed text-neutral-900">
+            <p className="mt-4 text-sm font-semibold leading-relaxed text-foreground">
               {explanation.summary}
             </p>
-            <div className="mt-3 space-y-3 text-sm leading-relaxed text-neutral-700">
+            <div className="mt-3 space-y-3 text-sm leading-relaxed text-foreground">
               {explanation.body
                 .split(/\n{2,}/)
                 .filter((p) => p.trim().length > 0)
@@ -810,7 +768,7 @@ function ExplainRail({
                   <p key={i}>{para}</p>
                 ))}
             </div>
-            <p className="mt-4 border-t border-brand-200 pt-3 text-[11px] text-neutral-500">
+            <p className="mt-4 border-t border-primary/20 pt-3 text-[11px] text-muted-foreground">
               {explanation.cached
                 ? "Cached. "
                 : "Generated by Claude Haiku. Cached for next time. "}
@@ -818,7 +776,7 @@ function ExplainRail({
             </p>
           </>
         ) : (
-          <p className="mt-4 text-sm text-neutral-700">
+          <p className="mt-4 text-sm text-foreground">
             Couldn&rsquo;t generate an explanation for{" "}
             <span className="font-mono text-xs">{slug}</span>. The Anthropic
             API may be unavailable; try again in a moment.
@@ -826,8 +784,8 @@ function ExplainRail({
         )}
       </div>
 
-      <p className="mt-3 text-[11px] text-neutral-500">
-        Tip: any badge with a small <span className="text-brand-700">?</span>{" "}
+      <p className="mt-3 text-[11px] text-muted-foreground">
+        Tip: any badge with a small <span className="text-primary">?</span>{" "}
         opens this rail with that term&rsquo;s explanation.
       </p>
     </aside>
@@ -864,20 +822,20 @@ function AskPanel({
   const recent = questions.items.slice(0, 5);
 
   return (
-    <section className="rounded-lg border border-neutral-200 bg-white p-6">
+    <section className="rounded-lg border border-border bg-card p-6">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-brand-700">
+          <p className="text-xs font-medium uppercase tracking-wide text-primary">
             Ask Claude about this opportunity
           </p>
-          <p className="mt-1 text-sm text-neutral-600">
-            Direct answers from your firm's data — capability statements, past
+          <p className="mt-1 text-sm text-muted-foreground">
+            Direct answers from your firm&rsquo;s data — capability statements, past
             performance, active partners, and the SAM description. Cap 200
             words per answer.
           </p>
         </div>
         {questions.total > 5 && (
-          <span className="text-xs text-neutral-500">
+          <span className="text-xs text-muted-foreground">
             {questions.total} total · showing 5 most recent
           </span>
         )}
@@ -892,7 +850,7 @@ function AskPanel({
 
       {/* History */}
       {recent.length > 0 && (
-        <ul className="mt-6 space-y-4 border-t border-neutral-100 pt-5">
+        <ul className="mt-6 space-y-4 border-t border-border pt-5">
           {recent.map((q) => (
             <li key={q.id}>
               <QuestionCard q={q} opportunityId={opportunityId} />
@@ -912,17 +870,17 @@ function QuestionCard({
   opportunityId: string;
 }) {
   return (
-    <article className="rounded-md border border-neutral-100 bg-neutral-50 p-4">
+    <article className="rounded-md border border-border bg-secondary p-4">
       <div className="flex items-baseline justify-between gap-3">
-        <p className="text-sm font-medium text-neutral-800">
-          <span className="text-brand-700">Q.</span> {q.question}
+        <p className="text-sm font-medium text-foreground">
+          <span className="text-primary">Q.</span> {q.question}
         </p>
         <form action={deleteOpportunityQuestion} className="shrink-0">
           <input type="hidden" name="id" value={q.id} />
           <input type="hidden" name="opportunity_id" value={opportunityId} />
           <button
             type="submit"
-            className="rounded-md p-0.5 text-[10px] text-neutral-400 hover:text-red-700"
+            className="rounded-md p-0.5 text-[10px] text-muted-foreground hover:text-destructive"
             title="Remove this Q&A"
             aria-label="Delete question"
           >
@@ -930,10 +888,10 @@ function QuestionCard({
           </button>
         </form>
       </div>
-      <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-neutral-800">
-        <span className="text-brand-700">A.</span> {q.answer}
+      <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+        <span className="text-primary">A.</span> {q.answer}
       </p>
-      <p className="mt-2 text-[11px] text-neutral-400">
+      <p className="mt-2 text-[11px] text-muted-foreground">
         {q.asked_by ? `${q.asked_by.full_name} · ` : ""}
         {fmtDate(q.created_at)}
         {q.model && ` · ${q.model}`}
@@ -960,21 +918,21 @@ function BriefAndDescriptionPanel({
 
   return (
     <Card>
-      <header className="flex flex-wrap items-baseline justify-between gap-3 border-b border-neutral-100 pb-3">
+      <header className="flex flex-wrap items-baseline justify-between gap-3 border-b border-border pb-3">
         <div className="flex gap-1" role="tablist" aria-label="Description view">
           {/* Use anchor links with hash so the page scrolls to the section
               without a server roundtrip. The "active" tab is implicit —
               the user toggles via :target on the destination panel. */}
           <a
             href={`#brief-${opportunityId}`}
-            className="rounded-md border border-brand-300 bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-800 hover:bg-brand-100"
+            className="rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/15"
             role="tab"
           >
             Plain-English brief
           </a>
           <a
             href={`#raw-${opportunityId}`}
-            className="rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 hover:border-neutral-500"
+            className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:border-foreground/40"
             role="tab"
           >
             Original SAM text
@@ -984,7 +942,7 @@ function BriefAndDescriptionPanel({
           <form action={generateAction}>
             <button
               type="submit"
-              className="rounded-md px-2 py-1 text-[11px] text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
+              className="rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-accent-foreground"
               title="Regenerate the brief from the current SAM description"
             >
               ↻ Regenerate brief
@@ -1016,29 +974,29 @@ function BriefAndDescriptionPanel({
         id={`raw-${opportunityId}`}
         role="tabpanel"
         aria-label="Original SAM description"
-        className="mt-6 border-t border-neutral-100 pt-4"
+        className="mt-6 border-t border-border pt-4"
       >
-        <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           Original SAM text
         </p>
         {description.fetch_status === "fetched" && description.text ? (
-          <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-md border border-neutral-200 bg-neutral-50 p-3 font-sans text-xs leading-relaxed text-neutral-700">
+          <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-secondary p-3 font-sans text-xs leading-relaxed text-foreground">
             {description.text.trim()}
           </pre>
         ) : description.fetch_status === "pending" ? (
-          <p className="mt-3 text-sm text-neutral-600">
+          <p className="mt-3 text-sm text-muted-foreground">
             Description text is queued for fetch from SAM.gov. The worker pulls
             it on the next 30-minute tick.
           </p>
         ) : (
-          <p className="mt-3 text-sm text-neutral-600">
+          <p className="mt-3 text-sm text-muted-foreground">
             No description text available for this notice.
           </p>
         )}
 
         {samResourceLinks.length > 0 && (
-          <div className="mt-4 border-t border-neutral-100 pt-3">
-            <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+          <div className="mt-4 border-t border-border pt-3">
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
               Attachments ({samResourceLinks.length})
             </p>
             <ul className="mt-2 space-y-1 text-sm">
@@ -1048,7 +1006,7 @@ function BriefAndDescriptionPanel({
                     href={url}
                     target="_blank"
                     rel="noreferrer"
-                    className="break-all text-brand-700 hover:underline"
+                    className="break-all text-primary hover:underline"
                   >
                     Attachment {i + 1} →
                   </a>
@@ -1066,10 +1024,10 @@ function BriefBody({ brief }: { brief: BriefOut }) {
   return (
     <div className="space-y-5">
       <div>
-        <p className="text-[11px] font-medium uppercase tracking-wide text-brand-700">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-primary">
           Scope
         </p>
-        <p className="mt-1 text-base font-semibold leading-snug text-neutral-900">
+        <p className="mt-1 text-base font-semibold leading-snug text-foreground">
           <AnnotatedProse text={brief.scope_one_sentence} />
         </p>
       </div>
@@ -1103,7 +1061,7 @@ function BriefBody({ brief }: { brief: BriefOut }) {
         />
       )}
 
-      <p className="text-[11px] text-neutral-400">
+      <p className="text-[11px] text-muted-foreground">
         Auto-generated by {brief.model ?? "Claude"} from{" "}
         {brief.description_chars?.toLocaleString() ?? "?"} chars of SAM text ·{" "}
         Updated {fmtDate(brief.updated_at)}
@@ -1121,16 +1079,19 @@ function BriefList({
   items: string[];
   tone: "brand" | "neutral" | "amber" | "violet";
 }) {
+  // Tone names stay back-compat for callers; values resolve to semantic
+  // tokens (`--primary`, `--warning`) where possible. `violet` stays raw
+  // pending the pillar/info-token promotion in a follow-up pass.
   const headTones: Record<string, string> = {
-    brand: "text-brand-700",
-    neutral: "text-neutral-600",
-    amber: "text-amber-700",
+    brand: "text-primary",
+    neutral: "text-muted-foreground",
+    amber: "text-warning",
     violet: "text-violet-700"
   };
   const dotTones: Record<string, string> = {
-    brand: "bg-brand-500",
-    neutral: "bg-neutral-400",
-    amber: "bg-amber-500",
+    brand: "bg-primary",
+    neutral: "bg-muted-foreground",
+    amber: "bg-warning",
     violet: "bg-violet-500"
   };
   return (
@@ -1147,7 +1108,7 @@ function BriefList({
               aria-hidden
               className={`mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full ${dotTones[tone]}`}
             />
-            <span className="text-neutral-800">
+            <span className="text-foreground">
               <AnnotatedProse text={item} />
             </span>
           </li>
@@ -1167,11 +1128,11 @@ function BriefEmpty({
   const hasText =
     description.fetch_status === "fetched" && !!description.text;
   return (
-    <div className="rounded-md border border-dashed border-neutral-300 bg-neutral-50 p-5 text-center">
-      <p className="text-sm font-medium text-neutral-800">
+    <div className="rounded-md border border-dashed border-border bg-secondary p-5 text-center">
+      <p className="text-sm font-medium text-foreground">
         No plain-English brief yet
       </p>
-      <p className="mt-2 text-sm leading-relaxed text-neutral-600">
+      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
         {hasText ? (
           <>
             Generate a structured 30-second read of this opportunity — scope,
@@ -1192,12 +1153,9 @@ function BriefEmpty({
       </p>
       {hasText && (
         <form action={generateAction} className="mt-4">
-          <button
-            type="submit"
-            className="rounded-md border border-brand-700 bg-brand-700 px-4 py-2 text-sm font-medium text-white hover:bg-brand-800"
-          >
+          <Button type="submit" variant="primary">
             Generate brief →
-          </button>
+          </Button>
         </form>
       )}
     </div>

@@ -79,16 +79,16 @@ export function SidebarNav() {
             aria-current={active ? "page" : undefined}
             className={
               active
-                ? "block rounded-md border-l-2 border-brand-700 bg-brand-50 px-3 py-2 text-sm text-brand-900"
-                : "block rounded-md border-l-2 border-transparent px-3 py-2 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 hover:text-neutral-900"
+                ? "block rounded-md border-l-2 border-primary bg-primary/10 px-3 py-2 text-sm text-foreground"
+                : "block rounded-md border-l-2 border-transparent px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
             }
           >
             <span className="block font-semibold">{item.label}</span>
             <span
               className={
                 active
-                  ? "block text-xs text-brand-700"
-                  : "block text-xs text-neutral-500"
+                  ? "block text-xs text-primary"
+                  : "block text-xs text-muted-foreground"
               }
             >
               {item.sub}

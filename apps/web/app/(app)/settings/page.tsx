@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { apiFetch, type SettingsResponse } from "@/lib/api";
 import { deleteFounder } from "@/lib/founders";
-import { Badge, Card, PageHeader, Pillar, fmtDate } from "@/components/ui";
+import { Badge, Card, LinkButton, PageHeader, Pillar, fmtDate } from "@/components/ui";
+import { TermPopover } from "@/components/term-popover";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ export default async function SettingsPage() {
       <PageHeader
         eyebrow="Tenant configuration"
         title="Settings"
-        subtitle="Read-only for Phase 2 Week 6. Editing UIs ship in later phases."
+        subtitle="Currently read-only — editing UIs ship in a follow-up sprint."
       />
 
       {/* Tenant card */}
@@ -26,12 +27,20 @@ export default async function SettingsPage() {
           <Row label="Plan">
             <Badge tone="neutral">{data.tenant.plan}</Badge>
           </Row>
-          <Row label="UEI">
-            {data.tenant.uei ?? <span className="text-neutral-400">— (pending)</span>}
+          <Row
+            label={
+              <TermPopover kind="tenant_field" value="uei">UEI</TermPopover>
+            }
+          >
+            {data.tenant.uei ?? <span className="text-muted-foreground">— (pending)</span>}
           </Row>
-          <Row label="CAGE">
+          <Row
+            label={
+              <TermPopover kind="tenant_field" value="cage">CAGE</TermPopover>
+            }
+          >
             {data.tenant.cage_code ?? (
-              <span className="text-neutral-400">— (pending)</span>
+              <span className="text-muted-foreground">— (pending)</span>
             )}
           </Row>
           <Row label="Clerk org">
@@ -45,15 +54,12 @@ export default async function SettingsPage() {
       {/* Founders */}
       <section id="founders">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-neutral-700">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-foreground">
             Founders ({data.founders.length})
           </h2>
-          <Link
-            href="/settings/founders/new"
-            className="rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800"
-          >
+          <LinkButton href="/settings/founders/new" variant="primary" size="sm">
             + Add founder
-          </Link>
+          </LinkButton>
         </div>
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
           {data.founders.map((f) => (
@@ -70,7 +76,7 @@ export default async function SettingsPage() {
               <dl className="mt-3 grid grid-cols-1 gap-y-2 text-xs">
                 <Row label="Email">
                   {f.email ?? (
-                    <span className="text-neutral-400">— (not set)</span>
+                    <span className="text-muted-foreground">— (not set)</span>
                   )}
                 </Row>
                 <Row label="Slug">
@@ -84,12 +90,12 @@ export default async function SettingsPage() {
                   )}
                 </Row>
               </dl>
-              <div className="mt-3 flex items-center justify-between border-t border-neutral-100 pt-2 text-[11px]">
-                <span className="text-neutral-400">@{f.slug}</span>
+              <div className="mt-3 flex items-center justify-between border-t border-border pt-2 text-[11px]">
+                <span className="text-muted-foreground">@{f.slug}</span>
                 <div className="flex items-center gap-3">
                   <Link
                     href={`/settings/founders/${f.id}/edit`}
-                    className="text-blue-700 hover:underline"
+                    className="text-primary hover:underline"
                   >
                     Edit
                   </Link>
@@ -97,7 +103,7 @@ export default async function SettingsPage() {
                     <input type="hidden" name="id" value={f.id} />
                     <button
                       type="submit"
-                      className="text-neutral-500 hover:text-red-700"
+                      className="text-muted-foreground hover:text-destructive"
                       title="Permanently remove this founder"
                     >
                       Delete
@@ -112,21 +118,24 @@ export default async function SettingsPage() {
 
       {/* Saved searches */}
       <section>
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-neutral-700">
-          Saved searches ({data.saved_searches.length})
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-foreground">
+          <TermPopover kind="tenant_field" value="saved_searches">
+            Saved searches
+          </TermPopover>{" "}
+          ({data.saved_searches.length})
         </h2>
-        <p className="mt-1 text-xs text-neutral-500">
-          Each saved search drives the founder's morning digest. Threshold + cadence + keyword
-          allowlist live here.
+        <p className="mt-1 text-xs text-muted-foreground">
+          Each saved search drives the founder&rsquo;s morning digest. Threshold +
+          cadence + keyword allowlist live here.
         </p>
         <div className="mt-3 space-y-3">
           {data.saved_searches.map((s) => (
             <Card key={s.id}>
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="text-base font-semibold text-neutral-900">{s.name}</p>
+                  <p className="text-base font-semibold text-foreground">{s.name}</p>
                   {s.owner_founder_slug && (
-                    <p className="text-xs text-neutral-500">
+                    <p className="text-xs text-muted-foreground">
                       owner @{s.owner_founder_slug}
                     </p>
                   )}
@@ -142,16 +151,24 @@ export default async function SettingsPage() {
                 </div>
               </div>
               <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3 text-xs">
-                <KvList label="NAICS">
+                <KvList
+                  label={
+                    <TermPopover kind="naics" value="overview">NAICS</TermPopover>
+                  }
+                >
                   {s.naics_codes.map((n) => (
                     <Badge key={n} tone="neutral">
                       {n}
                     </Badge>
                   ))}
                 </KvList>
-                <KvList label="Set-asides">
+                <KvList
+                  label={
+                    <TermPopover kind="set_aside" value="overview">Set-asides</TermPopover>
+                  }
+                >
                   {s.set_asides.length === 0 ? (
-                    <span className="text-neutral-400">any</span>
+                    <span className="text-muted-foreground">any</span>
                   ) : (
                     s.set_asides.map((sa) => (
                       <Badge key={sa} tone="violet">
@@ -162,7 +179,7 @@ export default async function SettingsPage() {
                 </KvList>
                 <KvList label="Keywords">
                   {s.keywords.length === 0 ? (
-                    <span className="text-neutral-400">none</span>
+                    <span className="text-muted-foreground">none</span>
                   ) : (
                     s.keywords.slice(0, 12).map((kw) => (
                       <Badge key={kw} tone="neutral">
@@ -171,13 +188,13 @@ export default async function SettingsPage() {
                     ))
                   )}
                   {s.keywords.length > 12 && (
-                    <span className="text-neutral-500">
+                    <span className="text-muted-foreground">
                       + {s.keywords.length - 12} more
                     </span>
                   )}
                 </KvList>
               </div>
-              <p className="mt-3 text-[11px] text-neutral-400">
+              <p className="mt-3 text-[11px] text-muted-foreground">
                 Created {fmtDate(s.created_at)}
               </p>
             </Card>
@@ -187,12 +204,13 @@ export default async function SettingsPage() {
 
       {/* NAICS matrix */}
       <section>
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-neutral-700">
-          NAICS matrix ({data.naics.length} codes)
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-foreground">
+          <TermPopover kind="naics" value="matrix">NAICS matrix</TermPopover>{" "}
+          ({data.naics.length} codes)
         </h2>
-        <div className="mt-3 overflow-hidden rounded-md border border-neutral-200 bg-white">
+        <div className="mt-3 overflow-hidden rounded-md border border-border bg-card">
           <table className="min-w-full text-sm">
-            <thead className="bg-neutral-50 text-left text-[11px] uppercase tracking-wider text-neutral-500">
+            <thead className="bg-secondary text-left text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="px-4 py-2">Code</th>
                 <th className="px-4 py-2">Title</th>
@@ -200,22 +218,30 @@ export default async function SettingsPage() {
                 <th className="px-4 py-2">Owners</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-100">
+            <tbody className="divide-y divide-border">
               {data.naics.map((n) => (
                 <tr key={n.code}>
                   <td className="whitespace-nowrap px-4 py-2 font-mono text-xs">
                     {n.code}
                   </td>
-                  <td className="px-4 py-2 text-neutral-700">{n.title}</td>
+                  <td className="px-4 py-2 text-foreground">{n.title}</td>
                   <td className="whitespace-nowrap px-4 py-2">
-                    {n.tier === "primary" && <Badge tone="blue">primary</Badge>}
-                    {n.tier === "secondary" && <Badge tone="neutral">secondary</Badge>}
-                    {!n.tier && <span className="text-neutral-400">—</span>}
+                    {n.tier === "primary" && (
+                      <TermPopover kind="naics" value="tier_primary">
+                        <Badge tone="brand">primary</Badge>
+                      </TermPopover>
+                    )}
+                    {n.tier === "secondary" && (
+                      <TermPopover kind="naics" value="tier_secondary">
+                        <Badge tone="neutral">secondary</Badge>
+                      </TermPopover>
+                    )}
+                    {!n.tier && <span className="text-muted-foreground">—</span>}
                   </td>
                   <td className="px-4 py-2">
                     <div className="flex flex-wrap gap-1">
                       {n.founder_slugs.map((s) => (
-                        <span key={s} className="text-[11px] text-neutral-600">
+                        <span key={s} className="text-[11px] text-muted-foreground">
                           @{s}
                         </span>
                       ))}
@@ -231,10 +257,16 @@ export default async function SettingsPage() {
   );
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Row({
+  label,
+  children
+}: {
+  label: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <div>
-      <dt className="text-[11px] uppercase tracking-wider text-neutral-500">
+      <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">
         {label}
       </dt>
       <dd className="mt-0.5">{children}</dd>
@@ -246,12 +278,12 @@ function KvList({
   label,
   children
 }: {
-  label: string;
+  label: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div>
-      <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
         {label}
       </p>
       <div className="mt-1 flex flex-wrap gap-1">{children}</div>

@@ -8,7 +8,10 @@ import {
   type SettingsResponse
 } from "@/lib/api";
 import { createPursuit, deletePursuit, updatePursuit } from "@/lib/pursuits";
+import { TermPopover } from "@/components/term-popover";
 import {
+  Button,
+  LinkButton,
   NaicsBadge,
   NoticeTypeBadge,
   PageHeader,
@@ -54,32 +57,30 @@ export default async function PipelinePage({
         title="Pursuit kanban"
         subtitle={
           data.total === 0
-            ? "No pursuits yet. Open an opportunity and click \u201CAdd to pipeline.\u201D"
+            ? "No pursuits yet. Open an opportunity and click “Add to pipeline.”"
             : `${data.total} pursuit${data.total === 1 ? "" : "s"} across ${activeColumns.length} active stages.`
         }
         trailing={
           <div className="flex items-center gap-2">
             {ownerFilter && (
-              <Link
-                href="/pipeline"
-                className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:border-neutral-500"
-              >
+              <LinkButton href="/pipeline" variant="secondary" size="sm">
                 Clear owner
-              </Link>
+              </LinkButton>
             )}
-            <Link
+            <LinkButton
               href="/opportunities?score_min=60"
-              className="rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800"
+              variant="primary"
+              size="sm"
             >
               Add from opportunities →
-            </Link>
+            </LinkButton>
           </div>
         }
       />
 
       {/* Owner filter bar */}
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="text-neutral-500">Filter by owner:</span>
+        <span className="text-muted-foreground">Filter by owner:</span>
         <Link
           href="/pipeline"
           className={pillCls(!ownerFilter)}
@@ -99,10 +100,29 @@ export default async function PipelinePage({
           );
         })}
         {(data.by_owner._unassigned ?? 0) > 0 && (
-          <span className="rounded-md border border-dashed border-neutral-300 px-2 py-1 text-neutral-500">
+          <span className="rounded-md border border-dashed border-border px-2 py-1 text-muted-foreground">
             unassigned ({data.by_owner._unassigned})
           </span>
         )}
+      </div>
+
+      {/* Stage legend — gives layman readers an inline glossary of the
+          7 lifecycle stages without forcing them to open every column. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+        <span className="uppercase tracking-wider">Stages:</span>
+        <TermPopover kind="pursuit_stage" value="lead">Lead</TermPopover>
+        <span aria-hidden>→</span>
+        <TermPopover kind="pursuit_stage" value="qualify">Qualify</TermPopover>
+        <span aria-hidden>→</span>
+        <TermPopover kind="pursuit_stage" value="pursue">Pursue</TermPopover>
+        <span aria-hidden>→</span>
+        <TermPopover kind="pursuit_stage" value="propose">Propose</TermPopover>
+        <span aria-hidden>→</span>
+        <TermPopover kind="pursuit_stage" value="submit">Submit</TermPopover>
+        <span aria-hidden>→</span>
+        <TermPopover kind="pursuit_stage" value="won">Won</TermPopover>
+        <span aria-hidden>·</span>
+        <TermPopover kind="pursuit_stage" value="lost">Lost</TermPopover>
       </div>
 
       {data.total === 0 ? (
@@ -148,8 +168,8 @@ export default async function PipelinePage({
 
 function pillCls(active: boolean) {
   return active
-    ? "rounded-md bg-neutral-900 px-2 py-1 text-white"
-    : "rounded-md border border-neutral-300 px-2 py-1 hover:border-neutral-500";
+    ? "rounded-md bg-primary px-2 py-1 text-primary-foreground"
+    : "rounded-md border border-border px-2 py-1 hover:border-foreground/40";
 }
 
 type FounderRef = { slug: string; full_name: string };
@@ -162,17 +182,19 @@ function Column({
   founders: FounderRef[];
 }) {
   return (
-    <section className="flex min-h-[200px] flex-col rounded-md border border-neutral-200 bg-neutral-50 p-3">
+    <section className="flex min-h-[200px] flex-col rounded-md border border-border bg-secondary p-3">
       <header className="mb-3 flex items-baseline justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-neutral-700">
-          {column.label}
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-foreground">
+          <TermPopover kind="pursuit_stage" value={column.stage}>
+            {column.label}
+          </TermPopover>
         </h2>
-        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium tabular-nums text-neutral-600 ring-1 ring-neutral-200">
+        <span className="rounded-full bg-card px-2 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground ring-1 ring-border">
           {column.count}
         </span>
       </header>
       {column.cards.length === 0 ? (
-        <p className="text-xs italic text-neutral-400">empty</p>
+        <p className="text-xs italic text-muted-foreground">empty</p>
       ) : (
         <ul className="space-y-2">
           {column.cards.map((c) => (
@@ -194,15 +216,17 @@ function TerminalColumn({
   founders: FounderRef[];
 }) {
   return (
-    <section className="rounded-md border border-neutral-200 bg-white p-4">
+    <section className="rounded-md border border-border bg-card p-4">
       <header className="mb-3 flex items-baseline justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-neutral-700">
-          {column.stage === "won" ? "✓ Won" : "✗ Lost"}
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-foreground">
+          <TermPopover kind="pursuit_stage" value={column.stage}>
+            {column.stage === "won" ? "Won" : "Lost"}
+          </TermPopover>
         </h2>
-        <span className="text-[11px] text-neutral-500">{column.count}</span>
+        <span className="text-[11px] text-muted-foreground">{column.count}</span>
       </header>
       {column.cards.length === 0 ? (
-        <p className="text-xs italic text-neutral-400">none</p>
+        <p className="text-xs italic text-muted-foreground">none</p>
       ) : (
         <ul className="space-y-2">
           {column.cards.map((c) => (
@@ -237,15 +261,15 @@ function Card({
   const stale = !isTerminal && card.days_in_stage >= 14;
   const warming = !isTerminal && card.days_in_stage >= 7 && card.days_in_stage < 14;
   const cardCls = stale
-    ? "rounded-md border-2 border-red-300 bg-white p-3 shadow-sm"
+    ? "rounded-md border-2 border-destructive/40 bg-card p-3 shadow-sm"
     : warming
-    ? "rounded-md border-2 border-amber-300 bg-white p-3 shadow-sm"
-    : "rounded-md border border-neutral-200 bg-white p-3 shadow-sm";
+    ? "rounded-md border-2 border-warning/40 bg-card p-3 shadow-sm"
+    : "rounded-md border border-border bg-card p-3 shadow-sm";
   const ageCls = stale
-    ? "tabular-nums font-semibold text-red-700"
+    ? "tabular-nums font-semibold text-destructive"
     : warming
-    ? "tabular-nums font-semibold text-amber-700"
-    : "tabular-nums text-neutral-500";
+    ? "tabular-nums font-semibold text-warning"
+    : "tabular-nums text-muted-foreground";
   const ageTitle = stale
     ? `Stale: in ${card.stage} for ${card.days_in_stage} days. Move it forward, kill it, or accept it's parked.`
     : warming
@@ -262,7 +286,7 @@ function Card({
           <ScoreBadge score={opp.score} />
           {opp.notice_type && <NoticeTypeBadge type={opp.notice_type} />}
         </div>
-        <h3 className="mt-2 line-clamp-2 text-xs font-semibold leading-snug text-neutral-900">
+        <h3 className="mt-2 line-clamp-2 text-xs font-semibold leading-snug text-foreground">
           {opp.title}
         </h3>
       </Link>
@@ -275,17 +299,17 @@ function Card({
       )}
 
       {!compact && opp.response_deadline && (
-        <p className="mt-2 text-[11px] text-neutral-500">
+        <p className="mt-2 text-[11px] text-muted-foreground">
           {fmtRelativeDays(opp.response_deadline, opp.days_until_deadline)}
         </p>
       )}
 
       <div className="mt-2 flex items-center justify-between text-[11px]">
-        <span className="text-neutral-500">
+        <span className="text-muted-foreground">
           {card.owner_founder_slug ? (
-            <span className="text-neutral-700">@{card.owner_founder_slug}</span>
+            <span className="text-foreground">@{card.owner_founder_slug}</span>
           ) : (
-            <span className="italic text-neutral-400">unassigned</span>
+            <span className="italic text-muted-foreground">unassigned</span>
           )}
         </span>
         <span className={ageCls} title={ageTitle}>
@@ -294,17 +318,17 @@ function Card({
       </div>
 
       {!compact && (
-        <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-neutral-100 pt-2">
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-border pt-2">
           <Link
             href={`/pursuits/${card.id}`}
-            className="rounded-md border border-neutral-300 px-2 py-0.5 text-[11px] text-neutral-700 hover:border-neutral-500 hover:bg-neutral-50"
+            className="rounded-md border border-border px-2 py-0.5 text-[11px] text-foreground hover:bg-accent hover:text-accent-foreground"
             title="Open pursuit detail (win themes, asset selection)"
           >
             Open
           </Link>
           <Link
             href={`/pursuits/${card.id}/capture-package`}
-            className="rounded-md border border-brand-300 bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-800 hover:bg-brand-100"
+            className="rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/15"
             title="Capture Package handoff to ProposalOS"
           >
             Pkg →
@@ -327,8 +351,8 @@ function Card({
           )}
           {stageIdx >= 1 && (
             <>
-              <StageBtn card={card} stage="won" label="Won" tone="green" />
-              <StageBtn card={card} stage="lost" label="Lost" tone="red" />
+              <StageBtn card={card} stage="won" label="Won" tone="success" />
+              <StageBtn card={card} stage="lost" label="Lost" tone="destructive" />
             </>
           )}
           <OwnerSelect card={card} founders={founders} />
@@ -349,7 +373,7 @@ function Card({
         >
           <button
             type="submit"
-            className="text-[10px] text-neutral-400 hover:text-red-700"
+            className="text-[10px] text-muted-foreground hover:text-destructive"
           >
             remove
           </button>
@@ -368,16 +392,20 @@ function StageBtn({
   card: PursuitCardT;
   stage: PursuitStage;
   label: string;
-  tone: "neutral" | "primary" | "green" | "red";
+  tone: "neutral" | "primary" | "success" | "destructive";
 }) {
-  const cls =
+  // Tone names are semantic and resolve to the design-token Button
+  // variants. Won/lost markers are deliberately solid (success/destructive
+  // backgrounds) — they're the only places in the kanban where we want
+  // the action to read as "this is a terminal commitment."
+  const variant: "primary" | "secondary" | "success" | "destructive" =
     tone === "primary"
-      ? "rounded-md bg-neutral-900 px-2 py-0.5 text-white hover:bg-neutral-800"
-      : tone === "green"
-      ? "rounded-md bg-emerald-600 px-2 py-0.5 text-white hover:bg-emerald-700"
-      : tone === "red"
-      ? "rounded-md bg-red-600 px-2 py-0.5 text-white hover:bg-red-700"
-      : "rounded-md border border-neutral-300 px-2 py-0.5 text-neutral-700 hover:border-neutral-500";
+      ? "primary"
+      : tone === "success"
+      ? "success"
+      : tone === "destructive"
+      ? "destructive"
+      : "secondary";
 
   return (
     <form
@@ -390,9 +418,9 @@ function StageBtn({
         });
       }}
     >
-      <button type="submit" className={`text-[10px] font-medium ${cls}`}>
+      <Button type="submit" variant={variant} size="xs">
         {label}
-      </button>
+      </Button>
     </form>
   );
 }
@@ -428,7 +456,7 @@ function OwnerSelect({
       <select
         name="owner"
         defaultValue={card.owner_founder_slug ?? ""}
-        className="rounded-sm border border-neutral-300 px-1 py-0.5 text-[10px]"
+        className="rounded-sm border border-border bg-card px-1 py-0.5 text-[10px]"
       >
         <option value="" disabled>
           owner
@@ -442,7 +470,7 @@ function OwnerSelect({
       </select>
       <button
         type="submit"
-        className="rounded-sm border border-neutral-300 px-1 py-0.5 text-[10px] hover:border-neutral-500"
+        className="rounded-sm border border-border px-1 py-0.5 text-[10px] hover:border-foreground/40"
       >
         set
       </button>
@@ -452,14 +480,14 @@ function OwnerSelect({
 
 function FirstTimePipeline() {
   return (
-    <div className="rounded-md border border-neutral-200 bg-white p-8">
-      <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+    <div className="rounded-md border border-border bg-card p-8">
+      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
         First time here?
       </p>
-      <h2 className="mt-1 text-lg font-semibold text-neutral-900">
+      <h2 className="mt-1 text-lg font-semibold text-foreground">
         The pipeline is empty.
       </h2>
-      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-neutral-600">
+      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
         The kanban tracks active pursuits. Pursuits land here when you open an
         opportunity and click <em>Add to pipeline</em>. Each pursuit moves
         through six stages — you advance them with one click as the pursuit
@@ -467,38 +495,38 @@ function FirstTimePipeline() {
       </p>
 
       <ol className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
-        <li className="rounded-md border border-neutral-100 bg-neutral-50 p-4">
-          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-neutral-900 text-[10px] font-semibold text-white tabular-nums">
+        <li className="rounded-md border border-border bg-secondary p-4">
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground tabular-nums">
             1
           </span>
-          <h3 className="mt-2 text-sm font-semibold text-neutral-900">
+          <h3 className="mt-2 text-sm font-semibold text-foreground">
             Open an opportunity
           </h3>
-          <p className="mt-1 text-xs leading-relaxed text-neutral-600">
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
             From the dashboard top-5 or the full opportunities feed. Anything
             scoring 60+ is digest-eligible and worth a closer look.
           </p>
         </li>
-        <li className="rounded-md border border-neutral-100 bg-neutral-50 p-4">
-          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-neutral-900 text-[10px] font-semibold text-white tabular-nums">
+        <li className="rounded-md border border-border bg-secondary p-4">
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground tabular-nums">
             2
           </span>
-          <h3 className="mt-2 text-sm font-semibold text-neutral-900">
+          <h3 className="mt-2 text-sm font-semibold text-foreground">
             Click &ldquo;Add to pipeline&rdquo;
           </h3>
-          <p className="mt-1 text-xs leading-relaxed text-neutral-600">
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
             On the opportunity detail page, just below the header. The pursuit
             self-assigns to you and lands in the Lead column.
           </p>
         </li>
-        <li className="rounded-md border border-neutral-100 bg-neutral-50 p-4">
-          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-neutral-900 text-[10px] font-semibold text-white tabular-nums">
+        <li className="rounded-md border border-border bg-secondary p-4">
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground tabular-nums">
             3
           </span>
-          <h3 className="mt-2 text-sm font-semibold text-neutral-900">
+          <h3 className="mt-2 text-sm font-semibold text-foreground">
             Advance through stages
           </h3>
-          <p className="mt-1 text-xs leading-relaxed text-neutral-600">
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
             Lead &rarr; Qualify &rarr; Pursue &rarr; Propose &rarr; Submit
             &rarr; Won/Lost. Reassign owners or remove from the pipeline at any
             time.
@@ -507,18 +535,12 @@ function FirstTimePipeline() {
       </ol>
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
-        <Link
-          href="/opportunities?score_min=60"
-          className="rounded-md border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
-        >
+        <LinkButton href="/opportunities?score_min=60" variant="primary">
           Browse scored opportunities &rarr;
-        </Link>
-        <Link
-          href="/dashboard"
-          className="rounded-md border border-neutral-300 px-4 py-2 text-sm hover:border-neutral-500"
-        >
+        </LinkButton>
+        <LinkButton href="/dashboard" variant="secondary">
           Back to dashboard
-        </Link>
+        </LinkButton>
       </div>
     </div>
   );
@@ -538,7 +560,7 @@ function RemoveBtn({ card }: { card: PursuitCardT }) {
     >
       <button
         type="submit"
-        className="text-[10px] text-neutral-400 hover:text-red-700"
+        className="text-[10px] text-muted-foreground hover:text-destructive"
         title="Remove from pipeline"
       >
         ✕

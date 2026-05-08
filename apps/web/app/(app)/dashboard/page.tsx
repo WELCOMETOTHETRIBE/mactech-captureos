@@ -16,7 +16,6 @@ import {
 } from "@/lib/api";
 import { dismissHowItWorks, showHowItWorks } from "@/lib/preferences";
 import {
-  Badge,
   EmptyState,
   Kpi,
   LinkButton,
@@ -24,7 +23,6 @@ import {
   PageHeader,
   Pillar,
   ScoreBadge,
-  SetAsideBadge,
   fmtDate,
   fmtMoney,
   fmtRelativeDays
@@ -120,12 +118,12 @@ export default async function DashboardPage() {
           data.you ? (
             <span className="inline-flex items-center gap-2">
               <Pillar pillar={data.you.pillar} />
-              <span className="text-neutral-400">·</span>
+              <span className="text-muted-foreground">·</span>
               <span>{data.you.title}</span>
               {data.you.email && (
                 <>
-                  <span className="text-neutral-400">·</span>
-                  <span className="text-neutral-500">{data.you.email}</span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="text-muted-foreground">{data.you.email}</span>
                 </>
               )}
             </span>
@@ -139,22 +137,22 @@ export default async function DashboardPage() {
       />
 
       {onboardingIncomplete && (
-        <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/40 bg-warning/10 p-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+            <p className="text-xs font-semibold uppercase tracking-wide text-warning">
               Setup incomplete
             </p>
-            <p className="mt-1 text-sm text-amber-900">
-              Confirm your UEI, CAGE, and set-aside certifications so the
-              proposal drafter can cite them. Two minutes.
+            <p className="mt-1 text-sm text-foreground">
+              Confirm your{" "}
+              <TermPopover kind="tenant_field" value="uei">UEI</TermPopover>,{" "}
+              <TermPopover kind="tenant_field" value="cage">CAGE</TermPopover>,
+              and set-aside certifications so the proposal drafter can cite
+              them. Two minutes.
             </p>
           </div>
-          <Link
-            href="/onboarding"
-            className="rounded-md border border-amber-700 bg-amber-700 px-4 py-2 text-sm font-medium text-white hover:bg-amber-800"
-          >
+          <LinkButton href="/onboarding" variant="warning">
             Finish setup →
-          </Link>
+          </LinkButton>
         </section>
       )}
 
@@ -163,18 +161,20 @@ export default async function DashboardPage() {
       )}
 
       {firstFeedLoading && (
-        <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brand-200 bg-brand-50 p-4">
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/10 p-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary">
               Loading your first feed
             </p>
-            <p className="mt-1 text-sm text-brand-900">
+            <p className="mt-1 text-sm text-foreground">
               {hasNaicsTargets ? (
                 <>
                   Pulling opportunities from SAM.gov for your{" "}
-                  {(me.tenant.target_naics?.length ?? 0)} NAICS targets, then scoring
-                  them against your firm profile. Usually 3–10 minutes for
-                  the first run; refresh to see opps as they land.
+                  {(me.tenant.target_naics?.length ?? 0)}{" "}
+                  <TermPopover kind="naics" value="overview">NAICS</TermPopover>{" "}
+                  targets, then scoring them against your firm profile.
+                  Usually 3–10 minutes for the first run; refresh to see
+                  opps as they land.
                 </>
               ) : (
                 <>
@@ -185,12 +185,9 @@ export default async function DashboardPage() {
               )}
             </p>
           </div>
-          <Link
-            href="/dashboard"
-            className="rounded-md border border-brand-700 bg-brand-700 px-4 py-2 text-sm font-medium text-white hover:bg-brand-800"
-          >
+          <LinkButton href="/dashboard" variant="primary">
             Refresh ↻
-          </Link>
+          </LinkButton>
         </section>
       )}
 
@@ -198,9 +195,9 @@ export default async function DashboardPage() {
           Sourced from Codex (codex.mactechsolutionsllc.com) which owns
           the assessment workflow; we just display + link out. */}
       {(me.tenant.sprs_score !== null || me.tenant.uei) && (
-        <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-3 text-sm">
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm">
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-            <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+            <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
               <TermPopover kind="sprs" value="score">
                 SPRS
               </TermPopover>{" "}
@@ -211,14 +208,14 @@ export default async function DashboardPage() {
             </span>
             {me.tenant.sprs_score !== null ? (
               <>
-                <span className="text-2xl font-semibold tabular-nums text-neutral-900">
+                <span className="text-2xl font-semibold tabular-nums text-foreground">
                   {me.tenant.sprs_score}
-                  <span className="ml-1 text-base font-normal text-neutral-500">
+                  <span className="ml-1 text-base font-normal text-muted-foreground">
                     / {me.tenant.sprs_max}
                   </span>
                 </span>
                 {me.tenant.sprs_assessment_date ? (
-                  <span className="text-xs text-neutral-500">
+                  <span className="text-xs text-muted-foreground">
                     last assessed{" "}
                     {new Date(me.tenant.sprs_assessment_date).toLocaleDateString(
                       undefined,
@@ -227,23 +224,23 @@ export default async function DashboardPage() {
                   </span>
                 ) : null}
                 {me.tenant.sprs_synced_at ? (
-                  <span className="text-[11px] text-neutral-400">
+                  <span className="text-[11px] text-muted-foreground">
                     synced from Codex
                   </span>
                 ) : (
-                  <span className="text-[11px] text-amber-700">
+                  <span className="text-[11px] text-warning">
                     pending Codex sync
                   </span>
                 )}
               </>
             ) : (
-              <span className="text-sm text-neutral-600">
+              <span className="text-sm text-muted-foreground">
                 no score on file —{" "}
                 <a
                   href="https://codex.mactechsolutionsllc.com/sprs"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-brand-700 hover:underline"
+                  className="text-primary hover:underline"
                 >
                   start your assessment in Codex →
                 </a>
@@ -258,7 +255,7 @@ export default async function DashboardPage() {
               }
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs font-medium text-brand-700 hover:underline"
+              className="text-xs font-medium text-primary hover:underline"
             >
               View assessment in Codex →
             </a>
@@ -266,7 +263,11 @@ export default async function DashboardPage() {
         </section>
       )}
 
-      {/* Action-oriented KPIs — your day at a glance */}
+      {/* Action-oriented KPIs — your day at a glance.
+          Each tile's hint links the jargon to a plain-English explanation
+          via the explain backend. The popover sits on the label-side help
+          icon when the user hovers — keeps the tile clean while making
+          the meaning discoverable. */}
       <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <Link
           href={
@@ -274,7 +275,7 @@ export default async function DashboardPage() {
               ? `/opportunities?assigned_founder=${data.you.slug}&score_min=60`
               : "/opportunities?score_min=60"
           }
-          className="rounded-lg transition-colors hover:ring-2 hover:ring-brand-200"
+          className="rounded-lg transition-colors hover:ring-2 hover:ring-primary/30"
         >
           <Kpi
             label="High-fit, untracked"
@@ -285,7 +286,7 @@ export default async function DashboardPage() {
         </Link>
         <Link
           href="/pipeline"
-          className="rounded-lg transition-colors hover:ring-2 hover:ring-brand-200"
+          className="rounded-lg transition-colors hover:ring-2 hover:ring-primary/30"
         >
           <Kpi
             label="Deadlines this week"
@@ -298,7 +299,7 @@ export default async function DashboardPage() {
           href={
             data.you ? `/pipeline?owner=${data.you.slug}` : "/pipeline"
           }
-          className="rounded-lg transition-colors hover:ring-2 hover:ring-brand-200"
+          className="rounded-lg transition-colors hover:ring-2 hover:ring-primary/30"
         >
           <Kpi
             label="Active pursuits"
@@ -308,7 +309,7 @@ export default async function DashboardPage() {
         </Link>
         <Link
           href="/drafts"
-          className="rounded-lg transition-colors hover:ring-2 hover:ring-brand-200"
+          className="rounded-lg transition-colors hover:ring-2 hover:ring-primary/30"
         >
           <Kpi
             label="Drafts to review"
@@ -318,6 +319,29 @@ export default async function DashboardPage() {
           />
         </Link>
       </section>
+
+      {/* KPI glossary — wraps the four bare jargon strings in the tile
+          labels with explainer popovers. Sits inline below the strip so
+          a layman can hover any term to learn what it means without us
+          adding visual noise to the tiles themselves. */}
+      <p className="-mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+        <span className="uppercase tracking-wider">What these mean:</span>
+        <TermPopover kind="score" value="high_fit">
+          high-fit
+        </TermPopover>
+        <span aria-hidden>·</span>
+        <TermPopover kind="pursuit_stage" value="overview">
+          pipeline
+        </TermPopover>
+        <span aria-hidden>·</span>
+        <TermPopover kind="draft_type" value="overview">
+          draft
+        </TermPopover>
+        <span aria-hidden>·</span>
+        <TermPopover kind="score" value="overview">
+          score
+        </TermPopover>
+      </p>
 
       {/* Today's moves — distills the dashboard into 1–3 actions the
           user should take right now. Sits at the top of the action
@@ -340,16 +364,16 @@ export default async function DashboardPage() {
       {/* Your top — the thing they came here to see */}
       <section>
         <div className="flex items-baseline justify-between">
-          <h2 className="text-base font-semibold text-neutral-900">
+          <h2 className="text-base font-semibold text-foreground">
             Your top {data.your_top.length}{" "}
-            <span className="font-normal text-neutral-500">
+            <span className="font-normal text-muted-foreground">
               — most promising opportunities in your lane
             </span>
           </h2>
           {data.you && (
             <Link
               href={`/opportunities?assigned_founder=${data.you.slug}&score_min=60`}
-              className="text-sm font-medium text-brand-700 hover:underline"
+              className="text-sm font-medium text-primary hover:underline"
             >
               See all your assigned →
             </Link>
@@ -381,24 +405,24 @@ export default async function DashboardPage() {
           <ul className="mt-4 space-y-3">
             {data.your_top.map((opp, i) => (
               <li key={opp.id}>
-                <Link
+  <Link
                   href={opp.detail_url}
                   data-kb-row
-                  className="block rounded-lg border border-neutral-200 bg-white p-5 transition-colors hover:border-brand-300 hover:shadow-sm"
+                  className="block rounded-lg border border-border bg-card p-5 transition-colors hover:border-primary/40 hover:shadow-sm"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-neutral-400 tabular-nums">
+                        <span className="text-xs font-medium text-muted-foreground tabular-nums">
                           #{i + 1}
                         </span>
                         <ScoreBadge score={opp.score} size="lg" />
                         <NoticeTypeBadge type={opp.notice_type} />
                       </div>
-                      <h3 className="mt-2 text-base font-semibold leading-snug text-neutral-900">
+                      <h3 className="mt-2 text-base font-semibold leading-snug text-foreground">
                         {opp.title}
                       </h3>
-                      <p className="mt-1 text-sm text-neutral-500">
+                      <p className="mt-1 text-sm text-muted-foreground">
                         {[opp.agency_short, opp.naics_code && `NAICS ${opp.naics_code}`]
                           .filter(Boolean)
                           .join(" · ")}
@@ -406,29 +430,29 @@ export default async function DashboardPage() {
                     </div>
                     {/* Deadline gets the right side — the #1 fact for a layman */}
                     <div className="shrink-0 text-right">
-                      <p className="text-[11px] uppercase tracking-wide text-neutral-500">
+                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
                         Deadline
                       </p>
-                      <p className="mt-0.5 text-sm font-semibold tabular-nums text-neutral-800">
+                      <p className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">
                         {fmtRelativeDays(opp.response_deadline, null)}
                       </p>
                     </div>
                   </div>
 
                   {opp.why_it_matters && (
-                    <p className="mt-3 text-sm leading-relaxed text-neutral-700">
+                    <p className="mt-3 text-sm leading-relaxed text-foreground">
                       {opp.why_it_matters}
                     </p>
                   )}
                   {opp.incumbent_name && (
-                    <p className="mt-3 text-sm text-neutral-600">
-                      <span className="font-medium text-neutral-800">Incumbent:</span>{" "}
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      <span className="font-medium text-foreground">Incumbent:</span>{" "}
                       {opp.incumbent_name}
                       {opp.incumbent_amount != null &&
                         ` — ${fmtMoney(opp.incumbent_amount)} prior obligations`}
                     </p>
                   )}
-                  <p className="mt-3 text-sm font-medium text-brand-700">
+                  <p className="mt-3 text-sm font-medium text-primary">
                     Open detail →
                   </p>
                 </Link>
@@ -461,7 +485,7 @@ export default async function DashboardPage() {
           feed. All consolidated into the ComingUpRail above; deep
           views live on the dedicated /events, /recompetes,
           /forecasts, /settings pages reachable from the sidebar. */}
-      <footer className="flex flex-wrap items-center justify-between gap-2 pt-2 text-xs text-neutral-500">
+      <footer className="flex flex-wrap items-center justify-between gap-2 pt-2 text-xs text-muted-foreground">
         <span>
           Last refreshed {fmtDate(data.rendered_at)} · Ingestion every 2h ·
           Scoring every 20m · Digest weekdays 6am ET
@@ -470,9 +494,9 @@ export default async function DashboardPage() {
           <form action={showHowItWorks}>
             <button
               type="submit"
-              className="rounded-md px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
+              className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             >
-              Show "How CaptureOS works"
+              Show &ldquo;How CaptureOS works&rdquo;
             </button>
           </form>
         )}
@@ -485,16 +509,16 @@ function HowItWorks() {
   return (
     <section
       aria-label="How CaptureOS works"
-      className="rounded-lg border border-neutral-200 bg-white p-6"
+      className="rounded-lg border border-border bg-card p-6"
     >
       <div className="flex items-baseline justify-between">
-        <p className="text-xs font-medium uppercase tracking-wide text-brand-700">
+        <p className="text-xs font-medium uppercase tracking-wide text-primary">
           How CaptureOS works
         </p>
         <form action={dismissHowItWorks}>
           <button
             type="submit"
-            className="rounded-md px-2 py-0.5 text-xs text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
+            className="rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             aria-label="Dismiss this guide"
             title="Hide this guide. You can always show it again from the footer."
           >
@@ -538,17 +562,17 @@ function Step({
   cta: { href: string; label: string };
 }) {
   return (
-    <li className="rounded-lg border border-neutral-100 bg-neutral-50 p-4">
+    <li className="rounded-lg border border-border bg-secondary p-4">
       <div className="flex items-baseline gap-2">
-        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-brand-700 text-xs font-semibold text-white tabular-nums">
+        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground tabular-nums">
           {n}
         </span>
-        <h3 className="text-sm font-semibold text-neutral-900">{title}</h3>
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
       </div>
-      <p className="mt-2 text-sm leading-relaxed text-neutral-600">{body}</p>
+      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{body}</p>
       <Link
         href={cta.href}
-        className="mt-3 inline-block text-sm font-medium text-brand-700 hover:underline"
+        className="mt-3 inline-block text-sm font-medium text-primary hover:underline"
       >
         {cta.label}
       </Link>
@@ -647,29 +671,29 @@ function ComingUpColumn({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col rounded-md border border-paper-200 bg-white p-4">
-      <header className="flex items-baseline justify-between gap-2 border-b border-paper-200 pb-2">
+    <div className="flex flex-col rounded-md border border-border bg-card p-4">
+      <header className="flex items-baseline justify-between gap-2 border-b border-border pb-2">
         <div>
-          <p className="flex items-baseline gap-1.5 text-[11px] font-medium uppercase tracking-wide text-neutral-500">
+          <p className="flex items-baseline gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             {label}
             {count > 0 && (
-              <span className="rounded-sm bg-paper-100 px-1 text-[10px] tabular-nums text-neutral-600">
+              <span className="rounded-sm bg-secondary px-1 text-[10px] tabular-nums text-muted-foreground">
                 {count}
               </span>
             )}
           </p>
-          <p className="mt-0.5 text-[11px] text-neutral-400">{sub}</p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">{sub}</p>
         </div>
         {count > 0 && (
           <Link
             href={seeAllHref}
-            className="text-[11px] font-medium text-brand-700 hover:underline"
+            className="text-[11px] font-medium text-primary hover:underline"
           >
             See all →
           </Link>
         )}
       </header>
-      <ul className="mt-3 flex flex-col divide-y divide-paper-200">
+      <ul className="mt-3 flex flex-col divide-y divide-border">
         {children}
       </ul>
     </div>
@@ -687,11 +711,11 @@ function ComingUpEmpty({
 }) {
   return (
     <li className="py-4 text-sm">
-      <p className="text-neutral-600">{msg}</p>
+      <p className="text-muted-foreground">{msg}</p>
       {ctaHref && ctaLabel && (
         <Link
           href={ctaHref}
-          className="mt-1 inline-block text-[11px] font-medium text-brand-700 hover:underline"
+          className="mt-1 inline-block text-[11px] font-medium text-primary hover:underline"
         >
           {ctaLabel} →
         </Link>
@@ -728,28 +752,28 @@ function ComingUpForecastRow({
     <li className="py-2.5">
       <Link
         href={showIncumbent ? "/recompetes" : "/forecasts"}
-        className="block hover:bg-paper-50 -mx-2 px-2 py-1 rounded"
+        className="block hover:bg-secondary -mx-2 px-2 py-1 rounded"
       >
         <div className="flex items-baseline justify-between gap-2">
-          <p className="line-clamp-1 text-sm font-medium text-neutral-900">
+          <p className="line-clamp-1 text-sm font-medium text-foreground">
             {fc.title}
           </p>
           <span
             className={`shrink-0 text-[10px] font-medium tabular-nums ${
               daysToRfp != null && daysToRfp <= 30
-                ? "text-amber-700"
-                : "text-neutral-500"
+                ? "text-warning"
+                : "text-muted-foreground"
             }`}
           >
             {rfpLabel}
           </span>
         </div>
-        <p className="mt-0.5 line-clamp-1 text-[11px] text-neutral-500">
+        <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">
           {fc.agency ?? "agency"}
           {fc.naics_code ? ` · NAICS ${fc.naics_code}` : ""}
         </p>
         {showIncumbent && fc.incumbent_name && (
-          <p className="mt-0.5 line-clamp-1 text-[11px] text-amber-800">
+          <p className="mt-0.5 line-clamp-1 text-[11px] text-warning">
             Incumbent: {fc.incumbent_name}
           </p>
         )}
@@ -788,23 +812,23 @@ function ComingUpEventRow({ ev }: { ev: AgencyEventOut }) {
         href={ev.registration_url ?? ev.source_url}
         target="_blank"
         rel="noopener noreferrer"
-        className="block hover:bg-paper-50 -mx-2 px-2 py-1 rounded"
+        className="block hover:bg-secondary -mx-2 px-2 py-1 rounded"
       >
         <div className="flex items-baseline justify-between gap-2">
-          <p className="line-clamp-1 text-sm font-medium text-neutral-900">
+          <p className="line-clamp-1 text-sm font-medium text-foreground">
             {ev.title}
           </p>
           <span
             className={`shrink-0 text-[10px] font-medium tabular-nums ${
               days != null && days >= 0 && days <= 7
-                ? "text-amber-700"
-                : "text-neutral-500"
+                ? "text-warning"
+                : "text-muted-foreground"
             }`}
           >
             {dateLabel}
           </span>
         </div>
-        <p className="mt-0.5 line-clamp-1 text-[11px] text-neutral-500">
+        <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">
           {ev.agency ?? "agency"}
           {ev.location ? ` · ${ev.location}` : ""}
         </p>
