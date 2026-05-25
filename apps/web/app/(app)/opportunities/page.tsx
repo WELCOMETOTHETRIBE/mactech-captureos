@@ -1,5 +1,11 @@
 import Link from "next/link";
-import { apiFetch, type OpportunityListResponse } from "@/lib/api";
+import {
+  apiFetch,
+  type MeResponse,
+  type OpportunityListResponse,
+  type SavedSearchOut,
+  type SettingsResponse
+} from "@/lib/api";
 import {
   Badge,
   EmptyState,
@@ -29,6 +35,7 @@ type SP = Promise<{
   sort?: string;
   sweet_spot_only?: string;
   high_moat_min?: string;
+  saved_search?: string;
 }>;
 
 const SORT_LABELS: Record<string, string> = {
@@ -37,6 +44,20 @@ const SORT_LABELS: Record<string, string> = {
   posted_desc: "Newest posted",
   deadline_asc: "Deadline (soonest first)"
 };
+
+/**
+ * Detects whether a saved search targets the high-moat track. The seed
+ * config marks the UFGS / FRCS Cyber search with `score_field:
+ * high_moat_score` in its filters JSONB, but `SavedSearchOut` doesn't
+ * surface that. Fall back to a name-based heuristic: the seeded
+ * high-moat search includes "UFGS" or "FRCS" in its title, and any
+ * future high-moat search authored from the settings UI would
+ * naturally name it similarly.
+ */
+function isHighMoatSavedSearch(s: SavedSearchOut): boolean {
+  const haystack = `${s.name} ${s.keywords.join(" ")}`.toUpperCase();
+  return /\b(UFGS|FRCS|UMCS|HIGH[-\s]?MOAT)\b/.test(haystack);
+}
 
 export default async function OpportunitiesListPage({
   searchParams
@@ -47,13 +68,68 @@ export default async function OpportunitiesListPage({
   const params = new URLSearchParams();
   const limit = 25;
   const page = Math.max(1, parseInt(sp.page ?? "1", 10) || 1);
+
+  // Fetch /me + /me/settings alongside the opportunities list. We need
+  // /me to filter saved searches to the current founder's lane, and
+  // /me/settings to render the perspective rail. Server-side
+  // composition (per brief §7.2 Option A): no API change required.
+  const [me, settings] = await Promise.all([
+    apiFetch<MeResponse>("/me"),
+    apiFetch<SettingsResponse>("/me/settings").catch(
+      () =>
+        ({
+          tenant: null,
+          founders: [],
+          naics: [],
+          saved_searches: []
+        }) as unknown as SettingsResponse
+    )
+  ]);
+
+  // Founder-private filter — show saved searches that belong to me, or
+  // tenant-shared ones (owner_founder_slug === null). Hides other
+  // founders' lanes from this user's rail (brief §11 Q3 + verifier
+  // success criterion §9).
+  const mySlug = me.founder?.slug ?? null;
+  const myPerspectives: SavedSearchOut[] = settings.saved_searches.filter(
+    (s) => s.owner_founder_slug === mySlug || s.owner_founder_slug === null
+  );
+
+  // Resolve ?saved_search=<id> to a perspective. If the id is unknown
+  // OR belongs to a different founder, silently fall through to
+  // "All opportunities" — never error.
+  const activePerspective: SavedSearchOut | null = sp.saved_search
+    ? myPerspectives.find((s) => s.id === sp.saved_search) ?? null
+    : null;
+
   // Sweet-spot toggle forces the high-moat sort so the gold rail sits
   // at the top of the page. Otherwise honor whatever ?sort= the user
   // selected, defaulting to general score.
-  const sweetSpotOnly = sp.sweet_spot_only === "true";
-  const sort = sweetSpotOnly ? "high_moat_desc" : sp.sort ?? "score_desc";
-  const score_min = sp.score_min ?? "0";
+  //
+  // When a perspective is active, the perspective's preferences seed
+  // the params (assigned_founder + score_min + sweet-spot flags for
+  // the high-moat search). The user can still override any of these
+  // via URL params — perspective seeds, doesn't lock.
+  const isHighMoat = activePerspective
+    ? isHighMoatSavedSearch(activePerspective)
+    : false;
+  const sweetSpotOnly =
+    sp.sweet_spot_only === "true" || (activePerspective !== null && isHighMoat);
+  const sort = sweetSpotOnly
+    ? "high_moat_desc"
+    : sp.sort ?? (activePerspective && isHighMoat ? "high_moat_desc" : "score_desc");
+  const score_min =
+    sp.score_min ??
+    (activePerspective ? String(activePerspective.alert_threshold) : "0");
   const score_max = sp.score_max ?? "100";
+  const assignedFounder =
+    sp.assigned_founder ??
+    (activePerspective?.owner_founder_slug ?? undefined);
+  const highMoatMin =
+    sp.high_moat_min ??
+    (activePerspective && isHighMoat
+      ? String(activePerspective.alert_threshold)
+      : undefined);
 
   params.set("page", String(page));
   params.set("limit", String(limit));
@@ -61,13 +137,13 @@ export default async function OpportunitiesListPage({
   params.set("score_min", score_min);
   params.set("score_max", score_max);
   if (sweetSpotOnly) params.set("sweet_spot_only", "true");
-  if (sp.high_moat_min) params.set("high_moat_min", sp.high_moat_min);
+  if (highMoatMin) params.set("high_moat_min", highMoatMin);
   if (sp.q) params.set("q", sp.q);
   if (sp.naics_code) params.set("naics_code", sp.naics_code);
   if (sp.set_aside) params.set("set_aside", sp.set_aside);
   if (sp.notice_type) params.set("notice_type", sp.notice_type);
   if (sp.agency) params.set("agency", sp.agency);
-  if (sp.assigned_founder) params.set("assigned_founder", sp.assigned_founder);
+  if (assignedFounder) params.set("assigned_founder", assignedFounder);
 
   const data = await apiFetch<OpportunityListResponse>(
     `/opportunities?${params.toString()}`
@@ -86,14 +162,20 @@ export default async function OpportunitiesListPage({
     activeFilters.push(`score ${score_min}–${score_max}`);
   if (sweetSpotOnly) activeFilters.push("sweet spots only");
 
+  // Subtitle: when a perspective is active, lead with the perspective
+  // name so a logged-in user sees "where am I" at a glance.
+  const subtitle = activePerspective
+    ? `Perspective: ${activePerspective.name} — showing ${start}–${end} of ${data.total.toLocaleString()} opportunities.`
+    : `Showing ${start}–${end} of ${data.total.toLocaleString()} ingested federal opportunities${activeFilters.length ? " — " + activeFilters.join(" · ") : ""}.`;
+
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="MacTech feed"
         title="Opportunities"
-        subtitle={`Showing ${start}–${end} of ${data.total.toLocaleString()} ingested federal opportunities${activeFilters.length ? " — " + activeFilters.join(" · ") : ""}.`}
+        subtitle={subtitle}
         trailing={
-          activeFilters.length > 0 ? (
+          activeFilters.length > 0 || activePerspective ? (
             <Link
               href="/opportunities"
               className="rounded-md border border-neutral-300 px-3 py-2 text-xs hover:border-neutral-500"
@@ -210,40 +292,53 @@ export default async function OpportunitiesListPage({
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
-        {/* Filters sidebar */}
+        {/* Perspectives rail — replaces the pass-1 filter aside per
+            brief §7.2. TOP section is the founder-private saved-search
+            list (your lane only) plus "All opportunities" first. BOTTOM
+            section keeps the facet filters reachable under a collapsed
+            "Refine this view" drawer — open by default only when no
+            perspective is active. */}
         <aside className="space-y-4 lg:col-span-1">
-          <FacetFilter
-            title="Set-aside"
-            paramKey="set_aside"
-            facets={data.facets.set_asides}
-            current={sp.set_aside ?? null}
-            allParams={params}
-            renderLabel={(k) => k}
+          <PerspectiveRail
+            perspectives={myPerspectives}
+            activeId={activePerspective?.id ?? null}
           />
 
-          <FacetFilter
-            title="Notice type"
-            paramKey="notice_type"
-            facets={data.facets.notice_types}
-            current={sp.notice_type ?? null}
-            allParams={params}
-            renderLabel={(k) => k}
-          />
-
-          <FacetFilter
-            title="Assigned founder (≥60)"
-            paramKey="assigned_founder"
-            facets={data.facets.assigned_founder}
-            current={sp.assigned_founder ?? null}
-            allParams={params}
-            renderLabel={(k) => k}
-          />
-
-          <details className="rounded-lg border border-neutral-200 bg-white">
-            <summary className="cursor-pointer rounded-lg px-4 py-3 text-xs font-medium uppercase tracking-wide text-neutral-700 hover:bg-neutral-50">
-              More filters
+          <details
+            className="rounded-lg border border-border bg-card"
+            {...(activePerspective ? {} : { open: true })}
+          >
+            <summary className="cursor-pointer rounded-lg px-4 py-3 text-xs font-medium uppercase tracking-wide text-foreground hover:bg-accent">
+              Refine this view
             </summary>
             <div className="space-y-4 px-4 pb-4">
+              <FacetFilter
+                title="Set-aside"
+                paramKey="set_aside"
+                facets={data.facets.set_asides}
+                current={sp.set_aside ?? null}
+                allParams={params}
+                renderLabel={(k) => k}
+              />
+
+              <FacetFilter
+                title="Notice type"
+                paramKey="notice_type"
+                facets={data.facets.notice_types}
+                current={sp.notice_type ?? null}
+                allParams={params}
+                renderLabel={(k) => k}
+              />
+
+              <FacetFilter
+                title="Assigned founder (≥60)"
+                paramKey="assigned_founder"
+                facets={data.facets.assigned_founder}
+                current={sp.assigned_founder ?? null}
+                allParams={params}
+                renderLabel={(k) => k}
+              />
+
               <FacetFilter
                 title="NAICS"
                 paramKey="naics_code"
@@ -267,8 +362,8 @@ export default async function OpportunitiesListPage({
                           href={`/opportunities?${qs.toString()}`}
                           className={
                             active
-                              ? "block rounded-sm bg-brand-700 px-2 py-1 text-xs text-white"
-                              : "block rounded-sm px-2 py-1 text-xs hover:bg-neutral-100"
+                              ? "block rounded-sm bg-primary px-2 py-1 text-xs text-primary-foreground"
+                              : "block rounded-sm px-2 py-1 text-xs hover:bg-accent text-foreground"
                           }
                         >
                           {label}
@@ -354,11 +449,12 @@ export default async function OpportunitiesListPage({
                   .toLowerCase()
                   .includes("sources sought");
                 // Sweet-spot row treatment: gold left border + HPEW chip.
-                // No background fill, no shadow on hover (calmer leaderboard
-                // posture per brief §6 motion guidance).
+                // No background fill. Hover: calmer leaderboard posture
+                // per pass-2 brief §7.5 — `bg-accent/40` instead of
+                // `shadow-sm` on both rail variants.
                 const rowClass = opp.is_sweet_spot
-                  ? "group block rounded-lg border border-neutral-200 border-l-[3px] border-l-[hsl(var(--high-moat))] bg-white p-5 transition-colors hover:border-brand-300 hover:border-l-[hsl(var(--high-moat))]"
-                  : "group block rounded-lg border border-neutral-200 bg-white p-5 transition-colors hover:border-brand-300 hover:shadow-sm";
+                  ? "group block rounded-lg border border-neutral-200 border-l-[3px] border-l-[hsl(var(--high-moat))] bg-white p-5 transition-colors hover:bg-accent/40 hover:border-l-[hsl(var(--high-moat))]"
+                  : "group block rounded-lg border border-neutral-200 bg-white p-5 transition-colors hover:bg-accent/40";
                 // Title promotion: Claude-generated scope_one_sentence
                 // (from the post-score worker chain) reads as a clean
                 // human-language title. Fall back to the raw SAM title
@@ -476,6 +572,91 @@ export default async function OpportunitiesListPage({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * PerspectiveRail — replaces the legacy filter aside on /opportunities
+ * with a list of named saved-search "perspectives" (per brief §7.2).
+ * Always renders "All opportunities" first; the rest are the current
+ * founder's lane-private saved searches, in seed/admin order.
+ *
+ * Active perspective uses the same `border-l-2 border-primary
+ * bg-primary/10` treatment SidebarNav uses for the primary nav, so
+ * the visual language stays consistent across chrome surfaces.
+ */
+function PerspectiveRail({
+  perspectives,
+  activeId
+}: {
+  perspectives: SavedSearchOut[];
+  activeId: string | null;
+}) {
+  return (
+    <section className="rounded-lg border border-border bg-card p-3">
+      <p className="px-2 pb-2 text-[11px] uppercase tracking-wider text-muted-foreground">
+        Perspectives
+      </p>
+      <ul className="space-y-1">
+        <li>
+          <PerspectiveRailItem
+            href="/opportunities"
+            label="All opportunities"
+            sub="every scored opp in the feed"
+            active={activeId === null}
+          />
+        </li>
+        {perspectives.map((p) => {
+          const qs = new URLSearchParams();
+          qs.set("saved_search", p.id);
+          return (
+            <li key={p.id}>
+              <PerspectiveRailItem
+                href={`/opportunities?${qs.toString()}`}
+                label={p.name}
+                sub={`≥ ${p.alert_threshold} · ${p.alert_cadence}`}
+                active={activeId === p.id}
+              />
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function PerspectiveRailItem({
+  href,
+  label,
+  sub,
+  active
+}: {
+  href: string;
+  label: string;
+  sub: string;
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? "true" : undefined}
+      className={
+        active
+          ? "block rounded-md border-l-2 border-primary bg-primary/10 px-3 py-2 text-xs text-foreground"
+          : "block rounded-md border-l-2 border-transparent px-3 py-2 text-xs text-foreground transition-colors hover:bg-accent"
+      }
+    >
+      <span className="block font-semibold leading-tight">{label}</span>
+      <span
+        className={
+          active
+            ? "block text-[10px] text-primary"
+            : "block text-[10px] text-muted-foreground"
+        }
+      >
+        {sub}
+      </span>
+    </Link>
   );
 }
 

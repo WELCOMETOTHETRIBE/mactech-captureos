@@ -264,12 +264,31 @@ export default async function DashboardPage() {
         </section>
       )}
 
-      {/* Action-oriented KPIs — your day at a glance.
-          Each tile's hint links the jargon to a plain-English explanation
-          via the explain backend. The popover sits on the label-side help
-          icon when the user hovers — keeps the tile clean while making
-          the meaning discoverable. */}
-      <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      {/* Action-oriented KPIs — your day at a glance. Three tiles
+          (pass 2): the lead tile is "Sweet spots today," demoting
+          generic high-fit + deadlines into slots 2/3. Active pursuits +
+          Drafts to review move to a one-line "Your work" rail below
+          TodaysMoves — they're work-in-flight metrics, not discovery
+          questions. Sweet-spots tile is gold-inked only when count > 0;
+          zero stays neutral (gravitas, not crying wolf). See brief §7.4. */}
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <Link
+          href={
+            data.you
+              ? `/opportunities?sweet_spot_only=true&sort=high_moat_desc&assigned_founder=${data.you.slug}`
+              : "/opportunities?sweet_spot_only=true&sort=high_moat_desc"
+          }
+          className="rounded-lg transition-colors hover:ring-2 hover:ring-primary/30"
+        >
+          <Kpi
+            label="Sweet spots today"
+            value={data.kpis.your_sweet_spots_open}
+            hint="high-probability easy wins in your lane, not yet in pipeline"
+            tone={
+              data.kpis.your_sweet_spots_open > 0 ? "high_moat" : "neutral"
+            }
+          />
+        </Link>
         <Link
           href={
             data.you
@@ -296,47 +315,24 @@ export default async function DashboardPage() {
             tone={data.kpis.your_deadlines_lt_7d > 0 ? "amber" : "neutral"}
           />
         </Link>
-        <Link
-          href={
-            data.you ? `/pipeline?owner=${data.you.slug}` : "/pipeline"
-          }
-          className="rounded-lg transition-colors hover:ring-2 hover:ring-primary/30"
-        >
-          <Kpi
-            label="Active pursuits"
-            value={data.kpis.your_active_pursuits}
-            hint="in your kanban (excl. won/lost)"
-          />
-        </Link>
-        <Link
-          href="/drafts"
-          className="rounded-lg transition-colors hover:ring-2 hover:ring-primary/30"
-        >
-          <Kpi
-            label="Drafts to review"
-            value={data.kpis.drafts_awaiting_review}
-            hint="proposal drafts pending sign-off"
-            tone={data.kpis.drafts_awaiting_review > 0 ? "brand" : "neutral"}
-          />
-        </Link>
       </section>
 
-      {/* KPI glossary — wraps the four bare jargon strings in the tile
+      {/* KPI glossary — wraps the bare jargon strings in the tile
           labels with explainer popovers. Sits inline below the strip so
           a layman can hover any term to learn what it means without us
           adding visual noise to the tiles themselves. */}
       <p className="-mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
         <span className="uppercase tracking-wider">What these mean:</span>
         <TermPopover kind="score" value="high_fit">
+          sweet spot
+        </TermPopover>
+        <span aria-hidden>·</span>
+        <TermPopover kind="score" value="high_fit">
           high-fit
         </TermPopover>
         <span aria-hidden>·</span>
         <TermPopover kind="pursuit_stage" value="overview">
           pipeline
-        </TermPopover>
-        <span aria-hidden>·</span>
-        <TermPopover kind="draft_type" value="overview">
-          draft
         </TermPopover>
         <span aria-hidden>·</span>
         <TermPopover kind="score" value="overview">
@@ -359,6 +355,34 @@ export default async function DashboardPage() {
           ),
         ]}
       />
+
+      {/* Your work — the work-in-flight pair demoted out of the KPI
+          strip per pass-2 brief §7.4. Active pursuits + Drafts to
+          review are useful but not discovery-question metrics; a
+          single text line keeps them above-fold without competing for
+          tile real estate. */}
+      <p className="-mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        <span className="uppercase tracking-wider">Your work:</span>
+        <Link
+          href={data.you ? `/pipeline?owner=${data.you.slug}` : "/pipeline"}
+          className="text-foreground hover:text-primary hover:underline"
+        >
+          <span className="font-semibold tabular-nums">
+            {data.kpis.your_active_pursuits}
+          </span>{" "}
+          active pursuits
+        </Link>
+        <span aria-hidden>·</span>
+        <Link
+          href="/drafts"
+          className="text-foreground hover:text-primary hover:underline"
+        >
+          <span className="font-semibold tabular-nums">
+            {data.kpis.drafts_awaiting_review}
+          </span>{" "}
+          drafts to review
+        </Link>
+      </p>
 
       {!howItWorksDismissed && <HowItWorks />}
 
@@ -408,9 +432,11 @@ export default async function DashboardPage() {
               // Sweet-spot row treatment mirrors /opportunities — gold
               // left border + HPEW chip, never as fill. Same token, same
               // shape, same primitive → consistent across surfaces.
+              // Hover: switched from `shadow-sm` to `bg-accent/40` per
+              // pass-2 brief §7.5 — calmer leaderboard posture.
               const rowClass = opp.is_sweet_spot
-                ? "block rounded-lg border border-border border-l-[3px] border-l-[hsl(var(--high-moat))] bg-card p-5 transition-colors hover:border-primary/40"
-                : "block rounded-lg border border-border bg-card p-5 transition-colors hover:border-primary/40 hover:shadow-sm";
+                ? "block rounded-lg border border-border border-l-[3px] border-l-[hsl(var(--high-moat))] bg-card p-5 transition-colors hover:bg-accent/40"
+                : "block rounded-lg border border-border bg-card p-5 transition-colors hover:bg-accent/40";
               // Promote Claude-generated brief sentence when available.
               const primaryTitle = opp.scope_one_sentence ?? opp.title;
               const hasPromotedTitle = !!opp.scope_one_sentence;
@@ -475,9 +501,9 @@ export default async function DashboardPage() {
                         ` — ${fmtMoney(opp.incumbent_amount)} prior obligations`}
                     </p>
                   )}
-                  <p className="mt-3 text-sm font-medium text-primary">
-                    Open detail →
-                  </p>
+                  {/* Pass 2 drop: the explicit "Open detail →" line was
+                      duplicative — the whole row is already a clickable
+                      <Link>. Removed per brief §7.5. */}
                 </Link>
               </li>
               );

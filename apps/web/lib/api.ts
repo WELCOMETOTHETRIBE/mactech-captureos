@@ -263,6 +263,27 @@ export type IncumbentBlock = {
   exclusions: IncumbentExclusionsBlock | null;
 };
 
+/**
+ * Parallel high-moat (UFGS 25 / FRCS cyber) score block. Null on the
+ * parent ScoreBlock when the tenant has no high_moat_scoring config or
+ * the opportunity hasn't been re-scored since the column was added.
+ *
+ * Drives the "Why this is high-moat" strip on the detail page when
+ * `score >= 70` (per pass-2 brief §11 Q1). Mirrors the API shape
+ * exactly — see apps/api/src/mactech_api/routes/opportunities.py
+ * HighMoatBlock for the source-of-truth field set.
+ */
+export type HighMoatBlock = {
+  score: number;
+  breakdown: Record<string, number>;
+  is_high_probability_easy_win: boolean;
+  clause_hits: string[];
+  clearance_hits: string[];
+  role_hits: string[];
+  top_clearance: string; // 'TS_SCI' | 'TS' | 'S' | 'NONE'
+  why_it_matters_seed: string | null;
+};
+
 export type ScoreBlock = {
   score: number;
   breakdown: Record<string, number>;
@@ -270,6 +291,11 @@ export type ScoreBlock = {
   why_it_matters: string | null;
   why_it_matters_model: string | null;
   scored_at: string | null;
+  // Parallel high-moat track. Populated when the tenant has a
+  // high_moat_scoring config + the opp has been re-scored since the
+  // column landed. The detail page renders the "Why this is high-moat"
+  // strip when this is non-null AND `score >= 70`.
+  high_moat: HighMoatBlock | null;
 };
 
 export type DescriptionBlock = {
@@ -1073,6 +1099,12 @@ export type CyberSummaryOut = {
   posture: CyberPostureSummary;
   sufficiency: "sufficient" | "gap" | "unknown";
   sufficiency_notes: string | null;
+  // Optional — clauses cited by the solicitation that the tenant has no
+  // evidence of meeting yet. UI surface (the "What's missing" sub-rail
+  // on <CyberFitCard>) consumes this when populated. Backend currently
+  // returns the field absent / empty; the cross-reference logic is a
+  // pass-3 endpoint addition. See brief §7.5 and §8.
+  missing_clauses?: string[];
 };
 
 /* ── /pursuits/{id}/capture-package ─────────────────────────────── */

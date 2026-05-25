@@ -1,578 +1,420 @@
 # Change Log
-For brief: 2026-05-25T09:29:00-07:00
-Iteration: 1
-Generated: 2026-05-25T10:35:00-07:00
+For brief: 2026-05-25T11:36:30-07:00
+Iteration: 1 (pass 2 of overall UX program)
+Generated: 2026-05-25T12:35:00-07:00
 
 ## Items addressed
 
-### Item 1 — Wire the high-moat track end-to-end into the discovery UI
-- **Brief reference:** §7.1 (the headline leverage point — the backend's
-  sweet-spot detector had zero presence in the web UI).
+### Item 1 — Detail-page restructure + "Why this is high-moat" strip
+- **Brief reference:** §7.1 (the headline leverage point — pre-decision
+  evidence was buried under three post-decision panels; high-moat
+  metadata was computed by the backend but absent from the detail UI).
 - **Files modified:**
-  - `apps/web/app/globals.css` — added `--high-moat: 45 90% 45%` token
-    (federal-procurement gold per brief §11 Q3).
-  - `apps/web/tailwind.config.ts` — registered the `high-moat` color in
-    the theme so `text-high-moat` / `border-high-moat` resolve.
-  - `apps/web/components/ui.tsx` — added `<HpewBadge>` primitive.
-  - `apps/web/lib/api.ts` — extended `OpportunityListItem` and
-    `TopOpportunity` with `high_moat_score`, `is_sweet_spot`, and
-    `scope_one_sentence`.
-  - `apps/web/app/(app)/opportunities/page.tsx` — added the "Sweet
-    spots" toggle to the score-bucket strip; URL contract is
-    `?sweet_spot_only=true&sort=high_moat_desc&score_min=0&score_max=100`.
-    Sweet-spot rows get a 3px gold left border + `<HpewBadge>` in the
-    chip row. Added `high_moat_desc` to `SORT_LABELS`. Exposed
-    `?high_moat_min=N` for the More-filters drawer's future use
-    (already plumbed but no UI affordance this pass — backend accepts it).
-- **Files created:** none.
-- **Approach taken:** URL-driven toggle (no client state). The toggle
-  forces `sort=high_moat_desc` so the gold rail rises to the top of
-  the page when the user clicks it; score bucket pills clear
-  `sweet_spot_only` when re-clicked so the two views are mutually
-  exclusive on the segmented control. Row treatment is a single
-  conditional className on the `<Link>` per the architect plan §1.
-  HpewBadge uses `text-[hsl(var(--high-moat))]` plus a thin
-  `border-[hsl(var(--high-moat))]/50` outline — no fill, honoring
-  brief §11 Q3.
+  - `apps/web/lib/api.ts` — added `HighMoatBlock` type with all 8
+    fields the API returns (`score`, `breakdown`,
+    `is_high_probability_easy_win`, `clause_hits`, `clearance_hits`,
+    `role_hits`, `top_clearance`, `why_it_matters_seed`). Extended
+    `ScoreBlock` with `high_moat: HighMoatBlock | null`.
+  - `apps/web/app/(app)/opportunities/[id]/page.tsx` — new render
+    order: PageHeader → meta strip → `<HighMoatStrip>` (conditional)
+    → two-column main (brief left, cyber-fit + incumbent + capability
+    right) → "Take action on this opportunity" section wrapping
+    PursuitPanel + DrafterPanel + AskPanel as three siblings (all
+    expanded per §11 Q5) → score breakdown.
+- **Files created:** none. `<HighMoatStrip>` is inline in the detail
+  page file alongside the other page-local helpers (`Row`, `Meta`,
+  `PursuitPanel`, etc.).
+- **Approach taken:** Pure render-order rearrangement plus one new
+  inline component. PursuitPanel / DrafterPanel / AskPanel internals
+  are untouched — only their position relative to the brief / cyber /
+  incumbent evidence changes. `<HighMoatStrip>` is gated to
+  `score.high_moat && score.high_moat.score >= 70` per §11 Q1; when
+  the gate fails the section is absent (not present-but-empty).
+  Visual contract: 3px gold left border (`border-l-[3px]
+  border-l-[hsl(var(--high-moat))]`), white card background, no gold
+  fill or tint anywhere. The `why_it_matters_seed` renders in
+  italic-serif to echo the page H1. Right half is a 3-column meta
+  grid surfacing `clause_hits`, `top_clearance` (when `!= "NONE"`),
+  `role_hits` — each clause and role wrapped in `<ExplainLink>` so a
+  layman can click into a plain-English explanation. An `<HpewBadge
+  size="sm">` sits beside the eyebrow when
+  `is_high_probability_easy_win`.
 - **Design decisions worth flagging:**
-  - The active state on the "Sweet spots" segmented-control toggle
-    uses a 2px gold border (no fill) instead of the brand-teal fill
-    used by the score-bucket pills. This intentionally signals that
-    the sweet-spot view is a parallel signal, not the same axis as
-    the general score buckets. Honoring "never as fill" required this
-    visual differentiation.
-  - HpewBadge is universal (per brief §11 Q1) — not pillar-gated.
-    Brian / James / John see the same chip; their opps will just
-    rarely hit `is_sweet_spot=true` until those pillars' high-moat
-    tracks are tuned.
-- **What I did NOT do and why:** I did not add a "Why this is
-  high-moat" strip on the opportunity-detail page (brief §7.3). That
-  strip belongs to the larger detail-page restructure deferred to the
-  next pass. The list-page + dashboard surfaces alone cover the
-  daily-question gap.
+  - **The `HpewBadge` primitive grew a `size` prop earlier; we use
+    `size="sm"` inside the strip** so the chip doesn't visually
+    compete with the H1 / score badge above it. The full-size chip
+    keeps living on list and dashboard rows.
+  - **`why_it_matters_seed` may be null** even when
+    `high_moat.score >= 70` — the strip still renders, falling back
+    to a calm "the high-moat scorer flagged this opp but didn't emit
+    a one-sentence rationale; open the score breakdown below" line.
+    Never errors, never empty.
+  - **Three-column right grid** uses `dl` semantics (`<dt>` label, `<dd>`
+    badge group). Reads cleanly with a screen reader and avoids
+    "cards inside a card" visual noise.
+- **What I did NOT do and why:**
+  - I did NOT promote the high-moat strip to its own page
+    (`/opportunities/{id}/high-moat`) — brief §8 explicit non-goal.
+  - I did NOT touch the `HpewBadge` primitive's chip-row appearance
+    on list / dashboard rows — pass-1 surface, off-limits.
 
-### Item 2 — Sweet-spot Move at slot 1 in Today's moves
+### Item 2 — Perspective left-rail on /opportunities
+- **Brief reference:** §7.2.
+- **Files modified:**
+  - `apps/web/app/(app)/opportunities/page.tsx` — added `?saved_search`
+    to the `SP` type. Fetches `/me` + `/me/settings` alongside the
+    existing `/opportunities` call. Filters
+    `settings.saved_searches` to `owner_founder_slug === me.founder.slug
+    || owner_founder_slug === null` (founder-private + tenant-shared).
+    Resolves `?saved_search=<id>` to a `SavedSearchOut`; if the id is
+    unknown or belongs to a different founder, silently falls through
+    to "All opportunities" (never errors). Replaced the old facet
+    aside contents with `<PerspectiveRail>` on top + a "Refine this
+    view" `<details>` drawer wrapping the facet filters underneath.
+    The drawer is `open` by default only when no perspective is
+    active.
+- **Files created:** none. `<PerspectiveRail>` and
+  `<PerspectiveRailItem>` are inline in the same file.
+- **Approach taken:** Pure server-side composition (brief §7.2 Option
+  A). The perspective seeds the backend params: `assigned_founder` =
+  the search's `owner_founder_slug`; `score_min` = the search's
+  `alert_threshold`. For the seeded "Patrick — UFGS 25 / FRCS Cyber"
+  high-moat search, the composition additionally sets
+  `sweet_spot_only=true`, `sort=high_moat_desc`, and
+  `high_moat_min=<alert_threshold>`. High-moat detection key: the
+  search name or its keyword list matches
+  `\b(UFGS|FRCS|UMCS|HIGH[-\s]?MOAT)\b` (case-insensitive). No API
+  schema change — the existing `/opportunities` endpoint already
+  accepts all the relevant params (verified at
+  `routes/opportunities.py` line 230+).
+- **Design decisions worth flagging:**
+  - **Perspective seeds, doesn't lock.** Any explicit URL param
+    (`?score_min=80`, `?assigned_founder=james-adams`) wins over the
+    perspective's seeded value. Lets the user drill into a
+    perspective without losing the rail's affordances.
+  - **Empty perspective list renders "All opportunities" only**
+    (brief §11 Q3). No inline CTA pointing at /settings. The settings
+    page already owns the saved-search admin surface.
+  - **Active state uses the same `border-l-2 border-primary
+    bg-primary/10` treatment `SidebarNav` uses** for the primary nav,
+    so the visual language reads as "same kind of left rail."
+  - **Subtitle changes when a perspective is active**: "Perspective:
+    <name> — showing N–M of T opportunities." Surfaces the active
+    perspective at the page header so the user always knows where
+    they are.
+- **What I did NOT do and why:**
+  - I did NOT add a `saved_search: str` query param on the backend
+    (brief §7.2 explicitly recommended Option A over Option B).
+  - I did NOT add a Cmd-K shortcut to swap perspectives — brief §8
+    no-new-keyboard-shortcuts non-goal.
+
+### Item 3 — Brief tab affordance + BriefList token discipline
+- **Brief reference:** §7.3.
+- **Files modified:**
+  - `apps/web/app/(app)/opportunities/[id]/page.tsx`:
+    - `searchParams` Promise extended with `view?: string`. Sanitized
+      to `"brief" | "raw" | null`; any other value falls through to
+      the default (brief when a brief row exists, raw otherwise).
+    - Replaced anchor-tabs (`#brief-{id}` / `#raw-{id}`) with `<Link
+      href="?view=brief">` and `<Link href="?view=raw">` tabs. Active
+      tab gets `bg-primary text-primary-foreground` (matches the
+      score-bucket pills); inactive gets `border border-border
+      text-foreground hover:border-foreground/40`. Both tabs use
+      `scroll={false}` to keep the user's vertical position.
+    - Inside the panel, only the active panel renders (the `:target`
+      trick is gone). `aria-selected` reflects which tab is active.
+    - "Regenerate brief" affordance moved from the tab header right
+      side to the brief panel's footer, sitting next to the
+      "Auto-generated by …" provenance line.
+    - `BriefList`'s `violet` tone routes to `text-muted-foreground`
+      (label) and `bg-muted-foreground` (dot) per §11 Q2 — neutral,
+      not pillar-coded.
+- **Files created:** none.
+- **Approach taken:** Search-param tabs are server-component-friendly
+  with no client state. Each tab is a `<Link>` that points at
+  `?view=brief` or `?view=raw` — the parent route's
+  `force-dynamic` directive means each click round-trips the server
+  and re-renders. Verified
+  `grep -E "text-violet|bg-violet" apps/web/app/\(app\)/opportunities/\[id\]/page.tsx`
+  returns zero hits (success criterion §9).
+- **Design decisions worth flagging:**
+  - **Tab visual matches the score-bucket pills on the list page.**
+    Consistent segmented-control language across the app.
+  - **Default behavior is asymmetric** — when there's no brief row,
+    the raw tab is default; when there is a brief row, the brief tab
+    is default. Gives the user something to read on arrival in both
+    states.
+  - **`scroll={false}`** on the tab links so flipping tabs doesn't
+    jump the page back to the top of the brief panel. Stays where
+    you were reading.
+  - **Did NOT add a "Copy brief to clipboard" affordance** — the
+    brief floated this as optional polish; adding it requires a
+    client island (the rest of the panel is server-rendered) and
+    would have grown the diff for marginal value. Easy follow-up.
+- **What I did NOT do and why:**
+  - I did NOT add `?view=brief|raw` on the list page — brief §8
+    explicit non-goal.
+  - I did NOT pillar-code the BriefList violet tone — brief §11 Q2
+    chose the neutral path explicitly.
+
+### Item 4 — KPI strip 4 → 3 tiles, "Sweet spots today" leading
+- **Brief reference:** §7.4.
+- **Files modified:**
+  - `apps/web/app/(app)/dashboard/page.tsx` — KPI grid changed from
+    `md:grid-cols-4` to `md:grid-cols-3`. First tile is now "Sweet
+    spots today" (value = `kpis.your_sweet_spots_open`, hint =
+    "high-probability easy wins in your lane, not yet in pipeline",
+    href = `/opportunities?sweet_spot_only=true&sort=high_moat_desc&assigned_founder={slug}`,
+    tone = `"high_moat"` when value > 0 else `"neutral"`). Tile
+    always renders even at 0 — zero is signal too on a triage
+    dashboard. "High-fit untracked" + "Deadlines this week" stay
+    (slots 2 and 3). "Active pursuits" + "Drafts to review" moved
+    into a single text line under TodaysMoves — "Your work: N active
+    pursuits · M drafts to review." Each segment is a Link.
+  - `apps/web/components/ui.tsx` — extended `Kpi`'s `tone` union to
+    include `"high_moat"`. The high-moat tone routes the value text
+    through `text-[hsl(var(--high-moat))]`; the hint stays
+    `text-muted-foreground`. When count === 0, callers pass
+    `tone="neutral"` so the tile reads as a calm zero, not a
+    gold-tinted alarm.
+  - `apps/web/app/(app)/dashboard/page.tsx` — KPI glossary line under
+    the strip refreshed: "sweet spot · high-fit · pipeline · score"
+    (was "high-fit · pipeline · draft · score"). The glossary still
+    routes each term through `<TermPopover>`.
+- **Files created:** none.
+- **Approach taken:** Tile reorder + one new tone branch. The "Your
+  work" line is a small text strip with two text links sitting
+  directly under `<TodaysMoves>`. Loses no information — both numbers
+  are still visible above-fold — and recovers vertical rhythm for
+  the higher-signal three tiles.
+- **Design decisions worth flagging:**
+  - **`tone="high_moat"` never auto-degrades inside the Kpi
+    primitive.** Callers pass `tone="neutral"` explicitly when the
+    count is 0. Gravitas is the caller's call, not the primitive's
+    default.
+  - **Sweet-spots tile renders even at 0** — zero is signal on a
+    triage dashboard. Brief §7.4: "render even when 0 — zero is
+    signal too, but skip the gold tone when the value is 0."
+  - **"Your work" demote uses tabular-nums on the inline numbers** so
+    the line scans like a sub-counter, not a sentence.
+- **What I did NOT do and why:**
+  - I did NOT change the `<TodaysMoves>` order — pass-1 surface,
+    off-limits.
+  - I did NOT add a separate "Your work" card with its own border —
+    the brief specified a single text line.
+
+### Item 5 — CyberFitCard rename + "What's missing" rail + row-hover polish
 - **Brief reference:** §7.5.
 - **Files modified:**
-  - `apps/api/src/mactech_api/routes/me.py` — added
-    `your_sweet_spots_open: int = 0` to `DashboardKpis`, populated by
-    a raw-SQL `count(*)` that mirrors the JSONB predicate used by
-    `/opportunities?sweet_spot_only=true`. Founder-scoped (your lane,
-    not in pipeline).
-  - `apps/web/lib/api.ts` — extended `DashboardKpis` with
-    `your_sweet_spots_open: number`.
-  - `apps/web/components/todays-moves.tsx` — added a slot-1 Move
-    "Pursue: N sweet-spot opp(s) dropped in your lane" when the
-    counter > 0. New `"high_moat"` tone with gold ink on the verb tag
-    only (no background fill).
+  - `apps/web/components/cyber-posture-card.tsx`:
+    - Exported symbol renamed from `CyberPostureCard` → `CyberFitCard`.
+      Visible card title changed from "Cyber posture vs. solicitation"
+      to "Cyber fit · your posture vs. their ask".
+    - Back-compat alias `export const CyberPostureCard = CyberFitCard`
+      added at the bottom of the file so any external imports
+      (internal or otherwise) still resolve during the transition.
+    - File path stays at `cyber-posture-card.tsx` (§11 Q4).
+    - New `<MissingClausesRail>` component renders under the
+      sufficiency banner when `summary.missing_clauses?.length > 0`.
+      Backend currently returns the field absent — the rail renders
+      nothing on day one. The day the backend cross-reference logic
+      ships, the surface lights up with no further UI work.
+  - `apps/web/lib/api.ts` — added optional `missing_clauses?:
+    string[]` to `CyberSummaryOut`. Optional so the type is
+    back-compat with the current backend response (which doesn't yet
+    include the field).
+  - `apps/web/app/(app)/opportunities/[id]/page.tsx` — import +
+    JSX call site updated from `CyberPostureCard` to `CyberFitCard`.
+  - `apps/web/app/(app)/dashboard/page.tsx` — dropped the explicit
+    `<p>Open detail →</p>` line at the bottom of each "Your top" row.
+    Swapped `hover:shadow-sm` for `hover:bg-accent/40` on the
+    non-sweet-spot row class. Same hover swap on the sweet-spot
+    variant (still keeps the gold left border on hover).
+  - `apps/web/app/(app)/opportunities/page.tsx` — same hover swap on
+    the list rows: `hover:shadow-sm` → `hover:bg-accent/40` for both
+    sweet-spot and standard variants.
 - **Files created:** none.
-- **Approach taken:** Pure additive change. The Move type already
-  supported a discriminated `tone` union; I extended it to include
-  `"high_moat"` and added the corresponding gold ink branch in the
-  verb-tag rendering. The "Decide / Review / Triage" moves below are
-  unchanged — the sweet-spot move outranks them per architect plan
-  ordering.
-- **Design decisions worth flagging:** The sweet-spot count uses the
-  same JSONB predicate (`high_moat_flags->>'is_high_probability_easy_win'`)
-  the list endpoint already uses, so the count linked from the move
-  matches the linked-to view exactly. Idempotent and bytewise stable
-  across endpoints.
-- **What I did NOT do and why:** I did NOT demote "high-fit untracked"
-  to slot #3 as the brief suggested. The current ordering still ranks
-  deadlines and drafts above generic high-fit, and the sweet-spot move
-  pre-empts slot 1 — the brief's intent (sweet-spot leads, generic
-  high-fit demotes) is satisfied without a separate edit. Simpler diff.
-
-### Item 3 — Sweet-spot row treatment across discovery surfaces
-- **Brief reference:** §7.8.
-- **Files modified:**
-  - `apps/api/src/mactech_api/routes/me.py` — `TopOpportunity` grows
-    `high_moat_score`, `is_sweet_spot`, `scope_one_sentence`; the
-    SELECT widens with a LEFT JOIN on `OpportunityBrief` and a JSONB
-    read on `OpportunityScore.high_moat_flags`.
-  - `apps/web/app/(app)/dashboard/page.tsx` — "Your top" list rows get
-    the same gold-left-border + HPEW chip treatment as the
-    `/opportunities` list rows.
-  - `apps/web/app/(app)/opportunities/page.tsx` — list rows get the
-    same treatment (covered under Item 1).
-- **Files created:** none.
-- **Approach taken:** Single shared treatment, two callsites. The
-  className differs slightly (dashboard uses `border-border` / `bg-card`
-  tokens, list page still uses legacy `border-neutral-200` / `bg-white`
-  from the not-yet-migrated list shell) but both override `border-l`
-  to gold. Row treatment doesn't tint the background — pure left-rail
-  signal.
-
-### Item 4 — Auto-generate plain-English brief on every score ≥ 60
-- **Brief reference:** §7.2 + brief §11 Q2 ("~$0.20/day, wire as a
-  post-score worker step").
-- **Files modified:**
-  - `apps/workers/src/mactech_workers/tasks/score.py` — added a
-    `_maybe_generate_brief()` helper modeled on the existing
-    `_maybe_fetch_interested_vendors()` pattern. Integrated into both
-    `score_unscored_batch` (cron path) and `score_one_opportunity`
-    (ad-hoc path). Gated by `BRIEF_MIN_SCORE = 60`, by the presence of
-    `ANTHROPIC_API_KEY`, by the presence of `opp.description_text`,
-    and idempotent against an existing `OpportunityBrief` row. Wraps
-    the Anthropic call in try/except so a single failure can't tank
-    the batch. ScoreStats now carries `briefs_generated` for
-    observability.
-  - `apps/api/src/mactech_api/routes/opportunities.py` — widened the
-    list SELECT with a LEFT JOIN on `opportunity_briefs ob` and
-    projected `ob.scope_one_sentence` into the response.
-  - `apps/api/src/mactech_api/routes/me.py` — same widening on the
-    dashboard `your_top` SELECT.
-  - `apps/web/lib/api.ts` — types caught up.
-  - `apps/web/app/(app)/opportunities/page.tsx` and
-    `apps/web/app/(app)/dashboard/page.tsx` — when
-    `opp.scope_one_sentence` is present, render it as the `<h3>` title
-    (15px / two-line clamp) and demote the raw SAM text to a muted
-    `SAM: …` second line. Both rows preserve the raw title in the
-    `title=` HTML attribute for hover provenance, per brief §7.2.
-- **Files created:** none.
-- **Approach taken:** The brief module already accepts an
-  `AnthropicLLMClient` and is wrapped by `BriefExtractionError`. The
-  worker reuses the same client it already builds for `why_it_matters`
-  generation, so we don't double-instantiate. Cost ceiling: 25 opps
-  per batch × ~6s/Haiku call ≈ 2.5 min upper bound — well within the
-  18-minute Celery beat expiry.
+- **Approach taken:** Single-symbol rename across two files. The
+  back-compat alias is a defensive guard — there are no current
+  external consumers of `CyberPostureCard` per a repo-wide grep, but
+  the alias costs one line and removes the bisect risk on any merge
+  conflict during a long-lived branch.
 - **Design decisions worth flagging:**
-  - **Idempotency.** `_maybe_generate_brief` short-circuits when a
-    brief row already exists for `(tenant, opp)`. If a human user
-    triggers `POST /opportunities/{id}/brief` later, that endpoint's
-    upsert path overwrites with the latest model output — but the
-    cron worker won't redundantly burn tokens.
-  - **Failure isolation.** Every short-circuit (no key, sub-60 score,
-    empty description, existing brief, bad JSON, transient API error)
-    returns False instead of raising. Architect plan §4 says: a single
-    brief failure cannot tank the whole batch.
-  - **No backfill task.** The brief now generates inline at scoring
-    time; opps already scored ≥ 60 from before this change won't pick
-    up briefs until they're re-scored. For MacTech's corpus that's
-    not a problem (the scorer revisits weekly via the cron beat). If
-    we need a faster backfill, run the existing `mactech.score.one`
-    Celery task per opp — `score_one_opportunity` will now generate
-    the brief as a side effect.
-
-### Item 5 — Migrate `CyberPostureCard` to the token system
-- **Brief reference:** §7.7 (token-migration portion only — rename to
-  `<CyberFitCard>` and "what's missing" sub-rail deferred).
-- **Files modified:**
-  - `apps/web/components/cyber-posture-card.tsx`.
-- **Files created:** none.
-- **Approach taken:** Pure className substitution mapping:
-  - `bg-emerald-50 / border-emerald-200 / text-emerald-{800,900}` →
-    `bg-success/10 / border-success/20 / text-success`
-  - `bg-red-50 / border-red-200 / text-red-{800,900}` →
-    `bg-destructive/10 / border-destructive/20 / text-destructive`
-  - `bg-amber-50 / border-amber-200 / text-amber-{800,900}` →
-    `bg-warning/10 / border-warning/20 / text-warning`
-  - `text-neutral-{500,600}` → `text-muted-foreground`
-  - `text-brand-700` → `text-primary`
-- **Design decisions worth flagging:** The three `✓` / `!` / `?`
-  glyphs inside the SufficiencyBanner are pre-existing tech debt
-  per brief §9 ("one stray check glyph … fine to leave or replace
-  with an icon, but do not add more"). Honored — not touched.
-
-## New primitives introduced
-
-- **`<HpewBadge>`** in `apps/web/components/ui.tsx`. Gold "HPEW" pill
-  used wherever an opportunity carries `is_sweet_spot === true`.
-  Currently rendered on:
-  - `/opportunities` list rows (Item 1)
-  - `/dashboard` "Your top" rows (Item 3)
-  Token-driven — visual identity is `text-[hsl(var(--high-moat))]` with
-  a `border-[hsl(var(--high-moat))]/50` outline. No fill, no background.
-  Universal across founders (brief §11 Q1).
-
-## Tokens / config changed
-
-- `apps/web/app/globals.css` — added `--high-moat: 45 90% 45%` to the
-  `:root` block. Locked-in placement next to the pillar tokens with a
-  documentation comment that the token is left-border / chip-border
-  only (never fill).
-- `apps/web/tailwind.config.ts` — added `"high-moat":
-  "hsl(var(--high-moat))"` to the theme colors so `text-high-moat` /
-  `border-high-moat` could resolve. (In practice the changed code uses
-  the explicit `text-[hsl(var(--high-moat))]` form because Tailwind's
-  JIT compiles either path identically and the explicit form survives
-  a config-rename without breaking.)
-
-## Test commands run and their result
-- typecheck: PASS (`cd apps/web && npx tsc --noEmit` → exit 0)
-- lint: NOT RUN (`npm run lint` errors with "Invalid project directory
-  provided, no such directory: …/apps/web/lint" — pre-existing Next 16
-  / next-lint tooling glitch unrelated to this pass; verified on the
-  prior unchanged build).
-- build: PASS (`cd apps/web && npx next build` → exit 0, all 35 routes
-  compiled).
-- Python AST: PASS for changed worker + API files
-  (`ast.parse(open(...))` on score.py / me.py / opportunities.py).
-- Python test suite: NOT RUN (no test_score* or test_opportunities*
-  exists; only `apps/api/tests/test_healthz.py` is in tree).
-
-## Known limitations
-
-1. **Backfill of `scope_one_sentence` is lazy.** Existing high-fit
-   opps scored before this commit won't carry a brief until they're
-   re-scored. Next score-batch tick refreshes the oldest opps; full
-   corpus backfill would require dispatching `mactech.score.one`
-   per opp, or temporarily lowering the `BRIEF_MIN_SCORE` gate.
-2. **The "Sweet spots" toggle is not yet keyboard-reachable via a
-   shortcut.** It is reachable via Tab and announces `aria-pressed`
-   correctly. A `g+s` global-nav binding would be a natural follow-up
-   in the keyboard-shortcuts pass.
-3. **`opportunities/page.tsx` still uses legacy `border-neutral-200`
-   / `bg-white` on the row shell.** Migrating that file's whole shell
-   to `border-border` / `bg-card` was out of scope for this pass —
-   I matched the existing shell so the diff stays focused.
-4. **The opportunity-detail page does not yet render the
-   `HpewBadge` or the "Why this is high-moat" strip.** Both are
-   architect-plan-deferred to the next iteration along with the
-   broader detail-page restructure (brief §7.3).
-5. **No Feedback / thumbs-up affordance was added.** Honored brief
-   §11 Q5 — Phase 2.
-6. **`your_sweet_spots_open` returns 0 for tenants without a
-   high-moat config block.** Acceptable — TodaysMoves simply doesn't
-   render the sweet-spot move slot when count is 0.
-
-## Suggested verifier focus
-
-1. **Sweet-spot toggle network request.** Click the gold "Sweet spots"
-   pill on `/opportunities` and verify the resulting request to
-   `/opportunities` carries both `sweet_spot_only=true` AND
-   `sort=high_moat_desc` in the query string. Verify clicking any
-   other score bucket clears the toggle.
-2. **Row visual treatment.** Confirm that any row with
-   `is_sweet_spot: true` shows a 3px gold left border AND the gold
-   "HPEW" pill next to the ScoreBadge, on both `/opportunities` and
-   `/dashboard` "Your top" rows. Rows where `is_sweet_spot: false`
-   look identical to today.
-3. **Title promotion.** On rows where the backend returns a
-   non-null `scope_one_sentence`, the `<h3>` shows the brief
-   sentence and the raw SAM title appears as a muted
-   `SAM: <title>` line below. On rows where it's null, the raw
-   SAM title still shows as the primary `<h3>`. Hover the row to
-   see `title="SAM title: ..."` on the promoted-title case.
-4. **Today's moves slot 1.** When `kpis.your_sweet_spots_open > 0`,
-   the first row in TodaysMoves is "Pursue: N sweet-spot opp(s)
-   dropped in your lane" with the gold verb tag. When count is 0,
-   the move does not render and the rest of the list is unchanged.
-5. **Worker auto-brief.** Bring up a worker process, trigger
-   `mactech.score.batch`, and verify the `briefs_generated` field
-   on the returned stats is non-zero on a corpus that contains
-   ≥1 high-fit opp without an existing brief. Confirm the
-   `opportunity_briefs` row count grows by exactly that number.
-6. **`CyberPostureCard` token sweep.** `grep -E
-   "bg-(red|amber|emerald|neutral)-[0-9]"
-   apps/web/components/cyber-posture-card.tsx` returns 0 hits.
-7. **No new emoji introduced.** `git diff` of this pass against
-   `main` shows no new emoji codepoints in any TSX / TS file.
-8. **No `--high-moat` background fills anywhere.** Grep for
-   `bg-\[hsl\(var\(--high-moat\)\)\]` should return only the toggle
-   active state if anywhere (it currently does NOT — the toggle uses
-   a border, not a fill). On rows the token only appears in
-   `border-l-` form.
-
----
-
-# Iteration 2
-For verification report: 2026-05-25T17:18:00-07:00
-Generated: 2026-05-25T17:42:00-07:00
-
-## Scope of this iteration
-
-The Iteration-1 verifier returned an **ITERATE** verdict with two blockers:
-
-1. **`--high-moat` token fails WCAG AA contrast** at every text callsite
-   (2.22:1 on white card, 2.10:1 on paper-50 — well below the 4.5:1
-   text bar and below the 3:1 non-text bar the brief itself sets in §9).
-2. **Protected surfaces (`/dashboard`, `/opportunities`,
-   `/opportunities/[id]`) could not be visually verified** because the
-   verifier has no Clerk session.
-
-Finding (2) is infra, not code — explicitly out of scope for this pass
-per the human's instructions. This iteration addresses (1) only.
-
-## Items addressed
-
-### Item 1 — Darken `--high-moat` to clear WCAG AA contrast
-- **Verifier reference:** "Items requiring iteration" #1; brief §9
-  contrast criterion.
-- **Files modified:**
-  - `apps/web/app/globals.css` — `--high-moat` lightness lowered from
-    `45%` → `32%`. Hue (45) and saturation (90%) preserved so the
-    token still reads as federal-procurement gold, not amber/brown.
-    Inline comment updated to record the iteration-2 darkening and
-    the rationale (contrast for three text callsites: HpewBadge,
-    Sweet-spots toggle text, TodaysMoves "Pursue" verb).
-- **Files created:** none.
-- **Approach taken:** Single-token edit. The verifier's contrast audit
-  confirmed every callsite already routes through the CSS variable
-  (`text-[hsl(var(--high-moat))]`, `border-[hsl(var(--high-moat))]/N`,
-  `border-l-[hsl(var(--high-moat))]`) — no callsite uses a hardcoded
-  hex. Lowering the token lightness propagates automatically to:
-  - `HpewBadge` text + outline (`apps/web/components/ui.tsx` 225)
-  - Sweet-spots toggle text + border, active and inactive
-    (`apps/web/app/(app)/opportunities/page.tsx` 171–172)
-  - Opportunities list-row left rail
-    (`apps/web/app/(app)/opportunities/page.tsx` 360)
-  - Dashboard "Your top" list-row left rail
-    (`apps/web/app/(app)/dashboard/page.tsx` 411–434)
-  - TodaysMoves "Pursue" verb ink
-    (`apps/web/components/todays-moves.tsx` 249)
-- **Computed contrast after change** (gold ≈ #9c7a0a at hsl(45 90% 32%)):
-  - on paper-50 (`#f8f5ec`): ≈4.6:1 — clears 4.5:1 text bar
-  - on white card (`#ffffff`): ≈5.0:1 — clears 4.5:1 text bar
-  - non-text uses (3px left border, /30 and /50 opacity chip outlines):
-    darker source color strictly improves contrast vs. the previous
-    `45 90% 45%` token, so the 3:1 non-text bar continues to hold.
-- **Design decisions worth flagging:**
-  - **Hue/saturation preserved (45, 90%), only lightness dropped.** The
-    verifier explicitly flagged the risk that a darker gold could read
-    as "brown" rather than "federal-procurement gold." At hsl(45 90% 32%)
-    the chroma stays high (90% saturation), keeping the warm gold
-    character — the visual reading is closer to "embossed seal gold"
-    than to "amber" or "mustard." This is the same hue used on
-    SDVOSB / VOSB / DBE certification ribbons, which is exactly the
-    gravitas read the brief calls for.
-  - **No split into separate `--high-moat` (border) vs.
-    `--high-moat-text` tokens.** The verifier flagged this as a
-    fallback option if 32% read as too brown. A darker single token
-    clears all callsites at once and avoids token sprawl. If
-    stakeholder review finds the new gold reads as muted on the chip
-    outlines specifically, the split-token path remains available as a
-    future iteration — but the simpler diff lands first.
-  - **No changes to any other file.** Every callsite was already
-    routed through the CSS variable per Iteration 1's architecture
-    discipline. The single-line token change carries the contrast fix
-    end-to-end with zero risk of missing a hardcoded usage.
+  - **"What's missing" rail uses `text-warning` for the label, not
+    `text-destructive`.** Per brief §7.5: "this is a 'to-do' list,
+    not a panic surface." The warning tone matches the gap-state
+    sufficiency banner without escalating.
+  - **`MissingClausesRail` renders absolutely nothing when the list
+    is empty** (early `return null`) — not a hidden surface, just
+    not in the tree. The backend can ship the field at any later
+    date with zero front-end follow-up required.
+  - **`TODO(pass-3)` comment** placed inline at the rail's mounting
+    point in `cyber-posture-card.tsx` so the next agent / human can
+    grep for it and know the cross-reference endpoint is the
+    remaining work.
+  - **Row-hover swap matches both surfaces** — sweet-spot and
+    non-sweet-spot rows on both /dashboard and /opportunities lose
+    the soft shadow lift in favor of a subtle background tint.
+    Calmer leaderboard posture (brief §6 motion guidance).
 - **What I did NOT do and why:**
-  - I did **not** address the verifier's finding #2 (no Clerk session
-    for protected-route screenshots). This is an infrastructure gap
-    that requires either a `TEST_USER_SESSION_TOKEN` env path in the
-    Next.js proxy, a Clerk testing-tokens setup, or a manual eyeball
-    pass by a logged-in human. Per the human's explicit instruction
-    on this iteration, it is being surfaced to them separately.
-  - I did **not** fix the pre-existing `/sign-in` footer "APPS" label
-    contrast (4.10:1). The verifier flagged this as pre-existing tech
-    debt, not a regression from this redesign, and explicitly excluded
-    it from this iteration.
-  - I did **not** revisit the sweet-spots toggle visual differentiation
-    or the HpewBadge as text-vs-chip question (verifier's "Items
-    requiring human decision" #1 and #2). Both depend on stakeholder
-    input and are tracked there for the next pass.
+  - I did NOT rename the file path (`cyber-posture-card.tsx` stays) —
+    brief §11 Q4 explicit decision.
+  - I did NOT add the backend cross-reference logic for
+    `missing_clauses` — brief §8 explicit non-goal; tracked as
+    `TODO(pass-3)`.
 
 ## New primitives introduced
 
-None this iteration.
+None. Every change in this pass is either a render-order rearrangement,
+a search-param-driven UI swap, an inline single-use composition, or an
+extension of an existing primitive's `tone` union.
+
+Specifically:
+- `<HighMoatStrip>` is inline in `opportunities/[id]/page.tsx` — single
+  call site, no shared primitive warranted.
+- `<PerspectiveRail>` / `<PerspectiveRailItem>` are inline in
+  `opportunities/page.tsx` — same reason.
+- `<MissingClausesRail>` is inline in `cyber-posture-card.tsx`.
+- `Kpi`'s `tone` union grew a `"high_moat"` member — same primitive,
+  one more variant.
 
 ## Tokens / config changed
 
-- `apps/web/app/globals.css` — `--high-moat` value:
-  `45 90% 45%` → `45 90% 32%` (single property change). Inline comment
-  expanded to record the iteration-2 darkening and contrast rationale.
-
-## Test commands run and their result
-- typecheck: **PASS** (`cd apps/web && npx tsc --noEmit` → exit 0)
-- lint: NOT RUN (same pre-existing `next lint` tooling glitch noted in
-  iteration 1 — unrelated to this pass; the change is a single
-  CSS-variable value and contains no TS/JS).
-- build: NOT RUN (no TS/JS surface changed; typecheck is sufficient
-  validation for a CSS-variable-value change. Existing build remains
-  green from iteration 1.)
-- Visual diff: NOT RUN (protected-route verification gap, per
-  verifier finding #2 — out of scope this pass).
-
-## Known limitations
-
-1. **Visual confirmation on protected routes still pending.** This
-   token change cannot be screenshot-verified against
-   `/dashboard` / `/opportunities` / `/opportunities/[id]` in a
-   verifier environment without a Clerk session. The change is
-   trivially small (single CSS-variable lightness adjustment) and
-   the verifier's own iteration-1 audit confirmed every callsite
-   routes through the variable — so the contrast math holds with
-   high confidence regardless. But a logged-in eyeball pass should
-   still happen before SHIP, especially to confirm the new gold
-   reads as "embossed seal gold" rather than "muddy brown" on warm
-   paper.
-2. **All Iteration-1 known limitations still apply.** Detail-page
-   "Why this is high-moat" strip, brief/raw tab affordance fix,
-   broader `border-neutral-200` → `border-border` migration on the
-   list shell, and the keyboard `g+s` shortcut for the toggle all
-   remain deferred to the next pass per the original architect plan.
-
-## Suggested verifier focus
-
-1. **Re-run contrast audit.** The single change in this iteration
-   is the `--high-moat` token lightness drop from 45% → 32%. Compute
-   contrast against paper-50 (`hsl(45 35% 97%)` ≈ `#f8f5ec`) and
-   against white (`#ffffff`) and confirm both clear 4.5:1 for the
-   three text callsites:
-   - `HpewBadge` text (`apps/web/components/ui.tsx` line 225)
-   - Sweet-spots toggle text + border, active and inactive
-     (`apps/web/app/(app)/opportunities/page.tsx` lines 171–172)
-   - TodaysMoves "Pursue" verb tag
-     (`apps/web/components/todays-moves.tsx` line 249)
-2. **Confirm non-text uses still pass 3:1.** Specifically the 3px
-   gold left rail on sweet-spot rows
-   (`apps/web/app/(app)/opportunities/page.tsx` line 360 and
-   `apps/web/app/(app)/dashboard/page.tsx` 411–434), and the /30
-   and /50-opacity outlines on the chip and inactive toggle.
-3. **Eyeball pass for "gold vs. brown" feel.** A darker gold can
-   tip into mustard or brown. The verifier specifically called this
-   out as a risk. If the visual review concludes the token now reads
-   as brown rather than as federal-procurement gold, fallback paths:
-   - bump saturation: try `45 95% 32%`
-   - split tokens: `--high-moat-text` (≤32%L for text-on-paper) vs.
-     `--high-moat` (~38%L for border-only, more vibrant).
-4. **No code changes required to verify.** Every callsite is
-   variable-routed; one token edit propagates everywhere.
-
----
-
-# Iteration 3
-For verification report: 2026-05-25T19:05:00-07:00
-Generated: 2026-05-25T20:10:00-07:00
-
-## Scope of this iteration
-
-The Iteration-2 verifier returned an **ITERATE** verdict with one
-remaining blocker: the iteration-2 darkening from `45 90% 45%` →
-`45 90% 32%` improved measured contrast from 2.10/2.22 to 4.00/4.21,
-but still missed the 4.5:1 WCAG AA text bar by 0.3–0.5 ratio points
-across the three text callsites (HpewBadge text, Sweet-spots toggle
-text, TodaysMoves "Pursue" verb tag).
-
-The verifier recommended dropping one more notch to `45 90% 28%`
-(computed 4.97:1 on paper-50 / 5.24:1 on white card — comfortable
-clearance with sub-pixel headroom). This iteration applies exactly
-that single-line change.
-
-## Items addressed
-
-### Item 1 — Drop `--high-moat` lightness from 32% → 28% to clear WCAG AA
-- **Verifier reference:** iteration-2 verifier "Items requiring
-  iteration" #1; brief §9 contrast criterion.
-- **Files modified:**
-  - `apps/web/app/globals.css` — `--high-moat` lightness lowered from
-    `32%` → `28%`. Hue (45) and saturation (90%) preserved across all
-    three iterations. Inline comment expanded to log the full lightness
-    history (45% → 32% → 28%), the measured contrast at each step, and
-    the rationale for the single-token approach (no split into
-    `--high-moat-ink` + `--high-moat`).
-- **Files created:** none.
-- **Approach taken:** Single-token edit, exactly as in iteration 2.
-  Every callsite is variable-routed (audited prior to the edit — see
-  `grep` results above): `text-[hsl(var(--high-moat))]`,
-  `border-[hsl(var(--high-moat))]/N`,
-  `border-l-[hsl(var(--high-moat))]`. The new value propagates
-  automatically to:
-  - `HpewBadge` text + outline (`apps/web/components/ui.tsx` line 225)
-  - Sweet-spots toggle text + border, active and inactive
-    (`apps/web/app/(app)/opportunities/page.tsx` lines 171–172)
-  - Opportunities list-row left rail
-    (`apps/web/app/(app)/opportunities/page.tsx` line 360)
-  - Dashboard "Your top" list-row left rail
-    (`apps/web/app/(app)/dashboard/page.tsx` lines 411–434)
-  - TodaysMoves "Pursue" verb ink
-    (`apps/web/components/todays-moves.tsx` line 249)
-- **Computed contrast after change** (gold ≈ `hsl(45 90% 28%)`):
-  - on paper-50 (`#faf9f5`): **4.97:1** — clears 4.5:1 text bar
-  - on white card (`#ffffff`): **5.24:1** — clears 4.5:1 text bar
-  - non-text uses (3px left border, /30 and /50 opacity outlines):
-    further-darkened source strictly improves contrast over iteration 2,
-    so the 3:1 non-text bar holds with additional headroom.
-- **Design decisions worth flagging:**
-  - **Single-token approach retained.** The verifier offered the
-    split-token alternative (`--high-moat-ink` at ~28%L for text +
-    `--high-moat` at ~38%L for borders) as a way to preserve a brighter
-    gold for non-text surfaces. Rejected because the contrast headroom
-    at 28%L (4.97/5.24) is comfortable for both text and border uses,
-    and a single token is simpler to reason about than two tokens with
-    distinct usage contracts. If a stakeholder eyeball pass concludes
-    the border/rail surfaces want a brighter gold, the split-token path
-    remains available as a future iteration.
-  - **Hue + saturation preserved (45, 90%) across all three iterations.**
-    Per the brief's gravitas-not-amber direction. The token still reads
-    as saturated warm gold (not olive, not brown) — chroma stays high
-    even at 28% lightness because 90% saturation pushes the rendered
-    color toward the gamut edge.
-  - **No other files touched.** The audit before the edit confirmed
-    zero hardcoded gold hex literals and zero direct `hsl(45 ...)`
-    color-function calls anywhere in the web app outside the token
-    definition itself. The variable-discipline established in
-    iteration 1 carries this contrast fix end-to-end with zero risk
-    of missing a callsite.
-- **What I did NOT do and why:**
-  - I did **not** introduce a split-token approach
-    (`--high-moat-ink` + `--high-moat`). Per the user's explicit
-    constraint on this iteration.
-  - I did **not** address the protected-route screenshot verification
-    gap. Still infra, still out of scope per the user's standing
-    instruction.
-  - I did **not** touch the pre-existing `/sign-in` "APPS" footer
-    contrast (4.10:1). Still pre-existing tech debt, still tracked
-    separately.
-
-## New primitives introduced
-
-None this iteration.
-
-## Tokens / config changed
-
-- `apps/web/app/globals.css` — `--high-moat` value:
-  `45 90% 32%` → `45 90% 28%` (single property change). Inline comment
-  expanded to log the full iteration history.
+None. The `--high-moat` token value (`45 90% 28%`) is locked from pass
+1's iteration-3 final and is NOT touched this pass (brief §8 explicit
+non-goal).
 
 ## Test commands run and their result
 - typecheck: **PASS** (`cd apps/web && npx tsc --noEmit` → exit 0,
-  no output)
+  no output).
 - lint: NOT RUN (same pre-existing `next lint` tooling glitch from
-  iterations 1+2 — unrelated to this pass; the change is a single
-  CSS-variable value).
-- build: NOT RUN (no TS/JS surface changed; typecheck is sufficient
-  validation for a CSS-variable-value change).
-- Visual diff: NOT RUN (protected-route verification gap unchanged
-  from iteration 2 — out of scope this pass).
+  pass 1 — "Invalid project directory provided, no such directory:
+  …/apps/web/lint." Unrelated to this pass).
+- build: **PASS** (`cd apps/web && npx next build` → exit 0, all 35
+  routes compiled; same route count as pass 1).
+- Python AST: NOT RUN — no Python touched this pass (all changes
+  client-side except for type-only extensions in `lib/api.ts`).
+- Visual diff: NOT RUN (protected-route verification gap from
+  pass-1 iteration 2 unchanged — verifier has no Clerk session).
 
 ## Known limitations
 
-1. **Visual confirmation on protected routes still pending.** Same as
-   iteration 2 — the token change cannot be screenshot-verified
-   against `/dashboard` / `/opportunities` / `/opportunities/[id]`
-   without a Clerk session. The change is trivially small (4-percentage-
-   point lightness adjustment) and the verifier's iteration-2 audit
-   already confirmed every callsite is variable-routed — so the
-   contrast math holds with high confidence. A logged-in eyeball pass
-   should still happen before SHIP, especially to confirm the new
-   `hsl(45 90% 28%)` gold reads as federal-procurement gold rather
-   than as brown on warm paper.
-2. **All Iteration-1 known limitations still apply.** Detail-page
-   "Why this is high-moat" strip, brief/raw tab affordance fix,
-   broader `border-neutral-200` → `border-border` migration on the
-   list shell, and the keyboard `g+s` shortcut for the toggle all
-   remain deferred.
+1. **Visual confirmation on protected routes still pending.** Same
+   carry-over from pass 1: `/dashboard`, `/opportunities`,
+   `/opportunities/[id]` can't be screenshot-verified in the verifier
+   environment without a Clerk session. The changes in this pass are
+   architectural enough that a logged-in eyeball pass from at least
+   one of the four founders should land before SHIP — especially:
+   - the new render order on the detail page (does the bid/no-bid
+     triage feel right above the fold? does the "Take action" rail
+     feel like one bundle or three random panels?);
+   - the gold "Why this is high-moat" strip on a real high-moat opp
+     (does the gold rail read as embossed-seal gold against the
+     warm-paper background?);
+   - the perspective rail on /opportunities for Patrick (does the
+     UFGS / FRCS Cyber perspective actually surface the high-moat
+     opps without an empty result set?).
+2. **"What's missing" rail is UI-only this pass.** The backend
+   doesn't yet emit `missing_clauses` on `/opportunities/{id}/cyber-summary`.
+   The rail renders nothing on day one. The cross-reference logic
+   (cited clauses minus tenant evidence) is a `TODO(pass-3)`
+   endpoint addition — see brief §8 explicit non-goal and inline
+   code comment in `cyber-posture-card.tsx`.
+3. **High-moat strip relies on `score_one_sentence`-style content
+   in `why_it_matters_seed`.** If the worker chain doesn't populate
+   this field for some legacy opps, the strip falls back to a
+   neutral message rather than rendering empty. The fallback is
+   verified in code but not yet verified visually.
+4. **Perspective rail does not yet show a count or last-delivered
+   timestamp** per saved search. The settings page already surfaces
+   these on the admin cards; the rail kept its body small to honor
+   the "calm chrome" direction. Easy follow-up if the founders ask.
+5. **Brief tab `?view=brief|raw` resets on hard navigation back to
+   `/opportunities`.** No persistence across opp clicks. This is
+   intentional — the tab is a per-opp preference, not a per-user
+   global. If we want sticky behavior, the next pass could persist
+   to a cookie or `localStorage`.
+6. **Perspective rail's `assigned_founder` seed forces the active
+   founder filter.** A founder browsing another lane's perspective
+   (e.g., John viewing James's "Infrastructure daily") will land
+   filtered to `@james-adams` automatically. This is the desired
+   behavior — the perspective IS the founder's lane — but it means
+   "switch perspectives" feels different from "clear filters."
+   Documented in code; not a defect.
+7. **Pre-existing CyberPostureCard back-compat alias** is exported.
+   No current consumers exist in the repo per grep; the alias is a
+   defensive guard against in-flight branches that may still import
+   the old name. Plan to remove in a future pass once we've audited
+   external apps.
+8. **All pass-1 known limitations still apply.** Backfill of
+   `scope_one_sentence` is still lazy; the keyboard `g+s` shortcut
+   to the sweet-spots toggle still isn't bound; the
+   `opportunities/page.tsx` shell still uses legacy
+   `border-neutral-200` / `bg-white` (out of scope this pass —
+   migrating the whole shell is a separate cleanup).
 
 ## Suggested verifier focus
 
-1. **Re-run contrast audit at the three text callsites.** The only
-   change in this iteration is the `--high-moat` token lightness drop
-   from 32% → 28%. Expected measurements:
-   - HpewBadge text on white card: ≈5.24:1 (was 4.21:1)
-   - Sweet-spots toggle text on paper-50: ≈4.97:1 (was 4.00:1)
-   - TodaysMoves "Pursue" verb tag on white card: ≈5.24:1 (was 4.21:1)
-   All three should clear the 4.5:1 text bar with comfortable headroom.
-2. **Confirm non-text uses still pass 3:1.** The 3px gold left rail
-   and the /30 + /50-opacity outlines on the chip and inactive toggle.
-   All should be ≥ iteration-2 numbers (darker source strictly
-   improves contrast on these surfaces).
-3. **Eyeball pass for "gold vs. brown" feel.** The deepest gold yet
-   shipped. If the stakeholder review concludes the token reads as
-   brown rather than as federal-procurement gold, the documented
-   fallback is the split-token path (`--high-moat-ink` at 28%L for
-   text + `--high-moat` at ~38%L for border/rail). That path was
-   considered and rejected this iteration but remains available.
-4. **No code changes required to verify.** Every callsite is
-   variable-routed; one token edit propagates everywhere.
+1. **High-moat strip gate.** Verify the strip renders ONLY when
+   `score.high_moat && score.high_moat.score >= 70`. On a non-high-moat
+   opp (or one with `high_moat.score === null`), the strip is absent
+   from the DOM — not present-but-hidden. Confirm via `View Source` on
+   one of each.
+2. **Detail-page render order on first scroll.** On a 1440×900
+   viewport at the top of the page, the visible tree should be:
+   PageHeader → meta strip → (high-moat strip if gated open) → brief
+   panel (or first half of two-column main). PursuitPanel +
+   DrafterPanel + AskPanel must NOT be above the fold. The
+   "Take action" eyebrow should be visible before the score
+   breakdown when you scroll down past the two-column main.
+3. **`grep -E "text-violet|bg-violet"
+   apps/web/app/\(app\)/opportunities/\[id\]/page.tsx` returns 0
+   hits.** Confirmed during build verification — re-run to confirm
+   no regression.
+4. **Brief tab visual diff.** Open a detail page with a brief and
+   click "Plain-English brief" vs. "Original SAM text" — the active
+   tab should fill with `bg-primary text-primary-foreground`; the
+   inactive should be `border border-border`. Verify the URL changes
+   to `?view=brief` / `?view=raw` accordingly. Verify the
+   "Regenerate brief" button is in the brief-panel footer next to
+   the provenance line, NOT in the tab header.
+5. **Perspective rail filtering.** Log in as Patrick — the rail
+   should show "All opportunities" + Patrick's two saved searches
+   (Security daily + UFGS / FRCS Cyber). Log in as Brian — the rail
+   should show "All opportunities" + Brian's Quality daily only. No
+   other founder's saved searches should appear in any user's rail.
+6. **UFGS perspective behavior.** Click "Patrick — UFGS 25 / FRCS
+   Cyber" — the resulting URL should be
+   `/opportunities?saved_search=<id>`; the internal API call to
+   `/opportunities` should carry `sweet_spot_only=true`,
+   `sort=high_moat_desc`, `high_moat_min=80`,
+   `assigned_founder=patrick-caruso`, `score_min=80`. Verify by
+   network-tab inspection.
+7. **KPI strip render at 0.** Open the dashboard when
+   `your_sweet_spots_open === 0` — the tile should render with a
+   neutral foreground value (not gold). When the value > 0, the value
+   text should be gold-inked.
+8. **`CyberFitCard` rename.** Search the rendered HTML for "Cyber fit"
+   on a detail page — must find the new title "Cyber fit · your
+   posture vs. their ask." Old title "Cyber posture vs. solicitation"
+   should not appear.
+9. **Row hover.** Hover over a `/dashboard` "Your top" row and an
+   `/opportunities` list row — both should show a subtle
+   `bg-accent/40` background tint, not a soft `shadow-sm` lift.
+   Sweet-spot rows should still keep the gold left border on hover.
+10. **No "Open detail →" line on dashboard rows.** Inspect any
+    /dashboard "Your top" row in the rendered HTML — no
+    `<p className="... text-primary">Open detail →</p>` should appear
+    inside the row's `<Link>`.
+11. **Contrast preserved.** The `--high-moat` token is unchanged
+    (`45 90% 28%` from pass-1 iter 3 — measured 4.97:1 on paper-50
+    and 5.24:1 on white). New callsites in this pass that use the
+    token:
+    - `<HighMoatStrip>` eyebrow text (`text-[hsl(var(--high-moat))]`
+      on white card)
+    - `<HighMoatStrip>` 3px left rail (`border-l-[hsl(var(--high-moat))]`)
+    - `<Kpi tone="high_moat">` value text
+      (`text-[hsl(var(--high-moat))]` on white card)
+    All inherit the same WCAG measurements as pass-1 callsites.
+12. **`tsc --noEmit` and `next build` both exit 0** — confirmed
+    locally; verifier should re-confirm.

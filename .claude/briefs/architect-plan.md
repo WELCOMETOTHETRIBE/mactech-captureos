@@ -1,167 +1,280 @@
 # Architect Plan
-For brief: 2026-05-25T09:29:00-07:00
-Iteration: 1
+For brief: 2026-05-25T11:36:30-07:00
+Iteration: 1 (pass 2 of overall UX program; pass-1 plan snapshotted)
 
 ## Items I will address this pass
 
-Five leverage points from §7, chosen for compounding effect on the daily question
-("for me, today, what should I open?"). Brief §11 answers govern: high-moat is
-universal across founders; gold token is `45 90% 45%` left-border + corner marker
-only (never fill); brief auto-gen at score ≥ 60 lands in the worker chain; saved
-searches stay founder-private; NO feedback / thumbs affordance.
+All five leverage points from §7 of the pass-2 brief. They are independent
+enough to ship in one diff and small enough that consolidating them avoids
+the rebase churn of staging across two passes. Section 11 of the brief
+gave explicit human decisions on the open questions; this plan honors
+each one exactly.
 
-1. §7.1 — Wire the high-moat track end-to-end into the discovery UI
-2. §7.5 — Add a sweet-spot move to "Today's moves"
-3. §7.8 — Sweet-spot row treatment on the opportunities list AND dashboard "Your top"
-4. §7.2 — Auto-generate the plain-English brief on every score ≥ 60 and promote
-   `scope_one_sentence` to the primary list-row title (worker chain change)
-5. §7.7 — Migrate `CyberPostureCard` to the token system (drop the legacy
-   `bg-emerald-50` / `bg-red-50` / `bg-amber-50` literals)
-
-These five compose: §7.1 + §7.8 + §7.5 ship the sweet-spot signal across all
-three primary discovery surfaces (list / dashboard top / today's moves) with one
-consistent gold accent. §7.2 makes every list row scannable in plain English in
-the same pass. §7.7 stops the one card that sits inside the new strip from
-looking visually off-key against its token-driven neighbors.
+1. §7.1 — Restructure opportunity-detail render order around bid/no-bid
+   AND add the "Why this is high-moat" strip (gated `score.high_moat &&
+   score.high_moat.score >= 70` per §11 Q1).
+2. §7.2 — Perspective left-rail on /opportunities. Founder-private filter
+   `owner_founder_slug == me.founder.slug || owner_founder_slug == null`.
+   Empty rail renders "All opportunities" only (per §11 Q3 — no CTA).
+3. §7.3 — Brief / Raw tab affordance moves from anchor-`:target` to a
+   real `?view=brief|raw` search param. BriefList `violet` tone routes
+   to `text-muted-foreground` (per §11 Q2 — neutral, not pillar-coded).
+   Regenerate-brief affordance moves into the brief panel footer next to
+   the provenance line.
+4. §7.4 — KPI strip from 4 to 3 tiles. "Sweet spots today" leads (gold
+   ink only when count > 0; neutral when 0 — gravitas, not crying wolf).
+   "High-fit untracked" stays slot 2. "Deadlines ≤7d" stays slot 3.
+   "Active pursuits" + "Drafts to review" demoted to a single text line
+   under TodaysMoves ("Your work: N active pursuits · M drafts to review").
+5. §7.5 — `CyberPostureCard` → exported symbol renamed to `CyberFitCard`
+   with visible title "Cyber fit · your posture vs. their ask". File
+   path stays `components/cyber-posture-card.tsx` (per §11 Q4). "What's
+   missing" sub-rail surface added — renders only when
+   `summary.missing_clauses?.length > 0` (backend returns empty list
+   for now; the cross-reference logic is a pass-3 backend addition,
+   marked as TODO). Drop the "Open detail →" verbal CTA on dashboard
+   "Your top" rows. Both dashboard + opportunities rows swap
+   `hover:shadow-sm` for `hover:bg-accent/40`.
 
 ## For each item
 
-### 1. High-moat track in the discovery UI (brief §7.1)
-- **Files I will touch:**
-  - `apps/web/lib/api.ts` — add `high_moat_score` and `is_sweet_spot` to
-    `OpportunityListItem` (already exposed by the API; type just needs to
-    catch up).
-  - `apps/web/tailwind.config.ts` — register the `high-moat` color from the
-    new CSS var.
-  - `apps/web/app/globals.css` — add `--high-moat: 45 90% 45%` token.
-  - `apps/web/components/ui.tsx` — add `<HpewBadge>` primitive (gold pill
-    "HPEW"). Universal — not pillar-gated per Q1.
-  - `apps/web/app/(app)/opportunities/page.tsx` — add a fourth score-bucket
-    pill "Sweet spots" that issues `?sweet_spot_only=true&sort=high_moat_desc`
-    via URL params. Apply sweet-spot row treatment (gold left border + HpewBadge).
-- **Approach:** Pure URL-driven toggle (no client state). Server reads
-  `sp.sweet_spot_only === "true"` and `sp.sort`, forwards them to the API.
-  Row treatment is a single conditional className on the `<Link>` plus an
-  inline HpewBadge in the chip row.
-- **New primitives I will create:** `HpewBadge` in `ui.tsx`. Uses the
-  `--high-moat` token via `text-[hsl(var(--high-moat))]` with a thin gold
-  border — keeps the token contract intact.
-- **Risk of regression:** Minimal — additive on a typed API column. The
-  `?sort=high_moat_desc` was already accepted by the backend; the only
-  change is exposing it in `SORT_LABELS` so it appears in the More-filters
-  drawer too.
+### 1. Detail-page restructure + high-moat strip (brief §7.1)
 
-### 2. Sweet-spot Move in Today's moves (brief §7.5)
 - **Files I will touch:**
-  - `apps/api/src/mactech_api/routes/me.py` — add
-    `your_sweet_spots_open` int field to `DashboardKpis`. Count is
-    "high-fit opps assigned to me where `high_moat_flags.is_high_probability_easy_win`
-    = true AND not in pipeline."
-  - `apps/web/lib/api.ts` — extend `DashboardKpis` with `your_sweet_spots_open`.
-  - `apps/web/components/todays-moves.tsx` — add a new slot-1 Move
-    ("Pursue: N sweet-spot…") that uses the gold tone, links to
-    `/opportunities?sweet_spot_only=true&assigned_founder={slug}&sort=high_moat_desc`.
-  - Extend the existing `Move.tone` field to include `"high_moat"` (gold).
-- **Approach:** The Move type currently supports `"amber" | "brand" | "neutral"`.
-  Extend to add `"high_moat"`. Render path: gold `text-[hsl(var(--high-moat))]`
-  on the verb label. Per brief §11 Q3, no gold fill — only the small uppercase
-  verb tag picks up the gold ink.
-- **Risk of regression:** Tiny — new optional KPI defaulted to 0 in the API,
-  consumer treats undefined as 0 via `?? 0` guard.
+  - `apps/web/lib/api.ts` — add `HighMoatBlock` type with all 8 fields
+    the API returns (`score`, `breakdown`, `is_high_probability_easy_win`,
+    `clause_hits`, `clearance_hits`, `role_hits`, `top_clearance`,
+    `why_it_matters_seed`). Extend `ScoreBlock` with
+    `high_moat: HighMoatBlock | null` (the API already returns this —
+    types just need to catch up, per brief §7.1 evidence).
+  - `apps/web/app/(app)/opportunities/[id]/page.tsx` — new render order:
+    PageHeader → meta strip → `<HighMoatStrip>` (conditional) →
+    two-column main (brief left, cyber/incumbent/cap right) → "Take
+    action on this opportunity" section header wrapping PursuitPanel +
+    DrafterPanel + AskPanel as three siblings (per §11 Q5 — no
+    accordion, all three expanded) → score breakdown.
+  - New inline component `<HighMoatStrip>` rendered when
+    `score.high_moat && score.high_moat.score >= 70`. Composition:
+    same `rounded-md border border-border bg-card p-5` chrome as the
+    meta strip, plus a 3px gold left border
+    (`border-l-[3px] border-l-[hsl(var(--high-moat))]`). Inside: a
+    small `<HpewBadge>` in the top-left when
+    `is_high_probability_easy_win`. Left half is `why_it_matters_seed`
+    (15px leading-snug italic-serif to echo the page H1). Right half
+    is a 3-column meta grid: "Clauses cited" (clause_hits as neutral
+    Badges wrapped in ExplainLink for `clause:UFGS 25 05 11` etc.),
+    "Top clearance" (top_clearance value, only if `!= "NONE"`),
+    "Cleared roles needed" (role_hits as neutral Badges wrapped in
+    ExplainLink for `role:ISSM` etc.). No gold fill, no gold tint
+    background — left-border + ink only, matching the pass-1 token
+    contract.
 
-### 3. Sweet-spot row treatment everywhere (brief §7.8)
-- **Files I will touch:**
-  - `apps/web/app/(app)/dashboard/page.tsx` — Your-top list rendering.
-  - `apps/web/app/(app)/opportunities/page.tsx` — list row rendering.
-  - `apps/web/lib/api.ts` — extend `TopOpportunity` with `high_moat_score` +
-    `is_sweet_spot`.
-  - `apps/api/src/mactech_api/routes/me.py` — `TopOpportunity` Pydantic model
-    grows the same two fields; SELECT widens.
-- **Approach:** Row treatment is a 3px gold left border + an HpewBadge in the
-  chip row. Both pages get the same conditional. To honor "never as fill"
-  (Q3), I use `border-l-[3px] border-l-[hsl(var(--high-moat))]` — no `bg-`
-  token use.
-- **Risk of regression:** Minimal. Both list templates already exist with the
-  same `border border-border bg-card` shell; we just override `border-l`.
+- **Approach:** All render-order changes happen inside the same
+  `<div className="min-w-0 space-y-6">` wrapper that already exists.
+  PursuitPanel / DrafterPanel / AskPanel internals stay untouched —
+  only their position changes. The "Take action" wrapper is a single
+  `<section>` with a quiet `text-xs uppercase tracking-wider
+  text-muted-foreground` eyebrow + `border-t border-border pt-6` to
+  read as one bundle.
 
-### 4. Auto-brief on score ≥ 60 + promote `scope_one_sentence` to primary title (brief §7.2)
-- **Files I will touch:**
-  - `apps/workers/src/mactech_workers/tasks/score.py` — after a successful
-    score upsert with `result.score >= 60` AND no existing `OpportunityBrief`
-    row, fan out an `extract_structured_brief` call and persist the row.
-    Add a `_maybe_generate_brief()` helper modeled on
-    `_maybe_fetch_interested_vendors()`. Gate on `ANTHROPIC_API_KEY` and on
-    presence of `opp.description_text`. Use the same Haiku-tier client
-    pattern (the brief module already takes an `AnthropicLLMClient`).
-  - `apps/api/src/mactech_api/routes/opportunities.py` — extend `OpportunityListItem`
-    Pydantic model with `scope_one_sentence: str | None`; widen the SELECT to
-    LEFT JOIN `opportunity_briefs ob` and project `ob.scope_one_sentence`.
-  - `apps/api/src/mactech_api/routes/me.py` — same widening for
-    `TopOpportunity` so the dashboard's top-5 inherits the same scope sentence.
-  - `apps/web/lib/api.ts` — add `scope_one_sentence: string | null` on both
-    `OpportunityListItem` and `TopOpportunity`.
-  - `apps/web/app/(app)/opportunities/page.tsx` and `dashboard/page.tsx` —
-    when `opp.scope_one_sentence` is present, render it as the `<h3>` title
-    (15px/snug, two-line clamp) and demote the raw SAM `opp.title` to a muted
-    second line. Preserve the raw title in `title=` for hover provenance.
-- **Approach:** Worker side mirrors the existing
-  `_maybe_fetch_interested_vendors` pattern: short-circuit if Anthropic key
-  missing, run inside the same scoring transaction, swallow exceptions so a
-  single brief failure can't tank the batch. Description-truncation budget
-  already baked into `extract_structured_brief` (`MAX_DESCRIPTION_CHARS = 12000`).
-- **Risk of regression:** Worker now does one extra Anthropic call per
-  high-fit opp at the cost projected in §11 Q2 (~$0.20/day). The per-batch
-  ceiling is bounded by `DEFAULT_BATCH_SIZE=25`. 25 × ~6s ≈ 2.5 min upper
-  bound for Haiku briefs, well within the 18-min beat expiry.
+- **New primitives I will create:** `<HighMoatStrip>` and the
+  "Take action" section wrapper live inline in `[id]/page.tsx` — both
+  are single-use compositions of existing primitives (`HpewBadge`,
+  `Badge`, `ExplainLink`, `AnnotatedProse`). No new shared primitive
+  warranted.
 
-### 5. Migrate `CyberPostureCard` to token system (brief §7.7)
+- **Risk of regression:** Medium. The PursuitPanel / DrafterPanel /
+  AskPanel are large existing components; moving them is the
+  highest-blast-radius change in this pass. Mitigation: their
+  internals don't change, only their wrapping `<section>` and order.
+  Build verifies render.
+
+### 2. Perspective left-rail on /opportunities (brief §7.2)
+
 - **Files I will touch:**
-  - `apps/web/components/cyber-posture-card.tsx`.
-- **Approach:** Replace
-  - `bg-emerald-50 border-emerald-200 text-emerald-900/800` → `bg-success/10
-    border-success/20 text-success`
-  - `bg-red-50 border-red-200 text-red-900/800` → `bg-destructive/10
-    border-destructive/20 text-destructive`
-  - `bg-amber-50 border-amber-200 text-amber-900/800` → `bg-warning/10
-    border-warning/20 text-warning`
-  - `text-neutral-500/600` → `text-muted-foreground`
-  - `text-brand-700` → `text-primary`
-  Brief notes a "rename to `<CyberFitCard>`" and "what's missing" sub-rail
-  in §7.7 — I'm deferring those (see "Deferred" below) and keeping the file
-  name + API intact to limit blast radius. Just the tone migration.
-- **Risk of regression:** Pure className substitution; tokens already have
-  HSL values defined.
+  - `apps/web/app/(app)/opportunities/page.tsx` — replace the existing
+    `<aside>` filter sidebar contents with a two-section rail:
+    TOP — "Perspectives" list (All opportunities + founder-private
+    saved searches). BOTTOM — "Refine this view" collapsible
+    `<details>` wrapping the existing facet filters (set-aside /
+    notice-type / assigned-founder + the nested NAICS / sort under
+    "More filters"). `<details open>` only when no perspective is
+    active (i.e., `sp.saved_search` is unset).
+  - Server-side composition for `?saved_search={id}`: the page
+    component fetches `/me/settings` alongside the existing
+    `/opportunities` fetch, looks up the saved search by id (filtered
+    by `owner_founder_slug == me.founder.slug || owner_founder_slug
+    == null`), and translates its filters into the existing query
+    params: `assigned_founder=<owner_slug>`,
+    `score_min=<alert_threshold>`. For the seeded high-moat saved
+    search ("Patrick — UFGS 25 / FRCS Cyber"), the composition
+    additionally sets `sweet_spot_only=true`, `sort=high_moat_desc`,
+    `high_moat_min=<alert_threshold>`. The high-moat detection key:
+    search name contains "UFGS" or "FRCS" or "high-moat"
+    (case-insensitive). This is the minimal-cost heuristic that doesn't
+    require an API schema change.
+
+- **Approach:** Pure URL-driven (no client state). The active
+  perspective is highlighted via the same
+  `border-l-2 border-primary bg-primary/10` pattern `SidebarNav`
+  already uses. The page subtitle changes to reflect the active
+  perspective ("Perspective: <name>") above the score-bucket strip.
+
+- **New primitives I will create:** Inline `<PerspectiveRail>` and
+  `<PerspectiveRailItem>` components in `opportunities/page.tsx`.
+  Single-use; doesn't earn a shared primitive.
+
+- **Risk of regression:** Low-medium. The aside contents are replaced
+  but the facet filters still render (just collapsed under "Refine
+  this view"). All existing URL params still resolve. The new
+  composition runs server-side at request time — no client work, no
+  RSC boundary changes.
+
+### 3. Brief tab affordance + BriefList token discipline (brief §7.3)
+
+- **Files I will touch:**
+  - `apps/web/app/(app)/opportunities/[id]/page.tsx`:
+    - Replace anchor-tabs (`#brief-{id}` / `#raw-{id}`) with
+      `?view=brief|raw` search-param tabs. Active tab gets
+      `bg-primary text-primary-foreground` (matches the score-bucket
+      pills); inactive gets `border border-border text-foreground
+      hover:border-foreground/40`. Default: `brief` when a brief row
+      exists, `raw` when null.
+    - The `searchParams` Promise grows `view?: "brief" | "raw"`.
+    - Inside `<BriefAndDescriptionPanel>`, only the active panel
+      renders — the `:target` trick goes away.
+    - "Regenerate brief" moves from the tab-header right side to the
+      brief-panel footer, sitting next to the `Auto-generated by …`
+      provenance line.
+    - `BriefList`'s `violet` tone resolves to `text-muted-foreground`
+      (label) and `bg-muted-foreground` (dot). The other three tones
+      (`brand`, `neutral`, `amber`) stay routed through their existing
+      tokens.
+
+- **Approach:** Search-param tabs are server-component-friendly with
+  no client state. Each tab is a `<Link>` that copies the existing
+  search params (including `explain` and `saved_search`) and sets
+  `view`. Hover/active classNames mirror the score-bucket pills on
+  the list page so the visual language reads as "same kind of
+  segmented control."
+
+- **New primitives I will create:** None — both changes are local
+  refactors inside the existing panel function.
+
+- **Risk of regression:** Low. The router/route shape doesn't change.
+  Only the inner JSX of `<BriefAndDescriptionPanel>` and the
+  `BriefList` className map.
+
+### 4. KPI strip 4 → 3 + "Sweet spots today" leading (brief §7.4)
+
+- **Files I will touch:**
+  - `apps/web/app/(app)/dashboard/page.tsx` — KPI grid changes from
+    `md:grid-cols-4` to `md:grid-cols-3`. First tile becomes "Sweet
+    spots today" (value = `kpis.your_sweet_spots_open`, hint =
+    "high-probability easy wins in your lane, not yet in pipeline",
+    href =
+    `/opportunities?sweet_spot_only=true&sort=high_moat_desc&assigned_founder={slug}`,
+    tone = `"high_moat"` when value > 0 else `"neutral"`). Tile
+    renders even at 0 — zero is signal too on a triage dashboard.
+    "High-fit untracked" + "Deadlines this week" stay (slots 2 and 3).
+    Active pursuits + Drafts to review move into a one-line "Your
+    work" rail under TodaysMoves.
+  - `apps/web/components/ui.tsx` — extend the `Kpi` component's `tone`
+    union to include `"high_moat"`. The high-moat tone routes
+    `text-[hsl(var(--high-moat))]` for the value text; hint label
+    stays muted-foreground. When count === 0, callers pass
+    `tone="neutral"` (the high-moat tone never auto-degrades inside
+    the primitive — gravitas is the caller's call).
+
+- **Approach:** Tile reorder + one new tone branch. The demoted "Your
+  work" line is a small text strip with two text links, sitting
+  directly under the `<TodaysMoves>` block.
+
+- **New primitives I will create:** None — extending an existing
+  primitive's `tone` union, not adding a new one.
+
+- **Risk of regression:** Low. The Kpi visual shape doesn't change;
+  only one new tone branch is added. The strip grid change from 4 to
+  3 columns is a Tailwind class swap.
+
+### 5. CyberFitCard rename + What's missing rail + dashboard row polish (brief §7.5)
+
+- **Files I will touch:**
+  - `apps/web/components/cyber-posture-card.tsx` — rename exported
+    symbol from `CyberPostureCard` → `CyberFitCard`. Visible card
+    title changes from "Cyber posture vs. solicitation" to "Cyber fit
+    · your posture vs. their ask". File path stays the same (per
+    §11 Q4). Add an optional "What's missing" sub-rail under the
+    sufficiency banner that renders only when
+    `summary.missing_clauses?.length > 0`. List label uses
+    `text-warning`; each clause is a neutral Badge wrapped in
+    ExplainLink to `clause:{name}`. Backend currently returns an
+    empty list; the surface lights up the day the API ships the
+    cross-reference. Mark with a `TODO(pass-3)` code comment.
+  - `apps/web/lib/api.ts` — add `missing_clauses?: string[]` to
+    `CyberSummaryOut`. Optional so the field is back-compat with the
+    current backend response (which doesn't include it).
+  - `apps/web/app/(app)/opportunities/[id]/page.tsx` — update the
+    import + JSX from `CyberPostureCard` to `CyberFitCard`.
+  - `apps/web/app/(app)/dashboard/page.tsx` — drop the `<p>Open detail
+    →</p>` line at the bottom of each "Your top" row (lines 478–480).
+    Swap `hover:shadow-sm` → `hover:bg-accent/40` on the non-sweet-spot
+    row class.
+  - `apps/web/app/(app)/opportunities/page.tsx` — same hover swap on
+    the non-sweet-spot row class (`hover:shadow-sm` →
+    `hover:bg-accent/40`).
+
+- **Approach:** Single-symbol rename across two files (component +
+  one consumer). The "What's missing" rail is purely additive UI;
+  backend returns empty for now so the surface only renders when
+  populated.
+
+- **New primitives I will create:** None — the rail surface is inline
+  in `cyber-posture-card.tsx` and is single-use.
+
+- **Risk of regression:** Low. The rename is purely internal — no
+  routing change, no API change. The rail's empty-state is "render
+  nothing," so the day-1 visual diff is zero on the cyber card
+  itself. Hover swap is a className change on two files. The "Open
+  detail →" drop is removing a paragraph — every row was already a
+  clickable `<Link>`, so functionality is preserved.
 
 ## Items I am deferring this pass
 
-- **§7.3 — Restructure opportunity-detail page around bid/no-bid.** Large
-  layout change, multiple panels, and the brief flags this as M-to-L effort.
-  This is the right thing to do but doing it in the same pass as the
-  high-moat strip + brief promotion makes the diff hard to review and
-  bisect if anything regresses. Pick it up next iteration; the high-moat
-  strip lands on the detail page next pass.
-- **§7.4 — Left-rail "perspectives" replacing the filter sidebar.** Big
-  IA shift; brief §11 Q4 confirms saved searches stay founder-private,
-  so the rail design has to address per-founder views. Worth its own
-  pass with screenshots to ground the conversation.
-- **§7.6 — Brief tab affordance + must-haves grid.** The brief tab fix is
-  small and tempting but it's coupled to §7.3 (the detail-page restructure).
-  Defer.
-- **§7.9 — Drop the "Open detail →" affordance.** Small polish; defer.
-- **§7.10 — KPI strip from 4 → 3 tiles.** Demoting "Active pursuits" is
-  reasonable but it changes the dashboard's vertical rhythm. Defer until
-  the §7.1 strip lands so we can re-photograph the page.
-- **§7.7 rename + "What's missing" sub-rail.** Doing the token migration
-  only this pass; the rename to `<CyberFitCard>` and the new actionable
-  sub-rail need an SPRS-vs-clauses delta that doesn't exist on the
-  current endpoint payload. Defer pending an API addition.
-
-Brief §11 Q5 explicitly says: defer the Feedback / thumbs-up affordance.
-Honored — no thumbs widget anywhere in this pass.
+- **Backend cross-reference logic for "What's missing"** — per brief
+  §8 explicit non-goal. The UI surface ships now; the backend
+  cross-reference (SPRS-vs-clauses gap detector) is a TODO(pass-3)
+  endpoint addition. Marked in code with a dated TODO.
+- **`g+s` keyboard shortcut to the Sweet-spots toggle** — pass-1
+  change log noted this as a natural follow-up; brief §8 says don't
+  add new global shortcuts this pass. Honored.
+- **Backfill of `scope_one_sentence`** — pass-1 known limitation;
+  lazy via re-score. Not in scope.
+- **Backend `saved_search: str` API param** — brief §7.2 explicitly
+  recommends Option A (server-side composition in the Next page)
+  over Option B (API param). Honored.
+- **Promote high-moat strip to its own page** — brief §8 explicit
+  non-goal. The strip stays inline.
+- **Feedback / thumbs widget** — brief §8 explicit non-goal. Phase 2.
+- **Dark mode / glass panels / animated KPIs** — brief §8 explicit
+  non-goals. Continued from pass 1.
+- **Token value re-tuning of `--high-moat`** — brief §8 explicit:
+  `45 90% 28%` is locked. Not touching.
 
 ## Open disagreements with the brief
 
-None. The brief's §11 answers fully resolve the open questions. Aesthetic
-direction (warm-paper + brand-teal + editorial-serif, gold for sweet spot,
-no glass, no dark mode, no decorative icons) is well-judged and consistent
-with the codebase's recent direction.
+None. The brief's §11 human answers fully resolve the open questions:
+
+- Q1 — threshold `score.high_moat.score >= 70` is unambiguous; it's
+  what the pass-1 architect plan already used and aligns with the
+  "Top fit" score bucket on the list page.
+- Q2 — `text-muted-foreground` is the cleaner of the two; the
+  pillar-coding alternative would have introduced semantic load the
+  layman BD lead has no way to decode without a legend.
+- Q3 — "All opportunities only" empty rail is consistent with the
+  settings page already owning the saved-search admin surface.
+- Q4 — symbol-only rename keeps the diff tight and respects any
+  external bookmarks to the file path.
+- Q5 — keeping all three Take-action panels expanded matches the
+  brief's "no accordion, no extra control surface" direction and
+  honors the original §7.1 proposal exactly.

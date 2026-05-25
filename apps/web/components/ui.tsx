@@ -135,17 +135,24 @@ export function Kpi({
   label: string;
   value: string | number;
   hint?: string;
-  tone?: "neutral" | "brand" | "amber" | "red";
+  /**
+   * "high_moat" routes the value ink through `--high-moat` (the
+   * federal-procurement gold token locked at `45 90% 28%`). Used by
+   * the dashboard's "Sweet spots today" tile when the count is > 0.
+   * Callers should pass `tone="neutral"` when count === 0 so the
+   * tile doesn't cry wolf when there's nothing to cry about.
+   */
+  tone?: "neutral" | "brand" | "amber" | "red" | "high_moat";
 }) {
   // Tone names stay back-compat for existing callers, but map to the
   // semantic token contract underneath: amber→warning, red→destructive,
-  // brand→primary. This is the §7.7 leverage point — same API, themable
-  // values.
+  // brand→primary, high_moat→--high-moat.
   const valueTones: Record<string, string> = {
     neutral: "text-foreground",
     brand: "text-primary",
     amber: "text-warning",
-    red: "text-destructive"
+    red: "text-destructive",
+    high_moat: "text-[hsl(var(--high-moat))]"
   };
   return (
     <div className="rounded-md border border-border bg-card p-5">

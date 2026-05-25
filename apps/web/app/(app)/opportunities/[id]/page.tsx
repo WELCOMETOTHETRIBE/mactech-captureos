@@ -11,24 +11,23 @@ import {
   type PursuitStage,
   type QuestionListResponse,
   type QuestionOut,
+  type ScoreBlock,
   type TermExplanationResponse
 } from "@/lib/api";
 import { createPursuit, deletePursuit, updatePursuit } from "@/lib/pursuits";
 import { deleteOpportunityQuestion } from "@/lib/ask";
 import { AskStreamingPanel } from "@/components/ask-streaming";
 import { AnnotatedProse } from "@/components/annotated-prose";
-import { CyberPostureCard } from "@/components/cyber-posture-card";
+import { CyberFitCard } from "@/components/cyber-posture-card";
 import { StreamingDraftButton } from "@/components/draft-streaming";
-import {
-  deleteOpportunityBrief,
-  generateOpportunityBrief
-} from "@/lib/brief";
+import { generateOpportunityBrief } from "@/lib/brief";
 import {
   BackLink,
   Badge,
   Button,
   Card,
   ExplainLink,
+  HpewBadge,
   LinkButton,
   NaicsBadge,
   NoticeTypeBadge,
@@ -89,10 +88,15 @@ export default async function OpportunityDetailPage({
   searchParams
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ explain?: string }>;
+  searchParams: Promise<{ explain?: string; view?: string }>;
 }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const explainSlug = sp.explain?.trim() || null;
+  // Brief / Raw tab is a search-param toggle (pass 2). Default: "brief"
+  // when present, "raw" when null (gives the user something to read
+  // immediately rather than an empty brief panel). Any other value
+  // falls through to the default — never throw.
+  const viewParam = sp.view === "brief" || sp.view === "raw" ? sp.view : null;
 
   let data: OpportunityDetail;
   try {
@@ -228,34 +232,29 @@ export default async function OpportunityDetailPage({
         </div>
       </section>
 
-      {/* Pursuit / pipeline status strip */}
-      <PursuitPanel
-        opportunityId={opp.id}
-        pursuit={pursuit}
-        meFounderSlug={me.founder?.slug ?? null}
-      />
+      {/* "Why this is high-moat" strip — gated to opps where the
+          parallel high-moat scorer returned >= 70 (per pass-2 brief
+          §11 Q1). Sits BELOW the meta strip and ABOVE the two-column
+          main so first-visit triage sees the decision evidence before
+          any do-work affordance. Falls back to render nothing when
+          the score is null or below threshold. */}
+      <HighMoatStrip score={data.score} />
 
-      {/* Sources Sought drafter strip */}
-      <DrafterPanel opportunityId={opp.id} drafts={drafts} noticeType={opp.notice_type} />
-
-      {/* Ask-Claude panel — quickest path from "what is this" to an answer */}
-      <AskPanel
-        opportunityId={opp.id}
-        questions={questions}
-        meFounderSlug={me.founder?.slug ?? null}
-      />
-
-      {/* Two-column main: description (with brief tab) left, incumbent + capability right */}
+      {/* Two-column main: description (with brief tab) left, incumbent +
+          capability right. Pre-decision evidence — brief + cyber-fit +
+          incumbent + capability — sits ABOVE the take-action rail
+          (pass-2 brief §7.1). */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <BriefAndDescriptionPanel
           opportunityId={opp.id}
           description={data.description}
           brief={brief}
           samResourceLinks={data.sam_resource_links}
+          view={viewParam}
         />
 
         <div className="space-y-4">
-          {cyberSummary && <CyberPostureCard summary={cyberSummary} />}
+          {cyberSummary && <CyberFitCard summary={cyberSummary} />}
           <Card title="Incumbent intelligence">
             {data.incumbent && data.incumbent.name ? (
               <>
@@ -326,6 +325,36 @@ export default async function OpportunityDetailPage({
           </Card>
         </div>
       </div>
+
+      {/* Take action — post-decision affordances wrapped under a quiet
+          section header (pass-2 brief §7.1 + §11 Q5 — all three panels
+          stay expanded, no accordion). PursuitPanel + DrafterPanel +
+          AskPanel internals unchanged; only their position relative to
+          the brief / cyber-fit / incumbent evidence above changes.
+          A user landing on a high-moat opp now sees the decision
+          evidence first; the do-work surface sits below it. */}
+      <section className="space-y-4 border-t border-border pt-6">
+        <header>
+          <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            Take action on this opportunity
+          </p>
+        </header>
+        <PursuitPanel
+          opportunityId={opp.id}
+          pursuit={pursuit}
+          meFounderSlug={me.founder?.slug ?? null}
+        />
+        <DrafterPanel
+          opportunityId={opp.id}
+          drafts={drafts}
+          noticeType={opp.notice_type}
+        />
+        <AskPanel
+          opportunityId={opp.id}
+          questions={questions}
+          meFounderSlug={me.founder?.slug ?? null}
+        />
+      </section>
 
       {/* Score + rationale — full-width */}
       {data.score ? (
@@ -462,6 +491,104 @@ function Meta({ label, value }: { label: string; value: React.ReactNode }) {
       <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</p>
       <p className="mt-0.5">{value}</p>
     </div>
+  );
+}
+
+/**
+ * HighMoatStrip — renders the "Why this is high-moat" evidence strip
+ * directly under the meta strip on the opportunity detail page. Gated
+ * to high-moat scores >= 70 per pass-2 brief §11 Q1. When the gate
+ * fails the component renders nothing — the strip is absent rather
+ * than present-but-empty.
+ *
+ * Visual contract per brief §6 + §11 Q3: 3px gold left border, no fill
+ * and no background tint. Left half is the Claude-seeded
+ * `why_it_matters_seed` (italic-serif to echo the page H1). Right half
+ * is a 3-column meta grid of clause / clearance / role evidence.
+ */
+function HighMoatStrip({ score }: { score: ScoreBlock | null }) {
+  if (!score || !score.high_moat) return null;
+  const hm = score.high_moat;
+  if (hm.score < 70) return null;
+
+  const hasClauses = hm.clause_hits.length > 0;
+  const hasClearance = hm.top_clearance && hm.top_clearance !== "NONE";
+  const hasRoles = hm.role_hits.length > 0;
+  const hasAnyMeta = hasClauses || hasClearance || hasRoles;
+
+  return (
+    <section
+      className="rounded-md border border-border border-l-[3px] border-l-[hsl(var(--high-moat))] bg-card p-5"
+      aria-label="Why this is high-moat"
+    >
+      <div className="flex flex-wrap items-baseline gap-2">
+        <p className="text-[11px] font-medium uppercase tracking-wider text-[hsl(var(--high-moat))]">
+          Why this is high-moat
+        </p>
+        {hm.is_high_probability_easy_win && <HpewBadge size="sm" />}
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <div className="min-w-0">
+          {hm.why_it_matters_seed ? (
+            <p className="text-[15px] font-medium italic leading-snug font-serif text-foreground">
+              <AnnotatedProse text={hm.why_it_matters_seed} />
+            </p>
+          ) : (
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              The high-moat scorer flagged this opp as a fit for
+              MacTech&rsquo;s strongest win profile (UFGS 25 / FRCS cyber
+              clauses, set-aside fit, thin interested-vendors list) but
+              didn&rsquo;t emit a one-sentence rationale. Open the score
+              breakdown below for the component-level evidence.
+            </p>
+          )}
+        </div>
+
+        {hasAnyMeta && (
+          <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
+            {hasClauses && (
+              <div>
+                <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Clauses cited
+                </dt>
+                <dd className="mt-1 flex flex-wrap gap-1">
+                  {hm.clause_hits.map((c) => (
+                    <ExplainLink key={c} slug={`clause:${c}`}>
+                      <Badge tone="neutral">{c}</Badge>
+                    </ExplainLink>
+                  ))}
+                </dd>
+              </div>
+            )}
+            {hasClearance && (
+              <div>
+                <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Top clearance
+                </dt>
+                <dd className="mt-1">
+                  <Badge tone="neutral">{hm.top_clearance}</Badge>
+                </dd>
+              </div>
+            )}
+            {hasRoles && (
+              <div>
+                <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Cleared roles
+                </dt>
+                <dd className="mt-1 flex flex-wrap gap-1">
+                  {hm.role_hits.map((r) => (
+                    <ExplainLink key={r} slug={`role:${r}`}>
+                      <Badge tone="neutral">{r}</Badge>
+                    </ExplainLink>
+                  ))}
+                </dd>
+              </div>
+            )}
+          </dl>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -907,120 +1034,137 @@ function BriefAndDescriptionPanel({
   opportunityId,
   description,
   brief,
-  samResourceLinks
+  samResourceLinks,
+  view
 }: {
   opportunityId: string;
   description: OpportunityDetail["description"];
   brief: BriefOut | null;
   samResourceLinks: string[];
+  /** "brief" | "raw" | null. Null falls through to the natural default:
+   * brief when a brief row exists, raw when null. */
+  view: "brief" | "raw" | null;
 }) {
   const generateAction = generateOpportunityBrief.bind(null, opportunityId);
+  // Default tab logic (pass 2): brief when a brief row exists, raw when
+  // null. Honors the explicit search-param override.
+  const activeView: "brief" | "raw" = view ?? (brief ? "brief" : "raw");
+
+  // Real tab pills (search-param-driven, server-component-friendly). The
+  // active tab matches the score-bucket pill visual on the list page;
+  // inactive uses a border-only treatment. Per brief §7.3.
+  const briefHref = `?view=brief`;
+  const rawHref = `?view=raw`;
+  const briefTabClass =
+    activeView === "brief"
+      ? "rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"
+      : "rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:border-foreground/40";
+  const rawTabClass =
+    activeView === "raw"
+      ? "rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"
+      : "rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:border-foreground/40";
 
   return (
     <Card>
       <header className="flex flex-wrap items-baseline justify-between gap-3 border-b border-border pb-3">
         <div className="flex gap-1" role="tablist" aria-label="Description view">
-          {/* Use anchor links with hash so the page scrolls to the section
-              without a server roundtrip. The "active" tab is implicit —
-              the user toggles via :target on the destination panel. */}
-          <a
-            href={`#brief-${opportunityId}`}
-            className="rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/15"
+          <Link
+            href={briefHref}
+            scroll={false}
+            aria-selected={activeView === "brief"}
             role="tab"
+            className={briefTabClass}
           >
             Plain-English brief
-          </a>
-          <a
-            href={`#raw-${opportunityId}`}
-            className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:border-foreground/40"
+          </Link>
+          <Link
+            href={rawHref}
+            scroll={false}
+            aria-selected={activeView === "raw"}
             role="tab"
+            className={rawTabClass}
           >
             Original SAM text
-          </a>
+          </Link>
         </div>
-        {brief && (
-          <form action={generateAction}>
-            <button
-              type="submit"
-              className="rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-              title="Regenerate the brief from the current SAM description"
-            >
-              ↻ Regenerate brief
-            </button>
-          </form>
-        )}
+        {/* Regenerate-brief affordance moved to the brief-panel footer
+            next to the provenance line — see BriefBody. The header
+            stays focused on the tab segmented-control. */}
       </header>
 
-      {/* Brief panel — primary, lives at #brief-{id} */}
-      <section
-        id={`brief-${opportunityId}`}
-        role="tabpanel"
-        aria-label="Plain-English brief"
-        className="pt-4"
-      >
-        {brief ? (
-          <BriefBody brief={brief} />
-        ) : (
-          <BriefEmpty
-            description={description}
-            generateAction={generateAction}
-          />
-        )}
-      </section>
-
-      {/* Raw panel — secondary, lives at #raw-{id}. Hidden visually below
-          the brief, so #raw anchor scroll just reveals further down. */}
-      <section
-        id={`raw-${opportunityId}`}
-        role="tabpanel"
-        aria-label="Original SAM description"
-        className="mt-6 border-t border-border pt-4"
-      >
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Original SAM text
-        </p>
-        {description.fetch_status === "fetched" && description.text ? (
-          <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-secondary p-3 font-sans text-xs leading-relaxed text-foreground">
-            {description.text.trim()}
-          </pre>
-        ) : description.fetch_status === "pending" ? (
-          <p className="mt-3 text-sm text-muted-foreground">
-            Description text is queued for fetch from SAM.gov. The worker pulls
-            it on the next 30-minute tick.
+      {activeView === "brief" ? (
+        <section
+          role="tabpanel"
+          aria-label="Plain-English brief"
+          className="pt-4"
+        >
+          {brief ? (
+            <BriefBody brief={brief} generateAction={generateAction} />
+          ) : (
+            <BriefEmpty
+              description={description}
+              generateAction={generateAction}
+            />
+          )}
+        </section>
+      ) : (
+        <section
+          role="tabpanel"
+          aria-label="Original SAM description"
+          className="pt-4"
+        >
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Original SAM text
           </p>
-        ) : (
-          <p className="mt-3 text-sm text-muted-foreground">
-            No description text available for this notice.
-          </p>
-        )}
-
-        {samResourceLinks.length > 0 && (
-          <div className="mt-4 border-t border-border pt-3">
-            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-              Attachments ({samResourceLinks.length})
+          {description.fetch_status === "fetched" && description.text ? (
+            <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-secondary p-3 font-sans text-xs leading-relaxed text-foreground">
+              {description.text.trim()}
+            </pre>
+          ) : description.fetch_status === "pending" ? (
+            <p className="mt-3 text-sm text-muted-foreground">
+              Description text is queued for fetch from SAM.gov. The worker pulls
+              it on the next 30-minute tick.
             </p>
-            <ul className="mt-2 space-y-1 text-sm">
-              {samResourceLinks.map((url, i) => (
-                <li key={url}>
-                  <a
-                    href={url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="break-all text-primary hover:underline"
-                  >
-                    Attachment {i + 1} →
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </section>
+          ) : (
+            <p className="mt-3 text-sm text-muted-foreground">
+              No description text available for this notice.
+            </p>
+          )}
+
+          {samResourceLinks.length > 0 && (
+            <div className="mt-4 border-t border-border pt-3">
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                Attachments ({samResourceLinks.length})
+              </p>
+              <ul className="mt-2 space-y-1 text-sm">
+                {samResourceLinks.map((url, i) => (
+                  <li key={url}>
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="break-all text-primary hover:underline"
+                    >
+                      Attachment {i + 1} →
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
+      )}
     </Card>
   );
 }
 
-function BriefBody({ brief }: { brief: BriefOut }) {
+function BriefBody({
+  brief,
+  generateAction
+}: {
+  brief: BriefOut;
+  generateAction: () => Promise<void>;
+}) {
   return (
     <div className="space-y-5">
       <div>
@@ -1061,11 +1205,26 @@ function BriefBody({ brief }: { brief: BriefOut }) {
         />
       )}
 
-      <p className="text-[11px] text-muted-foreground">
-        Auto-generated by {brief.model ?? "Claude"} from{" "}
-        {brief.description_chars?.toLocaleString() ?? "?"} chars of SAM text ·{" "}
-        Updated {fmtDate(brief.updated_at)}
-      </p>
+      {/* Provenance + regenerate affordance. Pass 2: regenerate moved
+          from the tab header to here so it sits next to the content it
+          mutates (brief §7.3). The tab header now stays focused on the
+          tab segmented-control only. */}
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-t border-border pt-3">
+        <p className="text-[11px] text-muted-foreground">
+          Auto-generated by {brief.model ?? "Claude"} from{" "}
+          {brief.description_chars?.toLocaleString() ?? "?"} chars of SAM text ·{" "}
+          Updated {fmtDate(brief.updated_at)}
+        </p>
+        <form action={generateAction}>
+          <button
+            type="submit"
+            className="rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            title="Regenerate the brief from the current SAM description"
+          >
+            ↻ Regenerate brief
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
@@ -1080,19 +1239,21 @@ function BriefList({
   tone: "brand" | "neutral" | "amber" | "violet";
 }) {
   // Tone names stay back-compat for callers; values resolve to semantic
-  // tokens (`--primary`, `--warning`) where possible. `violet` stays raw
-  // pending the pillar/info-token promotion in a follow-up pass.
+  // tokens. Pass 2: `violet` routes to `text-muted-foreground` /
+  // `bg-muted-foreground` per brief §11 Q2 — neutralizes the
+  // teaming-roles section rather than pillar-coding it (avoids
+  // introducing semantic load the layman BD lead has no legend for).
   const headTones: Record<string, string> = {
     brand: "text-primary",
     neutral: "text-muted-foreground",
     amber: "text-warning",
-    violet: "text-violet-700"
+    violet: "text-muted-foreground"
   };
   const dotTones: Record<string, string> = {
     brand: "bg-primary",
     neutral: "bg-muted-foreground",
     amber: "bg-warning",
-    violet: "bg-violet-500"
+    violet: "bg-muted-foreground"
   };
   return (
     <div>
