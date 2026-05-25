@@ -12,6 +12,13 @@ from mactech_integrations.sam_gov.exclusions import (
     SamExclusionsError,
     SamExclusionsRateLimitError,
 )
+from mactech_integrations.sam_gov.interested_vendors import (
+    CYBER_NAICS,
+    InterestedVendorsResult,
+    SamInterestedVendorsClient,
+    SamInterestedVendorsError,
+    SamInterestedVendorsRateLimitError,
+)
 from mactech_integrations.sam_gov.models import (
     OpportunityAward,
     OpportunityAwardee,
@@ -21,8 +28,10 @@ from mactech_integrations.sam_gov.models import (
 )
 
 __all__ = [
+    "CYBER_NAICS",
     "EntityProfile",
     "ExclusionResult",
+    "InterestedVendorsResult",
     "OpportunityAward",
     "OpportunityAwardee",
     "OpportunityPointOfContact",
@@ -36,4 +45,7 @@ __all__ = [
     "SamExclusionsError",
     "SamExclusionsRateLimitError",
     "SamGovOpportunitiesClient",
+    "SamInterestedVendorsClient",
+    "SamInterestedVendorsError",
+    "SamInterestedVendorsRateLimitError",
 ]

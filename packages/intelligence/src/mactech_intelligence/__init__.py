@@ -46,11 +46,21 @@ from mactech_intelligence.extract_solicitation import (
     extract_solicitation,
 )
 from mactech_intelligence.llm import AnthropicLLMClient, LLMResponse, StreamChunk
+from mactech_intelligence.clause_detector import (
+    ClauseFindings,
+    detect as detect_clauses,
+)
 from mactech_intelligence.scoring import (
     OpportunityFacts,
     ScoringContext,
     ScoringResult,
     score_opportunity,
+)
+from mactech_intelligence.scoring_high_moat import (
+    HighMoatConfig,
+    HighMoatFacts,
+    HighMoatResult,
+    score_high_moat,
 )
 from mactech_intelligence.sources_sought_drafter import (
     CapabilityContext,
@@ -75,6 +85,7 @@ __all__ = [
     "BriefExtractionError",
     "CapabilityContext",
     "CapabilityExtractionError",
+    "ClauseFindings",
     "ExtractBriefInput",
     "ExtractSolicitationInput",
     "ExtractedCapabilityStatement",
@@ -84,6 +95,9 @@ __all__ = [
     "ExtractedPastPerformance",
     "ExtractedRequirementItem",
     "FounderContext",
+    "HighMoatConfig",
+    "HighMoatFacts",
+    "HighMoatResult",
     "LLMResponse",
     "OpportunityContext",
     "OpportunityFacts",
@@ -101,6 +115,7 @@ __all__ = [
     "TermExplanationOut",
     "ask_about_opportunity",
     "context_hash",
+    "detect_clauses",
     "explain_term",
     "extract_capability_statement",
     "extract_past_performance",
@@ -109,6 +124,7 @@ __all__ = [
     "generate_sources_sought_draft",
     "generate_why_it_matters",
     "parse_explain_slug",
+    "score_high_moat",
     "score_opportunity",
     "stream_ask_about_opportunity",
     "stream_sources_sought_draft",

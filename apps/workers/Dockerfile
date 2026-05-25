@@ -35,6 +35,16 @@ ENV PATH="/app/.venv/bin:${PATH}" \
 
 WORKDIR /app
 
+# Tesseract for OCR fallback when PyMuPDF can't extract text from a scanned
+# PDF — required by library_import.py (capability uploads) and
+# attachment_fetcher.py (high-moat clause detection on USACE/NAVFAC PWS
+# attachments). Mirrors apps/api/Dockerfile. Without this binary,
+# pytesseract raises TesseractNotFoundError and we silently fall through
+# to PyMuPDF's empty result — losing OCR coverage on scanned RFPs.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng \
+ && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /app /app
 
 # Workers consume the same data + config as api for ad-hoc admin paths.

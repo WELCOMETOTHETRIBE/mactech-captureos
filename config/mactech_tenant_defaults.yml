@@ -159,6 +159,50 @@ saved_searches:
     alert_cadence: weekly
     alert_channels: [email]
 
+  # High-moat track. Leads with the UFGS 25 05 11 / 25 08 11 clauses —
+  # facility-related control systems cybersecurity work mandated inside
+  # construction primes' solicitations, where the prime almost never has
+  # a cleared cyber sub. Clearance (TS/SCI, SCIF) is intentionally NOT a
+  # match filter here — Patrick is cleared, so we want to surface the
+  # clause even when the spec is clearance-silent. The high_moat_score
+  # column is what this search ranks against, not the general score.
+  - name: Patrick — UFGS 25 / FRCS Cyber
+    owner_slug: patrick-caruso
+    filters:
+      # Primary cyber NAICS plus the construction NAICS where UFGS 25
+      # clauses typically appear (so we don't miss a construction prime's
+      # design-build RFP that wraps cyber inside).
+      naics: [541519, 541512, 541513, 518210, 236220, 237310, 237990, 238210]
+      keywords:
+        - "25 05 11"
+        - "25 08 11"
+        - UFGS 25
+        - UFC 4-010-06
+        - NIST SP 800-82
+        - DoDI 8500.01
+        - FRCS
+        - UMCS
+        - Facility-Related Control Systems
+        - SCADA
+        - OT cybersecurity
+        - Platform Information Technology
+        - PIT cyber
+        - Civil Works
+      # Capability-tag terms; surfaced by the detector but not used to
+      # filter the saved-search match. Keeps clearance-silent UFGS 25 hits
+      # in the result set.
+      capability_keywords:
+        - TS/SCI
+        - SCIF
+        - ISSM
+        - ISSE
+        - RMF Validator
+        - 3PAO
+      score_field: high_moat_score
+    alert_threshold: 80
+    alert_cadence: daily
+    alert_channels: [email]
+
 capability_statements_seed:
   - title: CMMC 2.0 Level 2 Implementation & Assessment Readiness
     summary: |
@@ -262,6 +306,115 @@ scoring_weights:
   founder_availability: 10
   freshness: 5
   # cap at 100
+
+# High-moat (UFGS 25 / FRCS cyber) scoring rubric — runs in parallel to
+# the general scoring_weights above. Drives the high_moat_score column.
+# The clause hit itself is the dominant signal (35 + 15 = 50/100); clearance
+# is a capability tag (5/100), not a multiplier. See packages/intelligence/
+# src/mactech_intelligence/scoring_high_moat.py.
+high_moat_scoring:
+  weights:
+    ufgs_25_exact: 35           # 25 05 11 or 25 08 11 directly cited
+    ufgs_25_division: 20        # other UFGS Division 25 reference
+    adjacent_ot_per_hit: 5      # +5 per distinct adjacent clause family
+    adjacent_ot_max: 15         # capped here
+    set_aside_exact: 20         # opp set-aside ∈ tenant set-aside certs
+    set_aside_compatible: 10    # small-biz family when tenant is SDVOSB
+    agency_priority: 15         # USACE / NAVFAC / DHA / MDA / NRO
+    agency_dod_other: 8         # any other DoD agency
+    velocity_bottleneck: 10     # IVL has vendors but zero cyber firms
+    velocity_inactive: 5        # IVL not enabled / unknown
+    clearance_ts_sci: 5         # capability tag — not a buy signal
+    clearance_secret: 2
+  clause_patterns:
+    # The two headline clauses. Match either with or without "UFGS " prefix.
+    ufgs_25_05_11:
+      - "UFGS 25 05 11"
+      - "25 05 11"
+    ufgs_25_08_11:
+      - "UFGS 25 08 11"
+      - "25 08 11"
+    # Other UFGS Division 25 references — half weight.
+    ufgs_25_other:
+      - "UFGS 25"
+      - "UFGS Division 25"
+    # Adjacent OT/ICS signal — each distinct family contributes adjacent_ot_per_hit.
+    ufc_4_010_06:
+      - "UFC 4-010-06"
+    nist_800_82:
+      - "NIST SP 800-82"
+      - "NIST 800-82"
+    dodi_8500_01:
+      - "DoDI 8500.01"
+    frcs:
+      - "FRCS"
+      - "Facility-Related Control Systems"
+    umcs:
+      - "UMCS"
+      - "Utility Monitoring and Control"
+    scada_sec:
+      - "SCADA Security"
+      - "SCADA cybersecurity"
+    ot_cyber:
+      - "OT Cybersecurity"
+      - "Operational Technology Cyber"
+    pit_cyber:
+      - "Platform Information Technology"
+      - "PIT Cyber"
+    # eMASS + ICS/Industrial — the detector enforces the conjunction.
+    emass_ics:
+      - "eMASS"
+    # Civil Works + PLC/Cyber — conjunction enforced in code.
+    civil_works_plc:
+      - "Civil Works"
+  clearance_patterns:
+    ts_sci:
+      - "TS/SCI"
+      - "Top Secret/SCI"
+      - "Top Secret / Sensitive Compartmented"
+      - "Top Secret/Sensitive Compartmented Information"
+    secret_only:
+      - "Secret clearance"
+    scif:
+      - "SCIF"
+      - "Sensitive Compartmented Information Facility"
+    polygraph:
+      - "Polygraph"
+      - "Full Scope Poly"
+      - "CI Poly"
+    fcl_ts:
+      - "Facility Clearance"
+      - "FCL"
+  role_patterns:
+    csa:
+      - "Cybersecurity Systems Authority"
+    issm:
+      - "Information System Security Manager"
+      - "ISSM"
+    isse:
+      - "Information System Security Engineer"
+      - "ISSE"
+    rmf_validator:
+      - "RMF Validator"
+      - "Authorized Cybersecurity Professional"
+    threpao:
+      - "Third-Party Assessment Organization"
+      - "3PAO"
+  priority_agencies:
+    - "U.S. Army Corps of Engineers"
+    - "USACE"
+    - "Naval Facilities Engineering Command"
+    - "NAVFAC"
+    - "Defense Health Agency"
+    - "Missile Defense Agency"
+    - "National Reconnaissance Office"
+  traditional_construction_naics:
+    - "236220"
+    - "237310"
+    - "237990"
+    - "238210"
+    - "562910"
+  sweet_spot_min_score: 80
 
 compliance_gates:
   pursue_stage_requires:

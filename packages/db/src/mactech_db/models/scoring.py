@@ -77,3 +77,15 @@ class OpportunityScore(Base):
     scored_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
+    # Parallel high-moat (UFGS 25 / FRCS cyber) score. Null when the
+    # high_moat_scoring config block is absent or hasn't been computed
+    # yet. See packages/intelligence/.../scoring_high_moat.py for the rubric.
+    high_moat_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    high_moat_breakdown: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )
+    # Stores {clause_hits, clearance_hits, role_hits, top_clearance,
+    # is_high_probability_easy_win, why_it_matters_seed}.
+    high_moat_flags: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )

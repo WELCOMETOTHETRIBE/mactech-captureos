@@ -40,6 +40,26 @@ class OpportunityRaw(Base):
     place_of_performance: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     raw_payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Concatenated text of the solicitation's PDF attachments, populated by
+    # the attachment_fetcher worker (gated by title heuristic OR base score
+    # >= 50). Used by clause_detector for the high-moat track. Deferred load
+    # because individual blobs can be large.
+    attachment_text: Mapped[str | None] = mapped_column(Text, nullable=True, deferred=True)
+    attachments_fetched_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    # Counts from SAM.gov Interested Vendors List endpoint. cyber_count is
+    # the subset of vendors whose NAICS profile intersects MacTech's cyber
+    # codes. None = list endpoint never called for this opportunity.
+    interested_vendors_count: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True
+    )
+    interested_vendors_cyber_count: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True
+    )
+    interested_vendors_fetched_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
     ingested_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
