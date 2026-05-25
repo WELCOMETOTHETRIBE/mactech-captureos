@@ -1,449 +1,167 @@
-# UX Research Brief — CaptureOS Authenticated Suite, Continuity & World-Class Lift
-
-Generated: 2026-05-08T21:30:00-07:00
-Scope: every page under `apps/web/app/(app)/**` (`/dashboard`, `/opportunities`, `/opportunities/[id]`, `/pipeline`, `/pursuits/[id]`, `/library`, `/drafts`, `/drafts/[id]`, `/forecasts`, `/recompetes`, `/events`, `/settings`), the `(app)/layout.tsx` shell, `components/sidebar-nav.tsx`, and shared primitives (`PageHeader`, `Section`, `Card`, `Kpi`, `EmptyState`, `Term`/`TermPopover`/`ExplainRail`, `Badge`/`ScoreBadge`/`Pillar`, `TodaysMoves`).
-
-This pass picks up where the gold-copy port (commit `ee5bf2e`) left off. Token contract, auth shells, footer, and shadcn primitive scaffolding shipped successfully. The verifier's verdict was SHIP. This brief assumes that foundation and asks: now that every authenticated page renders on a token-driven warm-paper editorial frame, what's blocking it from being world-class for a layman DIB contractor?
-
----
-
-## 1. Suite-continuity audit
-
-"Suite continuity" in CaptureOS means: same shell shape (sidebar + topbar + main + footer), same `PageHeader` rhythm, same KPI/badge/score vocabulary, same jargon-helper system (`Term`/`TermPopover`/`ExplainRail`), same sober-veteran-owned voice across every authenticated page.
-
-### Already consistent (post-ee5bf2e, verified)
-- **Shell shape.** `apps/web/app/(app)/layout.tsx:18-103` is a single-source `flex min-h-screen / grid 240px_1fr / footer` for every page. Token-driven (`bg-background`, `border-border`, `bg-card`).
-- **`PageHeader` adoption.** All 12 in-scope routes mount `<PageHeader>` from `components/ui.tsx` (verified by grep — 14 callsites including nested `/library/...`, `/settings/founders/...`). Exception: opportunity detail does NOT use `PageHeader`; it inlines its own header strip with serif italic title (see §2).
-- **Jargon vocabulary.** `Pillar`, `NaicsBadge`, `SetAsideBadge`, `NoticeTypeBadge`, `ScoreBadge` are imported and used by every list/detail page that needs them. Pillar tokens (`--pillar-*`) flow through these consistently.
-- **Token utilities** (`bg-card`, `border-border`, `text-muted-foreground`) used by `(app)/layout.tsx`. Footer is paper-100 token-driven.
-- **Cmd-K + KeyboardShortcuts** mounted globally in the shell (one mount, listens app-wide).
-
-### Drifting page-to-page (the real problem this pass should fix)
-
-1. **Two parallel color systems running simultaneously.** The shell speaks in tokens (`bg-card`, `text-muted-foreground`); every page body speaks in legacy palette (`border-paper-200`, `bg-white`, `text-neutral-500`, `text-brand-700`). Grep counts: **497 legacy palette hits** across `app/(app)/`, **37 in the three hottest pages alone** (dashboard, pipeline, opportunity detail). The legacy aliases still resolve, so visually the result is fine — but the contract is split. Future cross-suite ports require the architect to migrate twice.
-2. **`PageHeader` used inconsistently for the SAME page archetype.** Opportunity list uses default sans `PageHeader` (`opportunities/page.tsx:80`). Pursuit detail uses `display` italic-serif (`pursuits/[id]/page.tsx:215-243`). Opportunity detail ignores `PageHeader` entirely and rolls its own h1 inside a card (`opportunities/[id]/page.tsx:162-229`). Three patterns for three structurally identical "page top" surfaces.
-3. **Primary-action affordance inconsistent.** "Add to pipeline" uses `bg-neutral-900` black button (`opportunities/[id]/page.tsx:521`). "Capture Package" uses `bg-brand-700` teal (`pursuits/[id]/page.tsx:231`). "Sign in" was just unified to teal in the auth pass. "Continue setup" on the dashboard uses `bg-amber-700` (`dashboard/page.tsx:154`). "Save" buttons in the pursuit page are a mix of black (`bg-neutral-900`) and teal (`bg-brand-700`). The user can't learn a single "this is the primary action" rule.
-4. **Stage / pursuit color vocabulary forks.** Pipeline page hardcodes win/lost stage tones (`bg-emerald-600`, `bg-red-600` — `pipeline/page.tsx:376-380`). Opportunity detail's `PURSUIT_STAGE_TONE` map gives `propose: "amber"` and `submit: "violet"`. Pursuit detail's `STAGE_TONE` map gives `pursue: "amber"`, `propose: "violet"`, `submit: "brand"` (`pursuits/[id]/page.tsx:50-58`). Three different pursuit-stage palettes living in three files. The user sees the same lifecycle paint differently depending on which page they entered through.
-5. **Back-affordance pattern forks.** Opportunity detail has `← All opportunities` (`opportunities/[id]/page.tsx:155`). Pursuit detail has `← Pipeline` (`pursuits/[id]/page.tsx:208-213`). Draft detail has `← All drafts` *and* `Source opportunity →` on the right (`drafts/[id]/page.tsx:60-74`). Library/settings sub-pages mostly use just `<PageHeader>` with no back link. There's no rule for when a back link appears, where it sits, or what it says.
-6. **Voice in empty states is inconsistent.** Pipeline first-time empty state is a 4-step pedagogical wall (`pipeline/page.tsx:453-525`) — strong, consistent with brand. Library empty states teach the user (`library/page.tsx:107-124`) — also strong. But `events/page.tsx:37-58` empty state explains the worker schedule + sends user to `/forecasts` to "check the diagnostic" — that's an ops voice, not a layman voice. `forecasts/page.tsx:96` short-circuits to the `<IntegrationDiagnostic>` component when empty (instead of a true empty state) which assumes the user understands what an integration is. `recompetes/page.tsx:194` correctly teaches what a recompete is — strong. Inconsistent quality means new users learn that some empty states help and some don't.
-7. **The `Term`/`TermPopover` system is one of CaptureOS's strongest brand assets but is used unevenly.** 52 callsites in `app/(app)/`. Strong coverage in opportunity detail, pursuit detail, solicitation-panel, cyber-posture-card, tenant-eligibility-card. **No coverage** in: `forecasts/page.tsx` (writes "RFP expected", "Set-aside:", "POP", "Federal footprint" bare), `recompetes/page.tsx` (writes "POP ends", "Federal footprint", "SEC EDGAR", "set-aside scope" bare), `events/page.tsx` (writes "Pre-solicitation", "Industry day", "OSBP" bare), `pipeline/page.tsx` (writes "Lead", "Qualify", "Pursue", "Propose", "Submit" as stage labels with no helper), `settings/page.tsx` (writes "UEI", "CAGE", "NAICS matrix", "tier: primary/secondary" bare), `drafts/page.tsx` (writes "Sources Sought", "RFP response", "compliance matrix" bare). Six pages where a layman reading would hit a wall.
-8. **Sidebar active-state color forks from the rest of the page.** `sidebar-nav.tsx:82` uses `border-brand-700 bg-brand-50 text-brand-900` (legacy palette literal) — the only place in the app shell that talks legacy. Cosmetic identical, but it's a token-contract gap right inside the shell.
-
----
-
-## 2. Per-page audit
-
-### `/dashboard` (`apps/web/app/(app)/dashboard/page.tsx`, 814 lines)
-
-**Strengths:** This is the most-iterated page (19 commits in 60d) and it shows. `TodaysMoves` (lines 326-336) is a genuine "what should I do right now?" surface — Linear-quality. KPI strip (270-320) is action-linked, not vanity. SPRS chip (200-267) is the only place in the product where the layman sees "what's my CMMC eligibility?" at a glance — and it has `<TermPopover kind="sprs">` wrappers (203-211). Score-tone language is in plain English ("Strong fit — pursue", "Worth a look", "Watch list", "Long shot" — `ui.tsx:212-219`).
-
-**Drift / friction:**
-- **No `Term`/`TermPopover` on the four KPI tiles.** "High-fit, untracked" KPI says `scored ≥60, not yet in your pipeline` (line 282). Layman: what's "high-fit"? what's a "score"? The hint should link the score concept to its plain-English explanation.
-- **The `HowItWorks` block** (484-527) renders a 3-step explanation but uses `bg-brand-700` black-circle step numbers and a dismissable affordance — that's good, but the language uses `Lead → Qualify → Pursue → Propose → Submit → Won/Lost` (line 521) without any helper. The first time a small DIB contractor sees those words, they don't know if "Qualify" means "qualify the opp" or "qualify yourself."
-- **`ComingUpRail` at lines 565-633** has three columns, each linking to a dedicated page. Good. But the column headers — "Coming to SAM", "Where to be", "Recompetes" — hide what the user gets. "Coming to SAM" and "RFP in 12d" assume the user knows what SAM is and what an RFP timeline looks like.
-- **3-month-old `bg-paper-200`/`bg-paper-50`/`bg-white` literals** at lines 650, 651, 656, 661, 672, 689, 731, 791. These are the legacy-palette holdouts — visually identical to tokens, but they fork the contract. The shell speaks tokens; the dashboard body speaks paper-*.
-- **`text-amber-700`/`text-rose-700` literal aging colors** in `ComingUpForecastRow` (lines 741-744) and `ComingUpEventRow` (799-802). The semantic system shipped in `ee5bf2e` has `--warning` and `--destructive`. These should be `text-warning` / `text-destructive`.
-- **Mobile posture:** the dashboard is responsive at the structural level (KPI strip is `grid-cols-2 md:grid-cols-4`). But the SPRS chip (line 201) + onboarding banner (142) + first-feed banner (166) all use `flex flex-wrap items-center justify-between gap-3` — fine on desktop, on a 375px viewport the action button drops below the text without explicit ordering, putting the CTA below the fold of a critical onboarding nudge.
-- **The `firstFeedLoading` banner** (165-195) uses `bg-brand-50 border-brand-200` (legacy palette). Same content as before; should be `bg-primary/10 border-primary/20`.
-
-**"What should I do here?"** answer: very clear. `TodaysMoves` + KPI strip + Your top + Coming-up rail is a strong information hierarchy. Score: **8/10** — the top of the dashboard is genuinely world-class; the bottom (HowItWorks + ComingUpRail) drifts off the contract.
-
-### `/opportunities` (list, `apps/web/app/(app)/opportunities/page.tsx`, 540 lines)
-
-**Strengths:** Quick-filter score-bucket strip (98-164) with plain-English labels ("Top fit", "Worth a look", "Watch list", "All") is the right shape — segmented control of the most-used filter. Card layout (310-385) with score on the left, deadline on the right, why-it-matters as the third row, hover-revealed extra chips (335-344). Pagination is clean.
-
-**Drift / friction:**
-- **Legacy palette wall.** Every literal: `border-neutral-200`, `text-neutral-500`, `bg-white`, `text-brand-700`, `bg-brand-700` (lines 89, 98, 121, 124-126, 147, 197, 224, 273, 285, 294, 315, 350-381, 398, 463-466, 508-535). The page is essentially zero-tokenized.
-- **Primary action color is black** (`bg-neutral-900` — line 124, 273, 294, 463). Inconsistent with the auth pages and primary-button shadcn variant which are brand teal. This page shipped before the gold-copy port; it's still on the old "black is primary" pattern.
-- **No Term wrapping on the filter chips.** "Set-aside", "Notice type", "NAICS" filter sidebar (170-211) — bare. These are the exact terms a layman doesn't know. The hover-revealed `NaicsBadge` chip on cards has the explanation, but the filter sidebar — where a new user goes to narrow results — doesn't.
-- **The empty state** (242-300) is good — distinguishes "no results match filters" from "ingestion still loading" with different bodies + actions. The verbiage "SAM.gov ingestion runs every 2h and scoring every 20m" is ops-tone, not layman.
-- **Mobile posture:** filter sidebar is left column at `lg:col-span-1` and main is right `lg:col-span-3` — fine. At <`lg`, the filter sidebar stacks above the results. That's correct, but on a 375px viewport the user scrolls through the entire facet sidebar before seeing the first opportunity. There's no "show filters" collapse on mobile.
-
-**"What should I do here?"** answer: clear if you've been onboarded. Less clear for a brand-new layman — they land on a list of jargon-tagged opportunities and the four score buckets are the only ergonomic. Score: **6/10**.
-
-### `/opportunities/[id]` (`apps/web/app/(app)/opportunities/[id]/page.tsx`, 1206 lines)
-
-**Strengths:** The flagship surface. Triage-first layout (the user can answer "should I bid?" above the fold): score badge + notice-type chip + set-aside chip + NAICS chip + deadline + the brief's must-haves and red-flags (1077-1097). `<ExplainLink>` and `<Term>` wrap every chip (171-198) — the strongest jargon coverage in the product. Plain-English brief tabs (962-1062) with structured Scope/must-haves/red-flags/teaming. PursuitPanel inline (488-599) means "add to pipeline" sits right at the decision point. AskPanel + DrafterPanel collocated at top (239-246). ExplainRail right-side (769-835) is a brand differentiator.
-
-**Drift / friction:**
-- **Header doesn't use `PageHeader`.** Lines 162-229 inline the eyebrow + serif italic title + chip row — duplicating the `display={true}` pattern from `PageHeader`. Should use `<PageHeader display eyebrow={agency} title={title} subtitle={...}>`. Currently a one-off.
-- **The pursuit-stage tone map is inconsistent with the pipeline page.** Lines 468-476 vs `pipeline/page.tsx:50-58`. Single source of truth needed.
-- **Inline buttons re-implement the shadcn-shaped button.** `DetailStageBtn` (642-678) and the literal `bg-neutral-900`/`bg-emerald-600`/`bg-red-600` buttons (520-525, 654-660). After the gold-copy port we have `components/ui/button.tsx` with `cva` + variants — but this page predates that scaffold and never adopted it. Each sub-component has its own button shape.
-- **`AskPanel` recent-questions list** (894-905) doesn't show "this answer cites X capability statement / Y past performance" — that's the citation surface CaptureOS uniquely earns trust on, and it's invisible on this surface.
-- **The score breakdown is a hover-only `<details>`** (375-430). The `<details>` summary is a small uppercase eyebrow ("Score breakdown") that a layman might miss. Worth promoting to a more visible "Why did we score this 78?" affordance — that's exactly the question a new user asks.
-- **Mobile posture:** ExplainRail is the right column at `lg:grid-cols-[minmax(0,1fr)_22rem]`. Below `lg` it stacks below the main column — good. But the in-page panels (PursuitPanel, DrafterPanel, AskPanel, BriefAndDescription, IncumbentIntel, CapabilityMatches, ScoreBreakdown) are six full-width sections in a row. On a 375px viewport the user scrolls forever before reaching the score rationale.
-
-**"What should I do here?"** answer: very clear for "should I bid this?" The score + brief + chips + add-to-pipeline button live above the fold. Score: **8.5/10** — only beaten by dashboard for polish; the inline-button divergence is the main thing keeping it from world-class.
-
-### `/pipeline` (`apps/web/app/(app)/pipeline/page.tsx`, 548 lines)
-
-**Strengths:** Real kanban with stage-aging color rings (red at 14d, amber at 7d, lines 239-253). Owner filter pills with counts. First-time empty state is a strong 3-step pedagogical block (453-525). Terminal stages (won/lost) collapsed to a smaller row.
-
-**Drift / friction:**
-- **Stage labels (`Lead`, `Qualify`, `Pursue`, `Propose`, `Submit`, `Won`, `Lost`) have no `Term` wrapper.** Layman: "what's the difference between Pursue and Propose?" Five stages with no inline help — for a user who's never run a federal capture pipeline this is a wall.
-- **Aging colors hardcoded.** `border-red-300`/`border-amber-300`/`text-red-700`/`text-amber-700` (lines 240-248). Should be `border-destructive/40`/`border-warning/40` semantic.
-- **Stage-action buttons are ad-hoc inline.** `StageBtn` (362-398) with primary as `bg-neutral-900`, won as `bg-emerald-600`, lost as `bg-red-600`. Should be variants on the shadcn `Button` primitive.
-- **`bg-emerald-600` and `bg-red-600`** for won/lost terminal-buttons aren't tokenized — even though `--success` and `--destructive` exist.
-- **No keyboard navigation** in the kanban. Cmd-K helps you find a pursuit but once you're on the kanban, no `j`/`k` row movement, no `→` advance like the opportunity list has via `KeyboardList`.
-- **Card density.** Each card has score + notice-type + title + set-aside + NAICS + deadline + owner + aging + 6 action buttons + remove (lines 256-360). At 5-column kanban width on lg+, each card is ~200px wide and the action button row wraps to two lines. Visually cramped.
-- **The terminal-stage card** has a `compact` mode (line 339-357) with a tiny "remove" link. Won/Lost cards should give the user one more thing — a "what worked?" / "what killed it?" prompt — currently they're a graveyard.
-
-**"What should I do here?"** answer: clear once you know the stages. For a layman: muddled — they have to read 5 stage names and decide which column to drop a pursuit in.  Score: **6.5/10**.
-
-### `/pursuits/[id]` (`apps/web/app/(app)/pursuits/[id]/page.tsx`, 703 lines)
-
-**Strengths:** Genuine deep-work surface. `BidDecisionForm`, `NotesEditor`, `WinStrategyEditor`, `PastPerformanceSelector`, `KeyPersonnelSelector`, `TeamingPartnerSelector` (lines 247-285), `SolicitationPanel` (260-267), `AmendmentsPanel`, `AgencyIntelCard`, `WebMentionsCard`, `AuditTrailCard`. This is where a pursuit lives. Uses `<PageHeader display>` + back link + capture-package CTA.
-
-**Drift / friction:**
-- **Long scroll, no in-page navigation.** 11 sections stacked vertically. There's no left rail, no anchor list, no "jump to win strategy" — the user scrolls. On 1440 wide this is fine; on 1024 (typical SDVOSB user laptop) it's a workout.
-- **Win-strategy editor and notes editor are side-by-side textareas** (249-256) at lg+, stacked at <lg. Good. But the `placeholder` (442-465) is the only guidance — there's no "what's a discriminator?" `Term` wrap on the label.
-- **PursuitMetaStrip** (336-367) shows Stage / Owner / NAICS / Deadline. Stage label has no Term wrap. NAICS has Term wrap (354-358) — good. Why are some labels wrapped and others not? Inconsistent.
-- **`Card` titles are passed strings, not `<Term>`** despite the title type being `ReactNode`. E.g. `Card title="Win strategy"` (426) — should `<Term kind="proposal" value="win_themes">Win strategy</Term>`.
-- **Save buttons and stage-action buttons** use raw black `bg-neutral-900` and brand-teal `bg-brand-700` mixed (471-476, 547-553, 609-616, 657-664). Same primary-action ambiguity as everywhere else.
-- **`Pillar` rendered on `KeyPersonnelSelector` (line 601)** — good, uses pillar tokens. But the same component renders nothing in `PastPerformanceSelector` even though past performance has a `related_founder_slugs` field. Asymmetric.
-- **Danger zone** (299-320) is at the bottom of an 11-section page — by the time the user scrolls there, they've forgotten the name of the pursuit. Maybe collapsed by default.
-
-**"What should I do here?"** answer: less clear than the opportunity detail. The opportunity detail has one CTA (Add to pipeline / Open in SAM); this page has 11 simultaneous CTAs (save notes, save win strategy, save selection × 3, advance stage, mark won/lost, generate capture package, regenerate compliance matrix, etc.) and nothing tells the user where to start. Score: **6/10**.
-
-### `/library` (`apps/web/app/(app)/library/page.tsx`, 531 lines)
-
-**Strengths:** Three-section structure (capability statements, past performance, teaming partners) with summary stats at top (51-79). Empty states are pedagogical (107, 222, 342). Section headers consistent (486-511). Cards per item with edit/delete affordances.
-
-**Drift / friction:**
-- **Bare jargon.** "Capability statements", "Past performance", "Teaming partners", "embedded for vector match", "NAICS coverage", "distinct codes referenced" (lines 53-78). All bare. Layman: "what does it mean for a capability statement to be 'embedded'?"
-- **Unicode-glyph CTAs.** "⬆ Import PDF" (88, 113, 207) — typographic glyph, not emoji, but the visual treatment is icon-styled. Inconsistent with the gold-copy direction (no decorative icons on cards). Should be a token-driven button with a variant.
-- **`bg-blue-50 text-blue-700` for "embedded" badge alternate** (138). Should resolve through the semantic-token map (probably `success`).
-- **Buttons on this page are "+ Add cluster", "+ Add record", "+ Add partner"** with `bg-neutral-900` (97, 213, 333) — same primary-action ambiguity.
-- **Set-aside certification badges on teaming partners use `tone="violet"`** (407) — the legacy violet maps to the future pillar/info token but isn't promoted yet.
-- **Mobile posture:** capability statements are `md:grid-cols-2`; past performance and teaming partners are flat lists. Reasonable.
-
-**"What should I do here?"** answer: clear if you know what these three terms mean. For a layman setting up the product for the first time, the eyebrow says "Capture library" and three sub-headers shout "capability statements / past performance / teaming partners" — they need a "what is this for?" sentence per section. The subtitles do this, but they're long enough that a hurried user skips them. Score: **6/10**.
-
-### `/drafts` (list, `apps/web/app/(app)/drafts/page.tsx`, 99 lines)
-
-**Strengths:** Compact. Each draft is a row with status / type / version / created date + opportunity title + model & token usage. The empty state's `Find Sources Sought opps` button is a smart redirect.
-
-**Drift / friction:**
-- **"Sources Sought", "RFP response", "compliance matrix"** are draft-type chips (lines 13-18, 65) with no Term wrap.
-- **Status badges** (`draft / reviewed / submitted / archived`) — no Term wrap. A first-time user wouldn't know whether to mark "reviewed" then "submitted" or skip "reviewed."
-- **Kbn shortcuts** — list is not keyboard-navigable. `KeyboardList` is wrapped on opportunity list and dashboard's "your top"; not here.
-- **`text-blue-700` for filtering link** (175 in elsewhere; this page itself uses `text-brand-700` consistently) — fine.
-- **Token literals.** Every classname is legacy palette.
-- **Action buttons (`bg-neutral-900` for "Find Sources Sought")** — same primary-action ambiguity.
-
-**"What should I do here?"** answer: clear if you've drafted before. For a layman: "what's the difference between 'reviewed' and 'submitted'?" is unanswered. Score: **6.5/10**.
-
-### `/drafts/[id]` (`apps/web/app/(app)/drafts/[id]/page.tsx`, 254 lines)
-
-**Strengths:** Two-column layout (editor 2/3, side panel 1/3). Generation metadata side panel surfaces the citations count (208-218) — this is the trust evidence and it's visible. Status-flow workflow (`STATUS_FLOW` map at 33-38) drives "Mark reviewed → Mark submitted" buttons that progress the user.
-
-**Drift / friction:**
-- **The big save button** is `bg-neutral-900` (172). Submit-mark button is `bg-emerald-600` (108). Export-DOCX button is `bg-brand-700` (96). Three primary actions, three different colors. None of them consistent with each other.
-- **The textarea has no markdown preview.** Drafters edit in raw markdown only. (Out of scope per CLAUDE.md §3 — domain rewrites — but worth flagging.)
-- **`PageHeader` is used correctly here** — eyebrow includes version + draft type, subtitle inline-renders status badge + notice type + opp title.
-- **Citations are shown as raw counts** (210-217) — "Capabilities cited: 3" — without any path to "which 3?" Trust requires being able to follow the citation back.
-- **No `Term` wrap on the type strings** ("Sources Sought", "rfp_response", "compliance_matrix") in the eyebrow.
-
-**"What should I do here?"** answer: clear (edit, save, mark, export). The status-flow buttons + metadata panel + regenerate panel give the user the right verbs. Score: **7/10**.
-
-### `/forecasts` (`apps/web/app/(app)/forecasts/page.tsx`, 189 lines)
-
-**Strengths:** Page subtitle (66-74) names the data sources (DHS APFS, VA FCO, USACE, AFBES, GSA, HHS) — credibility move. Filter for "your NAICS" vs "all." Card layout consistent with other domain lists.
-
-**Drift / friction:**
-- **No Term wraps anywhere.** "Procurement forecasts", "Set-aside", "POP", "RFP expected", "Federal footprint", "Apify" — all bare.
-- **"target NAICS" pill** (118-120) uses `bg-brand-50 text-brand-800` raw — should be `bg-primary/10 text-primary`.
-- **Empty state** (96-102) bypasses `<EmptyState>` entirely and goes straight to `<IntegrationDiagnostic>`. That component (`components/integration-diagnostic.tsx`) is an ops surface — it shows worker-run status and a "trigger now" button. For the four founders this is fine; for a Phase 4+ external customer, this would expose internal scheduler details. Should wrap in an `<EmptyState>` first, with `<IntegrationDiagnostic>` as an admin-fold-out.
-- **`text-amber-700`** literal (148) for "RFP expected" highlight — should be `text-warning`.
-- **No keyboard-list navigation.**
-
-**"What should I do here?"** answer: muddled. The page subtitle says what forecasts are; the value is there; but each card is a wall of text + chips with no clear "what should I do with this?" affordance. Score: **5.5/10**.
-
-### `/recompetes` (`apps/web/app/(app)/recompetes/page.tsx`, 357 lines)
-
-**Strengths:** Purpose-built for the highest-leverage signal in CaptureOS — "every forecast where we know the incumbent." Dense filter strip (114-169) with set-aside scope, agency, POP window, and a "Mine" toggle for the logged-in founder. Incumbent block (251-298) shows ticker, distress score, contract end, federal footprint, SEC filings — this is real intelligence.
-
-**Drift / friction:**
-- **EMOJI VIOLATION.** Line 261: `🚩 distress {fc.incumbent_distress_score}`. CLAUDE.md §3 explicitly says no emoji in product UI. The flag emoji is here. **Must remove this pass.**
-- **`bg-amber-50`, `bg-rose-200`, `text-amber-900`, `text-rose-900`** literals (250-263) — should be `bg-warning/10`/`text-warning` and `bg-destructive/20`/`text-destructive`. Even more important now that we have semantic tokens.
-- **POP, EDGAR, SEC, distress** — all bare jargon. "POP" especially needs a Term wrap; a small DIB contractor can guess it means period of performance, but that's exactly the kind of expert assumption CaptureOS prides itself on not making.
-- **Filter strip is full-width and wraps** (110-169). Three filter axes (set-aside, agency, POP, lane) are flat with no grouping. On 1024 wide it wraps to four lines. Hard to scan.
-- **"target NAICS" pill** uses `bg-brand-50 text-brand-800` raw — same as forecasts.
-- **Card structure** is identical to forecasts but with the incumbent block injected. The duplication is fine; the visual divergence between them is also fine. But neither uses the new shadcn `Card` family.
-
-**"What should I do here?"** answer: clear if you understand recompetes. The page subtitle teaches well. For a layman: "what's a recompete?" is answered, but "what do I do with one?" isn't. Each card needs a "Position now" or "Plan capture" affordance. Score: **6.5/10** (would be 7+ once the emoji is gone and POP/EDGAR are wrapped).
-
-### `/events` (`apps/web/app/(app)/events/page.tsx`, 135 lines)
-
-**Strengths:** Short and focused. Page subtitle names sources (DoD OSBP, NIWC, AFCEA, GSA OSDBU, DHS S&T, AFLCMC, Army OSBP) — credibility. Card with kind / agency / dates / location / NAICS / register button.
-
-**Drift / friction:**
-- **Empty-state body sends user to `/forecasts` to "check the diagnostic"** (45-50) — ops voice. Should say "there are no upcoming industry days yet — try widening your filter, or check back in a day" and offer a check-back affordance.
-- **No Term wraps.** "Industry day", "Pre-solicitation", "OSBP", "Meet the buyer", "Symposium" — bare.
-- **`code` block** at line 128-130: ``mactech_workers.tasks.apify_industry_days`` — this is internal worker name leaking into the UI. A layman would have no idea what it means. Should be a comment, not user-visible.
-- **Register button is full brand teal** (97-100) — the only page where the primary action is unambiguously brand teal. Good. But the pattern hasn't been propagated.
-
-**"What should I do here?"** answer: clear (look, register). Score: **7/10** — small page, fewer drift opportunities; the only thing keeping it from 8 is the worker-name leak and the no-jargon-help.
-
-### `/settings` (`apps/web/app/(app)/settings/page.tsx`, 260 lines)
-
-**Strengths:** Three-section structure: Tenant / Founders / Saved searches / NAICS matrix. Pillar chips on each founder. NAICS matrix is a clean table with primary/secondary tier badges.
-
-**Drift / friction:**
-- **Eyebrow says "Read-only for Phase 2 Week 6. Editing UIs ship in later phases."** (16) — internal sprint-numbering language leaking into the UI. A layman wouldn't know what "Phase 2 Week 6" means. Should be a soft-disabled state with a "edit coming soon" microcopy.
-- **No `Term` wraps.** "UEI", "CAGE", "Clerk org", "tier: primary", "tier: secondary", "saved searches", "alert threshold", "alert cadence", "alert channels", "NAICS matrix" — all bare.
-- **`tone="blue"` for primary tier and `tone="neutral"` for secondary** (211-212). Why blue? The semantic system supports `tone="brand"` which would make primary-NAICS visually obvious. Currently a non-semantic choice.
-- **The NAICS table has no row hover, no link to filter opportunities by that NAICS, no link to the SBA size-standard lookup.** It's a static table. For a tenant-admin a quick "filter opportunities by 541512" link would multiply the value.
-
-**"What should I do here?"** answer: muddled. "Read-only" + "Editing UIs ship in later phases" tells the user there's nothing to do; but "+ Add founder" link in the Founders section (52-57) is an exception that contradicts the eyebrow. Mixed signals. Score: **5.5/10**.
-
-### `/onboarding` (`apps/web/app/(app)/onboarding/page.tsx`, 400 lines)
-
-**Strengths:** Two-minute promise in subtitle (90-94). SAM.gov auto-fill on UEI lookup. Set-aside checkbox grid with hint per option (`SET_ASIDE_OPTIONS` 12-29). NAICS picker with primary/secondary tier separation.
-
-**Drift / friction:** Out of scope for this pass — onboarding is a separate journey and the brief lists it as one of the 12 routes but it functions more like an "auth-adjacent" page than an in-product page. **Quick observations only:**
-- The set-aside hint dictionary (13-29) is the most consistent jargon-help pattern in the app — this is what `Term` should look like everywhere.
-- Page subtitle has the "later sprint" leak ("NAICS picker and founder roster ship in a follow-up sprint" — line 92-94).
-
-Score: **7.5/10**.
-
----
-
-## 3. The "layman DIB contractor" lens
-
-The CLAUDE.md §1 + §8 user is not a Beltway BD professional. They're either Brian/John (founders less code-oriented) or — Phase 4+ — a 12-person SDVOSB defense subcontractor where one person wears the CO/PM/BD/sales hat. They open CaptureOS to find work and stay eligible for it. Three buckets of friction emerge from the per-page audit:
-
-### Words that assume insider knowledge (used bare on at least one in-scope page)
-
-`POP`, `POP-end`, `period of performance`, `Section L`, `Section M`, `SOW`, `PWS`, `RFI`, `RFP`, `Sources Sought`, `pre-solicitation`, `combined synopsis`, `set-aside`, `NAICS`, `UEI`, `CAGE`, `SPRS`, `CMMC`, `DFARS`, `FAR`, `8(a)`, `HUBZone`, `WOSB`, `EDWOSB`, `SDVOSB`, `JV`, `prime`, `sub`, `joint venture`, `incumbent`, `recompete`, `discriminator`, `win theme`, `compliance matrix`, `requirements matrix`, `evaluation factors`, `embedded` (vector embedding), `vector match`, `cosine similarity`, `OSBP`, `ATO`, `RMF`, `ConMon`, `STIG`, `eMASS`.
-
-The `Term` system already explains a portion of these (notice types, set-aside certs, NAICS, SPRS, FAR/DFARS clauses). Coverage is concentrated on opportunity detail / pursuit detail / solicitation-panel / cyber-posture-card / tenant-eligibility-card. Coverage is **near-zero on**: `/pipeline` stage labels, `/library` section labels, `/drafts` type/status labels, `/forecasts` value/POP labels, `/recompetes` POP/EDGAR/distress labels, `/events` kind labels, `/settings` tenant fields.
-
-### Dashboards that bury the lede
-
-The dashboard's lede is `TodaysMoves` — that's correct. But the `HowItWorks` block (524 lines into the file, 3-step explanation) is BELOW the four KPIs and the `your_top` list. A first-time visitor sees four numbers, then a list of opportunities, then the "this is how the product works" block. The right ordering is: greeting → "this is how it works" (collapsible) → today's moves → KPIs → your top. Currently it's: greeting → KPIs → today's moves → how it works → your top.
-
-### Empty states that leave the user lost
-
-- `/forecasts` empty state goes straight to `<IntegrationDiagnostic>` — ops surface. Layman thinks the product is broken.
-- `/events` empty state says "check the diagnostic on /forecasts" — sends the user to a different page to debug.
-- `/drafts` empty state says "Find Sources Sought opps" — better but assumes the user knows what Sources Sought is.
-- `/pipeline` first-time pedagogical 3-step is **the exemplar** — `library/page.tsx`'s three EmptyStates approach this. Everywhere else falls short.
-
-### Errors that aren't actionable
-
-The page-level error overlay isn't in scope (it's Next.js's). But several pages handle backend errors by silently `.catch(() => null)` and rendering an empty state — `forecasts/page.tsx:44-53` for integrations, `dashboard/page.tsx:42-80` for events/recompetes/forecasts/eligibility, etc. The user sees "no events" when the actual cause is "events ingester crashed." We can't fix the silent-catch this pass without rewriting the data-fetch layer, but we should at least surface a "couldn't load — retry" affordance on the empty states.
-
----
-
-## 4. Cross-cutting gaps (the system, not any one page)
-
-### Shell shape consistency
-- ✅ Sidebar / topbar / main / footer mounts uniformly via `(app)/layout.tsx`.
-- ❌ Sidebar nav uses `border-brand-700 bg-brand-50 text-brand-900` legacy literals (`sidebar-nav.tsx:82`) — should be `border-primary bg-primary/10 text-foreground` (or a dedicated `--sidebar-active` token).
-- ⚠️ Topbar (line 81-98 of layout) shows tenant name + plan badge + Clerk UserButton. The plan badge is uppercase tracking-wider; the tenant name is bold — fine. The Clerk UserButton renders Clerk-default styling regardless of our tokens; pre-existing.
-
-### `PageHeader` consistency
-- ❌ Used in 11 of 12 in-scope routes; opportunity detail rolls its own. Should adopt the primitive.
-- ❌ `display={true}` is used on opportunity detail (rolled-its-own) + pursuit detail + capture-package + dashboard's `display=false size="sm"`. Three semantic uses of one prop. The rule should be: **decision/work surfaces** (opportunity detail, pursuit detail, capture-package) use `display`; **catalogue surfaces** (opportunities list, library, drafts list, settings) use default sans; **conversational surfaces** (dashboard greeting) use `size="sm"`.
-
-### `Section` / `Card` rhythm
-- The repo has both `Section` (borderless titled section) and `Card` (boxed white card) in `ui.tsx`. They're used appropriately on the dashboard. Other pages use raw `<section className="rounded-md border ...">` instead of either primitive — see `forecasts/page.tsx`, `recompetes/page.tsx`, `pipeline/page.tsx`, `pursuits/[id]/page.tsx`. Migrating to `<Card>` collapses ~30 inline className strings to a single primitive.
-- The new shadcn `Card` family in `components/ui/` is unused. Either migrate to it or document it as legacy-only.
-
-### `Kpi` strip pattern
-- Dashboard is the only page that uses `<Kpi>` (4 callsites). Library has its own `SummaryStat` (lines 513-531) — visually identical to `Kpi` but renamed. Should consolidate.
-- `Kpi` sets `tabular-nums` on values; `SummaryStat` does too. Both opt-in to the same body-level tabular-nums declared in globals.css.
-
-### Breadcrumb / back-affordance pattern
-- Three different patterns in three places (opportunity detail, pursuit detail, draft detail). No standard. Add a `<BackLink>` primitive — `← All opportunities` shape, accepts an href + label, sits above `<PageHeader>` consistently.
-
-### Primary-action affordance pattern
-- Currently FOUR primary-action colors: `bg-neutral-900` (black, on opportunity list, library, pipeline, settings), `bg-brand-700` (teal, on capture-package, sign-in, marketing landing, draft export), `bg-amber-700` (onboarding nudge), `bg-emerald-600` (won marker, mark-submitted). Resolution: brand-teal `--primary` is the only primary; everything else is a semantic variant (`--success`, `--warning`, `--destructive`).
-- The shadcn `<Button variant="primary">` in `components/ui/button.tsx` already maps to `bg-primary text-primary-foreground`. Migrating the 30+ inline button instances to that variant resolves the entire ambiguity in a single PR.
-
-### Error / empty-state pattern
-- `<EmptyState>` is used on 6 of 12 routes. `/forecasts` and `/events` skip it. Standardize: every list page that can be empty MUST mount `<EmptyState title body action>` and never just render the content area empty.
-- Body should explain (a) why it's empty, (b) what would change that, (c) one action. The current `<EmptyState>` API supports that but isn't enforced.
-
-### Mobile responsive posture
-- Dashboard, opportunities list, opportunity detail collapse cleanly to single-column at <md.
-- Pipeline horizontal-scrolls at <lg via `min-w-[1100px]` (line 114) — that's a deliberate choice that says "kanban is a desktop tool." Acceptable but should be documented.
-- Pursuit detail's 11-section stack is the worst mobile experience in the app — needs a TOC or accordion for <lg.
-- No page uses a mobile drawer for filters. `/opportunities` left filter sidebar stacks above results on <lg, pushing the first opportunity below the fold.
-
-### Jargon-helper coverage
-- **The single most undervalued asset in the app.** 52 callsites, but concentrated on 5 files. Six pages have zero coverage. The fix is mechanical: for every CMMC/SPRS/FAR/Section L/Section M/POP/SOW/PWS/RFI/RFP/Sources Sought/UEI/CAGE/NAICS string in JSX text, wrap it. Most are static strings — search-and-replace is safe.
-- The `Term` taxonomy needs documenting (kinds list, naming convention) but that's a doc-task, not this pass.
-
----
-
-## 5. Prioritized leverage points (architect picks 5–7 to ship)
-
-Ranked strictly by impact / effort. Each item is implementable as a single focused PR; the architect should pick from the top.
-
-### 1. **Unify primary-action color across every authenticated page.**
-- Problem: Four different "primary" button colors in active use (`bg-neutral-900`, `bg-brand-700`, `bg-amber-700`, `bg-emerald-600`). User can't learn the rule.
-- Evidence: `dashboard/page.tsx:154`, `opportunities/[id]/page.tsx:521`, `pipeline/page.tsx:72`, `library/page.tsx:97/213/333`, `settings/page.tsx:53`, `pursuits/[id]/page.tsx:231/473/611`, `drafts/[id]/page.tsx:107/170` — black-button "primary" is the dominant pre-tokenization pattern. Brand-teal "primary" is the post-tokenization pattern.
-- Proposed direction: every primary action (the one CTA per surface) becomes `<Button variant="primary">` from `components/ui/button.tsx` — which already resolves to `bg-primary text-primary-foreground`. Won/Lost/Submitted markers use semantic variants (`success`/`destructive`). Black `bg-neutral-900` deletes from the codebase except inside Cmd-K (its dialog chrome).
-- Impact: **High** — visible on every page. Makes the brand decision visible.
-- Effort: **M** — ~30 callsites to migrate, but the `<Button>` component already exists.
-- Files: every in-scope page (mechanical search-and-replace).
-
-### 2. **Wrap every bare jargon string with `<Term>` or `<TermPopover>` on the six low-coverage pages.**
-- Problem: `Term`/`TermPopover`/`ExplainRail` is the strongest brand differentiator, but six pages have near-zero coverage.
-- Evidence: `pipeline/page.tsx` (stage labels Lead/Qualify/Pursue/Propose/Submit), `library/page.tsx` (capability statements / past performance / teaming partners / embedded / NAICS coverage), `drafts/page.tsx` (Sources Sought / RFP response / compliance matrix / status flow), `forecasts/page.tsx` (POP / RFP / target NAICS), `recompetes/page.tsx` (POP / EDGAR / SEC / distress / set-aside scope), `events/page.tsx` (Industry day / Pre-solicitation / OSBP), `settings/page.tsx` (UEI / CAGE / Clerk org / tier primary/secondary).
-- Proposed direction: for each bare jargon string in JSX text, wrap it with `<Term kind="..." value="...">label</Term>`. Use existing `kind`s where possible (`section`, `clause`, `cmmc`, `sprs`, `naics`, `set_aside`, `set_aside_cert`); add new ones for `pursuit_stage`, `draft_type`, `draft_status`, `pop`, `incumbent_distress`, `tenant_field` (UEI/CAGE), `library_section` (capability/past-perf/teaming).
-- Impact: **High** — directly serves the layman audience the user named in this brief. Brian and John can read every page.
-- Effort: **M** — mostly mechanical wrapping, but new `kind`s require backend `/explain/{slug}` entries (the LLM auto-generates these on demand and caches; one-time cost).
-- Files: six pages above; `lib/api.ts` (no change needed if backend auto-generates); optionally `docs/DESIGN_SYSTEM.md` to document `Term` taxonomy.
-
-### 3. **Migrate to a single pursuit-stage tone map and remove emoji from `/recompetes`.**
-- Problem: Three different pursuit-stage palettes in three files; emoji in `/recompetes` violates voice.
-- Evidence: `pipeline/page.tsx:50-58`, `opportunities/[id]/page.tsx:468-476`, `pursuits/[id]/page.tsx:50-58` — three different `STAGE_TONE` maps. `recompetes/page.tsx:261` — `🚩 distress`.
-- Proposed direction: extract `STAGE_TONE`/`STAGE_LABEL` into `lib/pursuits.ts` (or `components/domain/pursuit.tsx`), import everywhere. Replace `🚩` with a `<Badge tone="red">distress {n}</Badge>` or text-only `distress signal: {n}` — semantics over decoration.
-- Impact: **High** — emoji removal is a hard voice-rule violation; tone-map unification gives the user one mental model of the lifecycle.
-- Effort: **S** — ~5 files touched, all mechanical.
-- Files: `lib/pursuits.ts` (new export), `pipeline/page.tsx`, `opportunities/[id]/page.tsx`, `pursuits/[id]/page.tsx`, `recompetes/page.tsx`.
-
-### 4. **Replace the inline opportunity-detail header with `<PageHeader display>` + extract `<BackLink>` primitive.**
-- Problem: Opportunity detail is the flagship page and it doesn't use `PageHeader`. Three different back-affordance patterns across detail pages.
-- Evidence: `opportunities/[id]/page.tsx:152-229` rolls its own header. `pursuits/[id]/page.tsx:208-243` uses PageHeader. `drafts/[id]/page.tsx:60-74` uses two top links.
-- Proposed direction: convert the opportunity-detail header to `<BackLink href="/opportunities">All opportunities</BackLink>` + `<PageHeader display eyebrow={agency} title={title} subtitle={chip-row} trailing={score+open-on-sam}>`. Add `<BackLink>` primitive in `components/ui.tsx` — accepts href + label, renders the standard `← {label}` shape with `text-xs text-muted-foreground hover:text-foreground`.
-- Impact: **Medium** — matches the rest of the app on the most-loved page; reduces template duplication.
-- Effort: **S** — `BackLink` is 10 lines; opp-detail header reshape is ~30 lines.
-- Files: `components/ui.tsx` (add `BackLink`), `opportunities/[id]/page.tsx` (replace inline header), `pursuits/[id]/page.tsx` (use new BackLink), `drafts/[id]/page.tsx` (use new BackLink).
-
-### 5. **Standardize `<EmptyState>` adoption — every list page mounts it; pedagogical voice mandatory.**
-- Problem: `/forecasts` and `/events` skip `EmptyState` and inline ops-tone fallback. Empty-state voice quality is uneven.
-- Evidence: `forecasts/page.tsx:96` (renders `<IntegrationDiagnostic>` directly when empty), `events/page.tsx:37` (uses EmptyState but body sends user to forecasts diagnostic), `drafts/page.tsx:39` (correct), `library/page.tsx` (correct), `recompetes/page.tsx:193` (correct).
-- Proposed direction: every empty list mounts `<EmptyState title body action>`. Body teaches: (a) what the page would normally show, (b) what would put data here, (c) one CTA. For `/forecasts` and `/events`, the diagnostic surface lives behind a `<details>Admin diagnostic</details>` fold-out, not the primary empty state.
-- Impact: **Medium** — every empty page becomes the user's chance to learn.
-- Effort: **S** — ~3 pages to fix.
-- Files: `forecasts/page.tsx`, `events/page.tsx`, `drafts/page.tsx` (voice tweak only).
-
-### 6. **Migrate hot pages off legacy palette literals to tokens.**
-- Problem: 497 legacy palette hits in `app/(app)/`. Two parallel color systems are running. Future cross-suite ports cost double.
-- Evidence: 37 hits in dashboard + pipeline + opp-detail alone (the three hottest files). Examples: `border-paper-200`/`bg-paper-50`/`bg-white`/`text-neutral-500`/`text-brand-700`/`bg-brand-700`.
-- Proposed direction: scoped find-and-replace per file, in this order: dashboard → pipeline → opp-detail → opp-list → pursuits-detail → drafts → library → forecasts → recompetes → events → settings. Mapping: `bg-white` → `bg-card`; `border-paper-200` → `border-border`; `bg-paper-50` → `bg-secondary`; `text-neutral-500` → `text-muted-foreground`; `text-brand-700` → `text-primary`; `bg-brand-700` → `bg-primary`; `bg-brand-50` → `bg-primary/10`; `bg-amber-50` → `bg-warning/10`; `text-amber-700` → `text-warning`; `bg-emerald-600` → `bg-success`; `bg-red-600` → `bg-destructive`; `border-red-300` → `border-destructive/40`; `border-amber-300` → `border-warning/40`. Legacy aliases in `tailwind.config.ts` stay during migration; remove in a follow-up.
-- Impact: **Medium** (long-term: high) — visually invisible to users; massive payoff for cross-suite portability.
-- Effort: **L** if all 12 pages, **M** if just the top 3 hot pages.
-- Files: every in-scope page (recommend top 3 this pass, rest next).
-
-### 7. **Add a `<Section>`-based in-page nav to `/pursuits/[id]` (the 11-section scroll).**
-- Problem: Pursuit detail is the deepest-work surface in the app — 11 stacked sections — with no in-page navigation.
-- Evidence: `pursuits/[id]/page.tsx:200-320` — sections stack vertically with no jump-list.
-- Proposed direction: at `lg+`, render a sticky-left mini-TOC ("Bid decision · Notes · Win strategy · Amendments · Solicitation · Past performance · Key personnel · Teaming partners · Agency intel · Web mentions · Audit · Danger zone"). At <lg, the same list as a collapsible accordion at the top. Each section gets an id + `scroll-mt-24` for header offset.
-- Impact: **Medium** — biggest QoL improvement for the 4 founders' daily workflow.
-- Effort: **M** — ~50 lines of new component, every section gets an id.
-- Files: `pursuits/[id]/page.tsx` (mostly), `components/ui.tsx` (optional `<SectionAnchor>` primitive).
-
-### 8. **Promote the dashboard's `HowItWorks` above-the-fold for first-time users; demote for return users.**
-- Problem: The 3-step "how CaptureOS works" block is below the KPI strip — first-time users see 4 numbers before they see the 3-step explanation.
-- Evidence: `dashboard/page.tsx:484-527` — `HowItWorks` mounted after `your_top` list. Cookie-based dismiss (`HOW_IT_WORKS_COOKIE`).
-- Proposed direction: when the cookie is unset (first session), render `HowItWorks` directly under the greeting and above the KPIs. When dismissed or after the user has any pursuit, mount it where it is now (or hide entirely). Add a "Start tour" affordance somewhere to bring it back manually.
-- Impact: **Medium** — Phase 4+ external users; less impact for the 4 founders.
-- Effort: **S** — reorder a JSX block conditionally.
-- Files: `dashboard/page.tsx`.
-
-### 9. **Add semantic-token migration to the `Pipeline` aging colors and `TodaysMoves` tone map.**
-- Problem: Pipeline aging hardcodes `border-amber-300`/`border-red-300`/`text-amber-700`/`text-red-700`. TodaysMoves has its own ad-hoc tone map.
-- Evidence: `pipeline/page.tsx:239-254`, `todays-moves.tsx:213-219`.
-- Proposed direction: `border-warning/40`/`border-destructive/40`/`text-warning`/`text-destructive`. `TodaysMoves` tone tokens map to `--warning`/`--primary`/`--muted`.
-- Impact: **Low / cumulative quality** — visually unchanged but contractually clean.
-- Effort: **S**.
-- Files: `pipeline/page.tsx`, `components/todays-moves.tsx`.
-
-### 10. **Consolidate `library/page.tsx`'s `SummaryStat` into the existing `Kpi` primitive and migrate `<section className="rounded-md border ...">` callsites to `<Card>`.**
-- Problem: Two visually-identical primitives doing the same job (`Kpi` and `SummaryStat`); inline `<section>` rounded-borders proliferating.
-- Evidence: `library/page.tsx:513-531` defines `SummaryStat`; `forecasts/page.tsx:108`, `recompetes/page.tsx:217`, `pipeline/page.tsx:165`, `pursuits/[id]/page.tsx:multiple`, `dashboard/page.tsx:650` all roll their own card-shaped section.
-- Proposed direction: `Kpi` is the single source for label + big number + hint. `Card` (existing legacy primitive) is the single source for boxed sections. Inline rounded-border `<section>` blocks migrate to `<Card>` or `<Card title=...>`.
-- Impact: **Low** — long-term tidy.
-- Effort: **M** — touches many files.
-- Files: `library/page.tsx`, `forecasts/page.tsx`, `recompetes/page.tsx`, `pipeline/page.tsx`, `pursuits/[id]/page.tsx`, `dashboard/page.tsx`.
-
-### 11. **Wire the inline-button proliferation across detail pages to `<Button variant>`.**
-- Problem: ~25 inline buttons across opportunity-detail and pursuit-detail re-implement the shadcn Button shape.
-- Evidence: `opportunities/[id]/page.tsx:519-528, 642-678`, `pursuits/[id]/page.tsx:404-410, 471-478, 547-554, 609-616, 657-664`. Each one is a hand-laid `rounded-md bg-X px-Y py-Z text-color`.
-- Proposed direction: migrate all to `<Button variant="primary|secondary|ghost|destructive|success">` from `components/ui/button.tsx`. Add `success` and `warning` variants if missing.
-- Impact: **Medium** — cleaner code; consistent focus rings; one-place style updates.
-- Effort: **M** — careful migration to preserve focus / hover semantics.
-- Files: `opportunities/[id]/page.tsx`, `pursuits/[id]/page.tsx`, `pipeline/page.tsx`, `library/page.tsx`, possibly all forms.
-
-### 12. **Add a "primary affordance" to recompete cards: `Plan capture →` button.**
-- Problem: `/recompetes` shows the highest-leverage signal in the product (named incumbent + POP-end) but has no affordance to act on it.
-- Evidence: `recompetes/page.tsx:215-352` — each card has a "Source" link (out to the agency forecast page) and that's the only action.
-- Proposed direction: add a "Plan capture" button on each card that links to a new (or existing if forecast is in opps) opportunity, OR adds the recompete to a watchlist that surfaces on the dashboard. (If the data model doesn't yet support a recompete-watchlist, the simpler version is to link to `/forecasts?incumbent={name}` for now.)
-- Impact: **Medium** — turns a passive page into an active one.
-- Effort: **M-L** — depends on whether the watchlist feature exists; might require a new endpoint.
-- Files: `recompetes/page.tsx`, possibly `lib/api.ts`, possibly backend.
-
----
-
-## 6. What to AVOID this pass
-
-- **Do NOT port clearD's `cleard-hero-bg` radial-glow auras to any authenticated page.** That utility belongs to clearD's marketing surface; CaptureOS cards stay opaque and document-feel. (Brief 1, §6 already rejected this; reaffirming.)
-- **Do NOT introduce dark mode.** The light-first warm-paper decision is locked.
-- **Do NOT switch primary teal to copper or any other color.** Brand-teal `#207b78` (resolved through `--primary`) is the decision.
-- **Do NOT rewrite the domain cards listed in the constraint** (`agency-intel-card.tsx`, `cyber-posture-card.tsx`, `solicitation-panel.tsx`, `audit-trail-card.tsx`, `ask-streaming.tsx`, `draft-streaming.tsx`). Token migrations transparent to them are fine; layout changes are not.
-- **Do NOT add decorative iconography** (Lucide icons, brand-mark chips, illustrated empty states). The product is editorial and direct; iconography is reserved for functional affordances (Cmd-K, ?, ✕, ↻, →, ↑, ↓ — typographic or single-glyph).
-- **Do NOT introduce glassmorphism / backdrop-blur** on dashboard cards. Cards stay opaque.
-- **Do NOT marketing-frame the copy.** No "powerful," no "easy-to-use," no "designed for the modern federal contractor." Sober, plainspoken, competent.
-- **Do NOT remove the `font-serif` italic display titles** on opportunity / pursuit / capture-package. Brand DNA.
-- **Do NOT widen scope to onboarding wizard or capture-package detail page** unless the architect has bandwidth — those are separate journeys. Brief 1's §8 non-goals still apply.
-- **Do NOT import any emoji as decorative element.** The 🚩 violation in `/recompetes` is the example of what to avoid (and remove).
-- **Do NOT touch the footer color decision.** Brief 1's reversal locked it as obsidian for cross-suite continuity.
-
----
-
-## 7. Section 9: Success criteria for the verifier
-
-The architect's PR for this iteration succeeds if all of the following are true:
-
-1. **Single primary-action color in the app.** `grep -nE "bg-neutral-900|bg-amber-700|bg-emerald-600|bg-red-600" apps/web/app/\(app\) -r` returns zero hits in JSX class strings (matches in tone-record values are OK only if the value resolves to `bg-success`/`bg-warning`/etc). Every primary CTA on every authenticated page mounts `<Button variant="primary">` (or matches that styling).
-2. **Every authenticated page mounts `<PageHeader>`.** Specifically: opportunity detail (`opportunities/[id]/page.tsx`) replaces its inline header with `<PageHeader display>` + `<BackLink>`. Verify with `grep -L "<PageHeader" apps/web/app/\(app\)/*/page.tsx apps/web/app/\(app\)/*/\[id\]/page.tsx` — empty output.
-3. **`<BackLink>` exists as a primitive** (`components/ui.tsx` or `components/ui/back-link.tsx`) and is used on opportunity detail, pursuit detail, draft detail (3 callsites minimum). No two detail pages have different back-affordance shapes.
-4. **No emoji in any non-error UI string.** `perl -ne 'print if /[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}]/' apps/web/app/\(app\) apps/web/components -r` returns zero matches. The 🚩 in `/recompetes` is gone.
-5. **Single `STAGE_TONE` and `STAGE_LABEL` source.** Exported from `lib/pursuits.ts` (or `components/domain/pursuit.tsx`); imported by pipeline, opportunity-detail, pursuit-detail. `grep -c "STAGE_TONE.*Record" apps/web/app/\(app\) -r` = 0 (no per-file redefinitions).
-6. **Bare jargon coverage.** On every surface touched this pass, the following words MUST be wrapped in `<Term>` or `<TermPopover>` at least on first occurrence per page: `POP`, `Section L`, `Section M`, `SOW`, `PWS`, `Sources Sought`, `RFP`, `RFI`, `set-aside`, `NAICS`, `UEI`, `CAGE`, `SPRS`, `CMMC`, `DFARS`, `FAR`, `SDVOSB`, `8(a)`, `HUBZone`, `WOSB`, `EDWOSB`, `JV`, `pursuit stage` labels (`Lead`/`Qualify`/`Pursue`/`Propose`/`Submit`/`Won`/`Lost`), `embedded`, `vector match`, `incumbent distress`. Verifier spot-check: open `/pipeline`, `/library`, `/drafts`, `/forecasts`, `/recompetes`, `/events`, `/settings` — every page has at least 3 `<Term>` callsites.
-7. **`<EmptyState>` mounted on every empty-able list page.** `/forecasts` and `/events` empty surfaces use `<EmptyState>`; `<IntegrationDiagnostic>` lives behind a `<details>` fold-out or after the EmptyState, not in place of it.
-8. **No legacy-palette literals on the three hot pages.** `grep -nE "bg-paper-|border-paper-|text-brand-|bg-brand-|border-brand-|text-neutral-(?!200)" apps/web/app/\(app\)/dashboard/page.tsx apps/web/app/\(app\)/pipeline/page.tsx apps/web/app/\(app\)/opportunities/\[id\]/page.tsx` returns zero hits in JSX class strings (legacy in comments / type-record-keys allowed).
-9. **Pursuit-detail in-page nav present at `lg+`.** Sticky left rail or sticky top accordion linking to the 11 sections by anchor. Every section has a stable `id`.
-10. **Sidebar active-state uses tokens.** `sidebar-nav.tsx:82` no longer uses `bg-brand-50 border-brand-700 text-brand-900`; uses `bg-primary/10 border-primary text-foreground` (or equivalent token).
-11. **No emoji, no marketing-frame copy, no `bg-[#xxxxxx]` literals introduced.** (Carry-over from Brief 1.)
-12. **No `dark:` Tailwind variants introduced.** (Carry-over.)
-13. **`Term` taxonomy documented somewhere.** Either `docs/DESIGN_SYSTEM.md` or `apps/web/components/README.md` lists the supported `kind`s with examples.
-14. **Mobile horizontal-scroll regression check.** `/dashboard`, `/opportunities`, `/opportunities/[id]`, `/pipeline`, `/pursuits/[id]`, `/library`, `/drafts`, `/drafts/[id]`, `/forecasts`, `/recompetes`, `/events`, `/settings` at 375 / 768 / 1024 / 1440 — no horizontal scroll except `/pipeline` (which has explicit `min-w-[1100px]` for the kanban grid).
-15. **Contrast spot-check.** `text-warning` on `bg-card` ≥ 3:1 (passes for badges); `text-destructive` on `bg-card` ≥ 4.5:1 (passes for body); `text-muted-foreground` on `bg-secondary` ≥ 4.5:1.
-
----
-
-## 8. Section 10: Open questions for the human
-
-1. **Of the 12 in-scope routes, which 3 most matter to lift in this single pass?** My recommendation, ranked by user-value-per-effort: (a) `/dashboard` (it's the everyday landing, and the legacy-palette holdouts + how-it-works ordering + ComingUpRail tokenization are all medium-effort fixes), (b) `/opportunities/[id]` (flagship surface, biggest payoff for the layman audience — `<PageHeader>` adoption + `<Button variant>` migration + score-rationale promotion), and (c) `/pursuits/[id]` (the deep-work surface where the founders spend the most time — in-page nav alone is a meaningful lift). If only 2 can ship, drop pursuit detail. If only 1, ship `/opportunities/[id]` — it's the page everyone enters CaptureOS through.
-2. **Are we OK migrating dashboard / pipeline / opportunity-detail from `components/ui.tsx` (legacy 589-line file) to the new shadcn primitives this pass?** The shadcn Button/Card/Badge are scaffolded but unused. My recommendation: migrate the three hot pages' button instances ONLY to `<Button>` (leverage point #1 + #11) — a single mechanical migration. Leave Card/Badge migration for a follow-up; they're more tangled with domain components like `ScoreBadge`/`Pillar`/`NaicsBadge`. The legacy `ui.tsx` file stays.
-3. **Pursuit-stage labels — are they brand-stable?** `Lead`/`Qualify`/`Pursue`/`Propose`/`Submit`/`Won`/`Lost` is a 7-stage pipeline. For a layman SDVOSB owner, `Pursue` and `Propose` are easy to confuse. Should the labels rename to something more vernacular (e.g. `Watching` / `Researching` / `Capturing` / `Drafting` / `Submitting` / `Won` / `Lost`)? Or are these the BD-canonical names that an external customer in Phase 4 will recognize and we shouldn't fork? My instinct: keep the names, add `<Term>` wraps with plain-English explanations. Confirm.
-4. **Recompete `Plan capture` action — does the data model support a "recompete watchlist" yet, or is it a dashboard nudge / link to `/forecasts?incumbent={name}` for now?** Leverage point #12 depends on this. If the watchlist doesn't exist, the simpler "filter forecasts by incumbent" link is the right Phase 1 move.
-5. **Is the topbar tenant-name + plan-badge surface load-bearing?** It's tiny chrome (line 81-98 of layout). For a 4-founder Phase 1 product, it's cosmetic. For a Phase 4 multi-tenant external customer, it's important. Should we invest in making it a tenant-switcher (so users with multiple tenants — e.g. a CaptureOS admin) can swap), or keep it as static chrome this pass?
-
----
-
-## 11. Human responses (auto-mode decisions)
-
-Auto mode active — answers chosen by the orchestrator from CLAUDE.md context, the brief, and the user's instruction "perform a complete suite continuity and UX/UI upgrade for captureOS all internal pages should be worldclass UX/UI fit for a layman DIB contractor to succeed":
-
-1. **Top 3 routes to lift this pass.** Take the researcher's ranking: `/opportunities/[id]` (flagship — every user enters here), `/dashboard` (the daily landing), `/pursuits/[id]` (deep-work surface). The user said "all internal pages" — interpret that ambition as: the cross-cutting fixes (primary-action color, jargon coverage, emoji removal, EmptyState standardization, sidebar token, single STAGE_TONE) hit *every* page; the per-page deep-lifts focus on these three. Other pages get the cross-cutting wins for free.
-2. **Shadcn Button migration on hot pages — yes, this pass.** Migrate every primary-action `<button className="bg-neutral-900...">` and `<button className="bg-brand-700...">` and `<button className="bg-amber-700...">` and `<button className="bg-emerald-600...">` and `<button className="bg-red-600...">` to `<Button variant>` from `@/components/ui/button`. Keep `Card`/`Badge` shadcn migration scaffolded but unused — it tangles with `ScoreBadge`/`Pillar`/`NaicsBadge` domain components, defer.
-3. **Pursuit-stage labels stay (`Lead`/`Qualify`/`Pursue`/`Propose`/`Submit`/`Won`/`Lost`).** Add `<Term kind="pursuit_stage" value="lead|qualify|...">` wraps with plain-English explanations. Don't rename — those are BD-canonical and external customers will recognize them.
-4. **Recompete "Plan capture" action — defer.** No watchlist data model yet, and the link-to-forecasts-by-incumbent stopgap is enough work to push this pass over budget. Skip LP #12.
-5. **Topbar tenant-switcher — defer.** Phase 1 has 4 known founders on one tenant; topbar stays static chrome.
-
-**Architect's selected leverage points for this iteration (6 total)**:
-- §5.1 — Unify primary-action color (every primary CTA → `<Button variant="primary">`)
-- §5.2 — Jargon coverage with `<Term>` on the six low-coverage pages (`/pipeline`, `/library`, `/drafts`, `/forecasts`, `/recompetes`, `/events`, `/settings`) plus the dashboard KPI tiles
-- §5.3 — Single `STAGE_TONE`/`STAGE_LABEL` source in `lib/pursuits.ts` + remove the 🚩 emoji from `/recompetes`
-- §5.4 — `<BackLink>` primitive + replace `/opportunities/[id]` inline header with `<PageHeader display>`
-- §5.5 — `<EmptyState>` standardization on `/forecasts` and `/events` (diagnostic surface goes behind a `<details>` fold)
-- §5.6 — Token migration on the three hot pages only (dashboard, pipeline, opportunity-detail). Ship #4.10 sidebar token swap as part of this — it's the same kind of edit.
-
-**Deferred for next pass (out of scope this iteration)**: §5.7 pursuit-detail in-page nav, §5.8 HowItWorks reordering, §5.9 broader semantic-token migration (covered partially by §5.6), §5.10 SummaryStat→Kpi consolidation, §5.11 broader button migration (covered partially by §5.1), §5.12 recompete plan-capture action.
+# UX Research Brief
+Generated: 2026-05-25T09:29:00-07:00
+Scope: Opportunity discovery + opportunity rendering. Specifically: `app/(app)/dashboard/page.tsx`, `app/(app)/opportunities/page.tsx`, `app/(app)/opportunities/[id]/page.tsx`, `components/todays-moves.tsx`, `components/cyber-posture-card.tsx`, `components/sidebar-nav.tsx`, `components/ui.tsx`, `lib/api.ts`. Out of scope: pipeline kanban, drafts, library, onboarding, settings (only mentioned where they touch discovery).
+
+## 1. Product summary
+MacTech CaptureOS is an internal BD weapon for a 4-person SDVOSB defense contractor: it ingests every federal SAM.gov opportunity, scores each one 0–100 against MacTech's NAICS / set-aside / capability profile, routes high-fit opps to the right founder by pillar (Security/Infra/Quality/Governance), and supports the workflow from triage to Sources Sought draft to capture package. The product just shipped a parallel "high-moat" scoring track tuned to MacTech's strongest win profile (OT/ICS cyber work mandated via UFGS 25 05 11 / 25 08 11) — but that track has zero presence in the web UI yet. The core daily question users open the app to answer is "given my profile, what should I bid on today?"
+
+## 2. Stack & design system inventory
+- **Framework:** Next.js 16.2 (App Router, RSC-heavy, `force-dynamic` on all data pages) + React 18.3 + TypeScript 5.6
+- **UI library:** Hand-rolled shadcn-shape primitives in `components/ui.tsx` (Card, Section, PageHeader, Kpi, Badge, ScoreBadge, Button, LinkButton, EmptyState, Pillar, BackLink, Term, ExplainLink, NaicsBadge, NoticeTypeBadge, SetAsideBadge) — NOT the `npx shadcn` generator output. Radix Slot is the only Radix dep. `class-variance-authority` + `clsx` + `tailwind-merge` are wired.
+- **Styling:** Tailwind 3.4 + a "gold copy" HSL CSS-variable token contract in `app/globals.css`. Light-first only (no `.dark` block, on purpose). Warm-paper background (`hsl(45 35% 97%)`), brand-teal primary (`hsl(178 58% 30%)` = #207b78), semantic `--success` / `--warning` / `--destructive`, four `--pillar-*` tokens. Body type is 15px sans (system stack) with `font-variant-numeric: tabular-nums` as default; an editorial serif (Iowan Old Style → Palatino → Georgia) is reserved for `display` headers on decision-oriented surfaces.
+- **Existing primitives:** see ui.tsx above. Detail-page features: `AnnotatedProse` for inline jargon, `ExplainLink` / `ExplainRail` (an in-place right-rail "Explain this" surface that opens via `?explain=…` search param without losing state), `TermPopover`, `CmdK` (Cmd-K global search across opps/drafts/partners/past performance), `KeyboardList` (Linear-style j/k/Enter row navigation), keyboard shortcuts (g+letter go-to nav, ? for help modal), streaming `AskStreamingPanel`, `StreamingDraftButton`.
+- **Existing design tokens:** Eight pages of HSL variables already establish a coherent cross-app contract (vetted / clearD parity). Pillar tokens are first-class. The biggest gap is no `--high-moat` / sweet-spot token yet — the new scoring track has no visual identity.
+
+## 3. Activity signals (last 60 days)
+- **Hot files (most edited in 60d):** `docs/PROGRESS.md` (28), `apps/web/lib/api.ts` (25), `apps/api/.../main.py` (24), `apps/web/app/(app)/dashboard/page.tsx` (20), `apps/web/app/(app)/opportunities/[id]/page.tsx` (19), `apps/workers/.../celery_app.py` (19), `packages/db/.../models/__init__.py` (18). The opportunity-detail page and the dashboard are by a wide margin the hottest UI surfaces — exactly where the ask is focused. Good news: redesign effort here lands on the most-touched code, so it won't bit-rot.
+- **Active surface areas:** the four most recent commits (in chronological order) are `b09bb66 feat(intelligence): high-moat UFGS 25 / FRCS cyber scoring track`, `007d45f feat(web): worldclass internal-pages lift for layman DIB contractor`, `ee5bf2e feat(web): port vetted/clearD gold-copy token contract`, `e44699c ui(dashboard): tighten greeting`. Translation: the backend just shipped a major new ranking signal and the frontend just shipped a token contract — the next obvious move is to surface the new signal *through* the token contract. That's the brief.
+- **Team size signal:** 140 commits from Patrick, 4 from another committer = effectively single-engineer. The product can absorb a focused, opinionated redesign; it cannot absorb 20 simultaneous leverage points. Pick the 5 that move the daily question.
+
+## 4. User-reported pain points
+GitHub MCP is not connected in this session, so I have no PRs/issues/reactions to cite as user evidence. There is also no first-party `Feedback` table in the schema (only `audit_events`), so there is no in-app feedback to surface either.
+
+Recommendation for the human: this is a 4-person team that talks daily; the highest-value pre-design step is a 10-minute conversation that captures the actual phrases each founder uses when they say "this is annoying" on the opportunity feed. If you do nothing else before architecture, ask each founder to talk you through the last 3 opps they opened and which signal they actually used to decide bid/no-bid. That qualitative pass beats any code inference.
+
+Inferred pain points from code structure (marked low/medium evidence strength):
+- **High-moat signal is invisible** (HIGH evidence — direct code check). API returns `high_moat_score`, `is_sweet_spot`, `clause_hits`, `clearance_hits`, `role_hits`, `top_clearance`, `why_it_matters_seed`. Frontend has **zero** references to any of these. `grep -rn "high_moat" apps/web/` returns nothing. The list page sort still defaults to `score_desc` with no `high_moat_desc` option exposed in `SORT_LABELS`. This is the highest-leverage gap in the entire product right now: the team just built MacTech's "this is exactly the work we should win" detector and the UI literally cannot see it.
+- **Cyber/OT clause evidence isn't shown where it would matter** (HIGH evidence). `CyberPostureCard` (in detail view) renders `clauses_identified`, `cmmc_level_required`, CUI/FCI/ITAR — but it pulls from `/opportunities/{id}/cyber-summary` (a different endpoint than the high-moat scoring path) and doesn't show *which UFGS clauses* fired the high-moat detector or which clearance roles (ISSM/ISSE/3PAO) triggered the role bonus. So the card that *looks* like "cyber posture" is actually about the tenant's posture vs. the solicitation's ask, not about why this opp is a high-moat fit for MacTech.
+- **The list page has too many filters and not enough verbs** (MED evidence — visual density of `app/(app)/opportunities/page.tsx`). Score buckets, search, set-aside, notice type, assigned founder, NAICS, sort, page — eight controls on a row. A capture lead's actual question is two-dimensional ("for me, today, what should I open?"). The recently-shipped `/dashboard` "Today's moves" + KPI tiles already concedes this — they linkify to filtered list states. The list page should be a defaulted-correctly leaderboard, not a search UI.
+- **The "why this matters" line is buried** (MED evidence). On the list, `why_it_matters` is line-clamp-2 in muted gray after title + agency. On the detail page it's in the bottom score panel behind a `<details>` for the breakdown. For a layman BD lead the "why" is the most important sentence on the page; right now it's two scrolls down.
+- **Opportunity titles render as raw SAM.gov text** (LOW evidence, observed). SAM titles are notoriously ugly ("J--MAINTENANCE OF FACILITY DEDICATED CIRCUITS BLDG 4471 ROBINS AFB"). The brief generator (`brief.scope_one_sentence`) produces a clean "what this is" sentence but only inside the detail-page brief panel. The list shows the raw title.
+- **The brief — the best surface for "sleek and beautifully parsed" — is opt-in** (MED evidence). On `opportunities/[id]`, `BriefAndDescriptionPanel` renders the plain-English brief if it exists, otherwise an empty state asking the user to click "Generate brief." There's no async pre-warm trigger that runs the brief generator for any opp scored ≥60 the moment it crosses the threshold. Result: the cleanest possible "opportunity in 30 seconds" view is the *last* thing a triaging founder sees.
+- **No saved-search runner UI** (HIGH evidence). `SavedSearchOut` exists in `lib/api.ts`. The morning digest commit (`3c40db9 feat(digest): wire saved-search alerts through morning digest`) wires them through email. But there is no `/opportunities?saved_search=…` query path, no left-rail "Patrick's UFGS 25 / FRCS Cyber" entry, no first-class "open this saved view" affordance in the sidebar. The new high-moat-aware saved search the backend ships with has no front door.
+
+## 5. Inferred user & critical path
+- **Primary user persona (inferred + confirmed in CLAUDE.md):** four MacTech founders. Patrick (Security) and James (Infra) are code-fluent and likely live in CaptureOS daily; Brian (Quality) and John (Governance/Legal) are less code-oriented and check it episodically. Patrick is the engineer building it. The product is also a sales artifact (Phase 4+) so the UI must look credible to external DIB CISOs / BD leads / KOs visiting on demo — but optimize for the 4 daily users first.
+- **Top 3 jobs-to-be-done on the discovery surface:**
+  1. "Show me the 1–3 opportunities I personally should look at first today" (HPEW / sweet-spot triage).
+  2. "Show me everything in my lane I haven't yet decided on" (untracked, scored ≥60, assigned to me).
+  3. "Let me drill into one opp, decide bid/no-bid in 30 seconds, and either add to pipeline or move on" (decision triage).
+- **Critical path for the primary job (today, observed in code):**
+  1. Sign in via Clerk → `/dashboard`.
+  2. Scan `TodaysMoves` (up to 3 ranked verbs: Decide / Review / Triage / RSVP / Position) — today this does NOT include "Pursue this sweet-spot opp."
+  3. Click "Your top N" row → `/opportunities/{id}`.
+  4. Scan: header chips → meta strip → pursuit panel → drafter panel → ask panel → two-column main (brief left / cyber posture + incumbent + capability matches right) → score breakdown (collapsed by default).
+  5. Click "Add to pipeline" or bounce back.
+- **Friction points observed in code:**
+  - Triage requires scrolling past four pre-decision panels (PursuitPanel, DrafterPanel, AskPanel, then the brief) — they're useful *after* you've decided to pursue, but they sit above the "should we pursue?" evidence. The page layout is optimized for the second-visit, not the first-visit.
+  - `BriefAndDescriptionPanel` uses URL hash anchors (`#brief-{id}` / `#raw-{id}`) as a fake tab pattern. That works, but `:target` styling isn't applied, so the "active" tab visual state is identical to the inactive one — the user can't tell at a glance which view they're seeing.
+  - `cyber-posture-card.tsx` is one of two files still using raw hex tones (`bg-emerald-50`, `text-red-900`, `border-amber-200`) inside the post-token-contract codebase — it'll feel visually off-key on the page next to token-driven neighbors.
+  - The "How CaptureOS works" 3-step block sits above the fold for every user who hasn't dismissed it. It's a one-time orientation. After dismissal it's recoverable from the footer, which is correct — but it shouldn't be eating prime real estate on day 2.
+  - On opportunity-list `<details>` for "More filters" hides the sort control. Sort is a primary navigation verb on a ranked feed, not a power-user filter.
+
+## 6. Recommended aesthetic direction
+- **Direction: Editorial / B2G credibility, refined.** Keep the warm-paper + brand-teal + editorial-serif headers system that just shipped (commit `ee5bf2e`). This is the right call for the audience — KOs, CISOs, BD leads, and federal program staff respond to gravitas, not glow. The current token contract is well-judged; do not pivot it.
+- **Rationale:** (1) The audience reads ugly PDFs all day; a calm, paper-feeling surface is a competitive advantage on focus. (2) The "veteran-owned, sober, plainspoken" voice in CLAUDE.md is already baked into the type system — Iowan Old Style serif on display titles signals "Booz Allen / Stripe" not "Palantir." (3) Dark cyber-command-center palettes would actively damage credibility with a CO who associates them with marketing decks, not real assessments. (4) The product is also MacTech's external-credibility surface; restraint reads as competence.
+- **Visual language specifics:**
+  - **Color foundation:** keep paper-50 / paper-100 / paper-200 with brand-teal (#207b78) as the single accent. Reserve `--warning` (amber) for deadlines and gaps, `--destructive` (red) for debarments and hard blockers, `--success` (green) for clean exclusions and submitted drafts. **Add one new restrained signal** for the new high-moat track: a single saturated hue, used sparingly — proposal: a `--high-moat` token at roughly `45 90% 45%` (a confident gold), used only on the High-Probability-Easy-Win badge, the high-moat segmented-control option, and a single underline accent on the score-breakdown component when the high-moat track is the dominant scorer. Gold is right because it reads as "this is the prize" without screaming and doesn't collide with the existing palette.
+  - **Typography character:** body stays at 15px sans, tabular-nums on. Detail-page H1 stays italic-serif `display`. List-page row titles should bump from `text-base` to `text-[15px]/snug` with two-line clamp + an inferred plain-English title sourced from the brief's `scope_one_sentence` when available — fall back to SAM raw title. This single change is the biggest "sleek and beautifully parsed" win in the brief.
+  - **Density:** the list view should be denser and more scannable, not less. Currently each row is `p-5` with a min-height around 130px; target ~92px row height with a fixed left-edge "rail" showing the score (or, for a sweet-spot opp, a small gold left border + HPEW chip).
+  - **Motion posture:** static at rest. No card-lift hovers on rows (currently `hover:shadow-sm` — kill it for the leaderboard). One animated affordance only: the Ask Claude / Brief generation streams, which already work.
+- **What to AVOID:** glass panels, dark mode, cyan accents, neon score colors, animated KPIs, illustration art, emoji of any kind (rule in CLAUDE.md), "cyber-grid" backgrounds, gradient buttons, anything that looks like a SaaS marketing site landing page.
+
+## 7. Top UX leverage points (ranked)
+Ranked by impact/effort. The top three are non-negotiable if you do nothing else.
+
+1. **Wire the high-moat track end-to-end into the discovery UI.**
+   - Problem: The backend's new sweet-spot detector (`high_moat_score`, `is_sweet_spot`, `clause_hits`, `clearance_hits`, `role_hits`, `top_clearance`, `why_it_matters_seed`) cannot be seen, sorted by, or filtered to from the frontend. The single most valuable signal the platform produces is invisible to the people who built it.
+   - Evidence: `grep -rn "high_moat" apps/web/` returns zero hits. Commit `b09bb66` shipped the backend ten days ago and there is no companion frontend commit. The API exposes `?sort=high_moat_desc`, `?sweet_spot_only=true`, `?high_moat_min=80` per the brief context — none are reachable from a click.
+   - Proposed direction: (a) Extend `OpportunityListItem` and `TopOpportunity` types in `lib/api.ts` to include `high_moat_score` + `is_sweet_spot`. (b) Add a third toggle to the segmented score-bucket control on `/opportunities`: "Sweet spots" (sweet_spot_only=true, sorts by high_moat_desc). (c) Add a sweet-spot row treatment: gold left-border rail + an "HPEW · UFGS 25" chip beside the ScoreBadge, only when `is_sweet_spot` is true. (d) On the dashboard, add a new top-of-page strip *above* "Today's moves" called "Today's sweet spots" that renders 0–3 HPEW opps inline as compact cards with the new gold accent. If zero sweet spots, render nothing (no empty state — gravitas requires not crying wolf).
+   - Impact: High. Effort: M.
+
+2. **Surface the plain-English brief on every list row and pre-warm it on score ≥60.**
+   - Problem: SAM titles are formatted for the agency's internal system, not for human triage. The brief generator produces a one-sentence `scope_one_sentence` that is exactly the human-readable title the list wants. Today it lives only on the detail page and only after the user clicks "Generate brief."
+   - Evidence: `OpportunityListItem` has no brief field; `BriefOut.scope_one_sentence` is fetched only on `/opportunities/{id}/brief`. The detail-page empty state in `BriefEmpty()` requires a click to generate. Brief generation already runs through Claude and is cached.
+   - Proposed direction: (a) On score ≥60 (or any sweet-spot flag), enqueue brief generation in the same worker chain that already does scoring — the Celery work is small and the result is cached. (b) Include `scope_one_sentence` on the `/opportunities` and `/me/dashboard` list payloads. (c) Render it as the primary list-row title; demote the raw SAM title to a muted second line. (d) Keep the raw SAM title accessible via hover/title attribute for the BD lead who wants to verify provenance.
+   - Impact: High. Effort: M.
+
+3. **Restructure the opportunity detail page around the bid/no-bid decision, not the post-decision workflow.**
+   - Problem: The top of the detail page today is: header → meta strip → PursuitPanel ("Add to pipeline") → DrafterPanel → AskPanel → main columns → score → score breakdown. Four of those panels are about *what to do after you've decided to pursue.* The user has not yet decided. They scroll past the decision evidence to get to the "do work" buttons.
+   - Evidence: `app/(app)/opportunities/[id]/page.tsx` lines 232–246 place PursuitPanel + DrafterPanel + AskPanel before the brief panel. Layout order does not match decision order.
+   - Proposed direction: New section order: (1) Header with score + HPEW chip if sweet-spot. (2) Meta strip (posted/deadline/set-aside/notice ID). (3) The brief panel (left column, full width if no explain rail) — this is the decision evidence. (4) A new compact "Why this is high-moat" strip when `high_moat_score >= 70`: shows `clause_hits` as badges with click-to-Explain, `top_clearance`, `role_hits`, and the `why_it_matters_seed` sentence — borrows the `CyberPostureCard` chrome. (5) Capability matches + incumbent intel (right column). (6) PursuitPanel + DrafterPanel + AskPanel (collapsed into a single "Take action" rail). (7) Full score breakdown (general + high-moat both visible, side-by-side). The new high-moat strip is the most important addition.
+   - Impact: High. Effort: M-to-L.
+
+4. **Replace the list page's filter sidebar with a left-rail of named, savable views ("perspectives").**
+   - Problem: Eight filter controls + a search box force a capture lead to *configure* the feed every visit. The team already has `SavedSearchOut` typed and the morning-digest worker uses saved searches. None of that is exposed in the navigation surface.
+   - Evidence: `SavedSearchOut` in `lib/api.ts` line 345; `SettingsResponse.saved_searches`; commit `3c40db9` ("wire saved-search alerts through morning digest"). The list page (`app/(app)/opportunities/page.tsx` lines 168–237) has no saved-search read path.
+   - Proposed direction: Left-rail on `/opportunities` becomes a list of perspectives: "Sweet spots today," "My lane — untracked ≥60," "Sources Sought in my NAICS this week," "Deadlines ≤7d," "All opps." Each is a saved search with stable URL (`/opportunities?view=sweet-spots`). The current filter controls become a "Refine this view" drawer that collapses by default. Add a "Save as perspective" button after manual refinement. This is the Linear / Notion "views" pattern and it's right for this audience.
+   - Impact: High. Effort: M.
+
+5. **Add a sweet-spot deadline alert to "Today's moves."**
+   - Problem: `TodaysMoves` ranks deadlines, drafts, high-fit untracked, events, recompetes — but not "an HPEW opportunity just landed in your lane today." A founder who only looks at the dashboard misses the most valuable signal.
+   - Evidence: `components/todays-moves.tsx` lines 55–168 do not reference high-moat or sweet-spot. `DashboardKpis` has no `your_sweet_spots_open` field.
+   - Proposed direction: Add a `your_sweet_spots_open` KPI to `/me/dashboard`. Insert a new ranked Move at slot #1 ("Pursue: N sweet-spot opp[s] dropped in your lane this week") when count > 0, using the new gold tone, linking to `/opportunities?view=sweet-spots`. Demote "high-fit untracked" to slot #3 since "high-fit" is the more general superset.
+   - Impact: High. Effort: S.
+
+6. **Fix the `BriefAndDescriptionPanel` tab affordance and elevate the brief.**
+   - Problem: The brief/raw toggle uses anchor links without a `:target` style, so the "active" tab is visually indistinguishable from the inactive one. The brief should also be the default *and* render its `must_haves`, `red_flags`, `suggested_teaming` more scannably than the current bulleted list.
+   - Evidence: `app/(app)/opportunities/[id]/page.tsx` lines 922–940 (the two anchors have the same styling logic regardless of `:target`).
+   - Proposed direction: Replace anchor-tab with a state-aware tab strip (server-component–friendly: use a search param `?view=brief|raw` and conditional className). Promote `must_have_requirements` to a 2-column grid with checkbox-like dot affordance. Keep `red_flags_for_small_biz` amber-bordered. Add an inline "Copy brief to clipboard" button — BD leads often paste these into Slack/Teams. Add an "Send to teaming partner" mailto stub once partner email is in the library.
+   - Impact: Med. Effort: S.
+
+7. **Migrate the `CyberPostureCard` to the token system and rename it to clarify intent.**
+   - Problem: One of two remaining hex-tone holdouts in the post-token-contract codebase. Also: the card name suggests "MacTech's cyber posture" but actually means "MacTech's posture vs. this solicitation's cyber ask." On a list with the new high-moat strip nearby, this becomes confusing.
+   - Evidence: `components/cyber-posture-card.tsx` uses `bg-emerald-50`, `text-red-900`, `border-amber-200`, `text-neutral-500`, etc. throughout. Compare to the token-driven neighbors that use `text-muted-foreground` / `bg-success/10` etc.
+   - Proposed direction: Rename to `<CyberFitCard>` ("Cyber fit · your posture vs. their ask"). Convert tones to semantic tokens. Add an explicit "What's missing" sub-rail that lists clauses cited in the solicitation that the tenant's SPRS profile doesn't yet cover — turns the card from informational to actionable.
+   - Impact: Med. Effort: S.
+
+8. **Add an explicit `is_sweet_spot` row treatment to the list AND the dashboard's "Your top N."**
+   - Problem: Without a visual distinction, a sweet-spot opportunity and a generally-high-scoring opportunity look identical on every surface. The whole point of the new track is that one of these things is *not* like the other.
+   - Evidence: `app/(app)/opportunities/page.tsx` row template (lines 310–384) has no conditional treatment. `app/(app)/dashboard/page.tsx` `your_top` template (lines 406–460) ditto.
+   - Proposed direction: Sweet-spot rows get (a) a 3px gold left border, (b) a small "HPEW" pill beside the ScoreBadge, (c) the `why_it_matters_seed` sentence rendered above the regular `why_it_matters` in a slightly bolder weight. Three-level visual hierarchy on the list: sweet-spot > top-scored > everything else. Do not animate this — gravitas.
+   - Impact: Med. Effort: S.
+
+9. **Move the "Open detail →" affordance and tighten list-row affordance footprint.**
+   - Problem: The list-row currently has an explicit `Open detail →` link inside an already-clickable card. Hover state lifts the card with a shadow. Two competing affordances; both feel a bit Web-1.0.
+   - Evidence: `app/(app)/dashboard/page.tsx` line 455-457; `app/(app)/opportunities/page.tsx` lines 314-315 use `hover:shadow-sm`.
+   - Proposed direction: Whole row is the link (already true). Drop the explicit "Open detail" CTA text. Replace shadow-on-hover with a subtle background tint (`hover:bg-accent/40`) and a right-edge chevron that slides 2px on hover. Calmer, denser, more "leaderboard."
+   - Impact: Low-Med. Effort: S.
+
+10. **Tighten the KPI strip → make it three tiles, not four.**
+    - Problem: Four KPIs is one too many on a strip designed to be scanned in two seconds. "Active pursuits" is the weakest of the four — it's a pipeline-health metric, not a discovery question, and `/pipeline` is one click away in the sidebar.
+    - Evidence: `app/(app)/dashboard/page.tsx` lines 271–321.
+    - Proposed direction: Three tiles, all framed as discovery questions: "Sweet spots today" (new, gold), "High-fit untracked," "Deadlines ≤7d." Move "Active pursuits" + "Drafts to review" into a smaller "Your work" strip below "Today's moves" — they're work-in-flight metrics, not "what should I bid on today" metrics.
+    - Impact: Low-Med. Effort: S.
+
+## 8. Out of scope / explicit non-goals
+- **Do not touch the pipeline kanban (`/pipeline`)** on this pass. It's the post-decision surface; conflating it with discovery doubles the redesign surface area without serving the brief.
+- **Do not redesign the drafts surface, library, settings, or onboarding.** Each is independently working and any change there will cost focus the redesign can't spare.
+- **Do not introduce a dark mode.** Audience signals strongly point to light-first; the token contract was deliberately built without a `.dark` block in commit `ee5bf2e`. Honor that decision.
+- **Do not replace the hand-rolled UI primitives with the shadcn CLI generator.** The current primitives are tuned to the token contract; ripping them out is a multi-week regression risk for cosmetic parity gain.
+- **Do not redesign the Ask-Claude streaming panel.** It works and the streaming UX is good.
+- **Do not redesign auth/Clerk surfaces** — handled by upstream Identity Command Center, recent commits show stability work landed.
+- **Do not add a "compare opportunities" feature** even if it sounds clever. The team is 4 people; they decide in conversation, not in a comparison view.
+- **Do not add new external dependencies** without a written tradeoff in CLAUDE.md per the operating agreement.
+
+## 9. Success criteria for the verifier
+- A founder visiting `/dashboard` on a day when at least one sweet-spot opp exists in their lane sees an HPEW marker above the fold (no scroll on a 1440×900 viewport).
+- The `/opportunities` list page exposes a "Sweet spots" toggle that issues `sort=high_moat_desc&sweet_spot_only=true` to the API. Tested by clicking the toggle and inspecting the network request.
+- Every opportunity list row renders a human-readable title — either `brief.scope_one_sentence` when available, or the raw SAM title with no fallback string like "—" or "untitled."
+- Sweet-spot rows have a visually distinct, non-animated treatment from regular high-score rows. The treatment uses the new `--high-moat` token, not a hardcoded color.
+- The opportunity detail page renders the brief (`Plain-English brief` tab) as the default visible content; the raw SAM text is reachable in one click. The active tab is visually distinct from the inactive tab — verifiable by screenshot diff.
+- A new "Why this is high-moat" strip appears on the detail page when `high_moat_score ≥ 70`, showing `clause_hits` (UFGS / DFARS / FAR badges), `top_clearance`, `role_hits`, and `why_it_matters_seed`. The strip does NOT appear when score is below threshold.
+- The `CyberPostureCard` (or its renamed successor) uses zero hardcoded hex/tone classes — only semantic tokens. Verifiable via `grep -E "bg-(red|amber|emerald|neutral)-[0-9]" components/cyber-posture-card.tsx` returning nothing.
+- Contrast ratio ≥ 4.5:1 for body text on `--background` and on `--card`; ≥ 3:1 for the new `--high-moat` token at common foreground/background pairings. Use `npx @axe-core/playwright` (already a devDep) for the sweep.
+- Mobile layout at 375px width: the opportunity list does not horizontally scroll; the detail-page two-column layout stacks into a single column at <lg. Existing responsive utilities already imply this; verify it.
+- Keyboard navigation: j/k moves through list rows, Enter opens, Cmd-K opens search, ? shows shortcuts — all already working; verify the new sweet-spot toggle is reachable via Tab and announces correctly to a screen reader (`aria-pressed` on the segmented control).
+- No emoji introduced anywhere in product UI (CLAUDE.md rule). Currently there is one stray check glyph in `cyber-posture-card.tsx` — that's existing tech-debt, fine to leave or replace with an icon, but do not add more.
+- No new `console.log`, no new `TODO` comments without a date, no new `any` types in TypeScript additions.
+
+## 10. Open questions for the human
+1. The high-moat track is currently Patrick-tuned (UFGS 25 / FRCS cyber). Should the sweet-spot surface render the same for Brian, James, John — or do they get their own pillar-shaped "high-moat" tracks later? This determines whether the gold accent is universal or Security-pillar-only.
+2. The brief's `scope_one_sentence` is generated by Claude. If we promote it to be the primary list title for every score-≥60 opp, we'll generate ~1 brief per scored opp. Cost is probably trivial (Haiku, single-sentence prompt) but worth confirming the budget before wiring the worker chain.
+3. Is the gold `--high-moat` token (`45 90% 45%`) on-brand for MacTech? The four pillar tokens already cover the spectrum; gold is a fifth signal. If you'd rather extend the existing palette (e.g., a deeper teal variant or a brighter brand-700), say so and I'll specify accordingly in the architect pass.
+4. Saved searches: should the left-rail "perspectives" be founder-private or tenant-shared by default? `SavedSearchOut.owner_founder_slug` suggests private; the morning digest infra suggests they're also being used as shared filters. This affects the "Save as perspective" affordance.
+5. Is there appetite for a `Feedback` model + a one-key thumbs-up/thumbs-down "was this opp scored right?" affordance on the detail page? Right now there's no closed-loop signal from triage back to scoring. This is a Phase 2 idea, not a Phase 1 brief item, but flagging now since it's the kind of thing that's much cheaper to add at the same time as the score-breakdown redesign.
+
+## 11. Human responses
+
+**Q1 — High-moat scope: Universal across founders.** The gold accent + Sweet Spots strip render for all four pillars. Brian / James / John see the high_moat_score column header even when their pillar's track isn't tuned yet — the rows will show low or null high-moat scores until those tracks ship, which is acceptable. One consistent surface across the team beats per-pillar UI divergence.
+
+**Q2 — Auto-brief budget: Yes, generate briefs for every score ≥ 60.** Estimated ~$0.20/day at MacTech scale. Architect should wire the Haiku scope-extraction call as a post-score worker step so the list shows the human-readable `scope_one_sentence` as the primary title and demotes the raw SAM.gov text to a muted secondary line.
+
+**Q3 — Gold accent: Use the restrained gold token.** `45 90% 45%` federal-procurement gold. Strictly left-border + corner-marker on sweet-spot rows; never as fill or background. Reads as gravitas, not bling — matches the existing warm-paper + brand-teal + editorial-serif system.
+
+**Q4 — Saved searches: Founder-private.** Matches the existing `SavedSearch.owner_founder_id` schema and the per-founder morning digest. Sharing can come later as an explicit affordance — not the default.
+
+**Q5 — Feedback model: Defer to Phase 2.** Out of scope for this pass. The brief explicitly framed this as Phase 2 and the architect should NOT add a thumbs-up/down affordance during this iteration. Revisit after the first week of high-moat scoring data lands.

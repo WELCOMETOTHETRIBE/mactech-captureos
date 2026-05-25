@@ -16,14 +16,19 @@ import type {
  * is one concrete action with a one-click destination.
  *
  * Ranking (highest priority wins the top slot):
- *   1. Deadlines closing in ≤7 days  (decide / submit / no-bid)
- *   2. Drafts awaiting review        (review)
- *   3. High-fit untracked            (triage)
- *   4. Industry day in ≤14 days      (RSVP)
- *   5. Recompete you should position for  (research)
+ *   1. Sweet-spot opp dropped in your lane  (pursue)  ← high-moat track
+ *   2. Deadlines closing in ≤7 days         (decide / submit / no-bid)
+ *   3. Drafts awaiting review               (review)
+ *   4. High-fit untracked                   (triage)
+ *   5. Industry day in ≤14 days             (RSVP)
+ *   6. Recompete you should position for    (research)
  *
  * Renders nothing if no actionable signal is present — empty state
  * is the calm message that there's nothing pressing.
+ *
+ * Tones: amber = deadline pressure, brand = primary action, neutral =
+ * informational, high_moat = federal-procurement gold (sweet-spot only,
+ * gold ink on the verb tag — never a fill).
  */
 
 type Move = {
@@ -31,7 +36,7 @@ type Move = {
   verb: string;
   label: React.ReactNode;
   href: string;
-  tone: "amber" | "brand" | "neutral";
+  tone: "amber" | "brand" | "neutral" | "high_moat";
   detail?: string;
 };
 
@@ -53,6 +58,30 @@ export function TodaysMoves({
   recompetes: ForecastOut[];
 }) {
   const moves: Move[] = [];
+
+  // Sweet-spot pursue Move — always claims slot 1 when present.
+  // The high-moat track is the strongest signal MacTech ships, so a
+  // sweet-spot in the founder's lane outranks deadline pressure on the
+  // first-thing-in-the-morning surface. Gold ink on the verb tag is the
+  // only place the token bleeds into TodaysMoves (per brief §6 + §11 Q3).
+  const sweetSpotsOpen = kpis.your_sweet_spots_open ?? 0;
+  if (sweetSpotsOpen > 0) {
+    const ownerQ = you ? `&assigned_founder=${you.slug}` : "";
+    moves.push({
+      key: "sweet-spots",
+      verb: "Pursue",
+      label: (
+        <>
+          <strong>{sweetSpotsOpen}</strong>{" "}
+          {sweetSpotsOpen === 1 ? "sweet-spot opp" : "sweet-spot opps"} dropped
+          in your lane
+        </>
+      ),
+      detail: "high-probability easy win — UFGS 25 / FRCS cyber",
+      href: `/opportunities?sweet_spot_only=true&sort=high_moat_desc${ownerQ}`,
+      tone: "high_moat",
+    });
+  }
 
   if (kpis.your_deadlines_lt_7d > 0) {
     const ownerQ = you ? `?owner=${you.slug}` : "";
@@ -216,6 +245,8 @@ export function TodaysMoves({
                         ? "text-amber-700"
                         : m.tone === "brand"
                         ? "text-brand-700"
+                        : m.tone === "high_moat"
+                        ? "text-[hsl(var(--high-moat))]"
                         : "text-neutral-500"
                     }`}
                   >

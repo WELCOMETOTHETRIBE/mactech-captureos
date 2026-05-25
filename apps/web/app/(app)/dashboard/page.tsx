@@ -17,6 +17,7 @@ import {
 import { dismissHowItWorks, showHowItWorks } from "@/lib/preferences";
 import {
   EmptyState,
+  HpewBadge,
   Kpi,
   LinkButton,
   NoticeTypeBadge,
@@ -403,25 +404,47 @@ export default async function DashboardPage() {
         ) : (
           <KeyboardList>
           <ul className="mt-4 space-y-3">
-            {data.your_top.map((opp, i) => (
-              <li key={opp.id}>
-  <Link
-                  href={opp.detail_url}
-                  data-kb-row
-                  className="block rounded-lg border border-border bg-card p-5 transition-colors hover:border-primary/40 hover:shadow-sm"
-                >
+            {data.your_top.map((opp, i) => {
+              // Sweet-spot row treatment mirrors /opportunities — gold
+              // left border + HPEW chip, never as fill. Same token, same
+              // shape, same primitive → consistent across surfaces.
+              const rowClass = opp.is_sweet_spot
+                ? "block rounded-lg border border-border border-l-[3px] border-l-[hsl(var(--high-moat))] bg-card p-5 transition-colors hover:border-primary/40"
+                : "block rounded-lg border border-border bg-card p-5 transition-colors hover:border-primary/40 hover:shadow-sm";
+              // Promote Claude-generated brief sentence when available.
+              const primaryTitle = opp.scope_one_sentence ?? opp.title;
+              const hasPromotedTitle = !!opp.scope_one_sentence;
+              return (
+                <li key={opp.id}>
+                  <Link
+                    href={opp.detail_url}
+                    data-kb-row
+                    className={rowClass}
+                    title={
+                      hasPromotedTitle ? `SAM title: ${opp.title}` : undefined
+                    }
+                  >
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="text-xs font-medium text-muted-foreground tabular-nums">
                           #{i + 1}
                         </span>
                         <ScoreBadge score={opp.score} size="lg" />
+                        {opp.is_sweet_spot && <HpewBadge />}
                         <NoticeTypeBadge type={opp.notice_type} />
                       </div>
-                      <h3 className="mt-2 text-base font-semibold leading-snug text-foreground">
-                        {opp.title}
+                      <h3 className="mt-2 line-clamp-2 text-[15px] font-semibold leading-snug text-foreground">
+                        {primaryTitle}
                       </h3>
+                      {hasPromotedTitle && (
+                        <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">
+                          <span className="uppercase tracking-wider">
+                            SAM:
+                          </span>{" "}
+                          {opp.title}
+                        </p>
+                      )}
                       <p className="mt-1 text-sm text-muted-foreground">
                         {[opp.agency_short, opp.naics_code && `NAICS ${opp.naics_code}`]
                           .filter(Boolean)
@@ -457,7 +480,8 @@ export default async function DashboardPage() {
                   </p>
                 </Link>
               </li>
-            ))}
+              );
+            })}
           </ul>
           </KeyboardList>
         )}

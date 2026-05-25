@@ -153,6 +153,16 @@ export type TopOpportunity = {
   incumbent_amount: number | null;
   sam_link: string | null;
   detail_url: string;
+  // Parallel high-moat track — null when the track hasn't scored this
+  // opp yet. is_sweet_spot fires when the high-moat scorer flags
+  // it as a high-probability easy win (HPEW).
+  high_moat_score: number | null;
+  is_sweet_spot: boolean;
+  // Claude-generated one-sentence scope summary. Populated by the
+  // post-score worker chain for every score ≥ 60 opp. When present, the
+  // UI promotes this to the primary list title and demotes the raw SAM
+  // text to a muted second line.
+  scope_one_sentence: string | null;
 };
 
 export type FounderCard = {
@@ -171,6 +181,10 @@ export type DashboardKpis = {
   your_deadlines_lt_7d: number;
   your_active_pursuits: number;
   drafts_awaiting_review: number;
+  // Sweet-spot count: high-probability easy wins (HPEW) assigned to me
+  // and not yet in the pipeline. Drives the slot-1 Move in
+  // <TodaysMoves /> when > 0.
+  your_sweet_spots_open: number;
 };
 
 export type DashboardResponse = {
@@ -198,6 +212,16 @@ export type OpportunityListItem = {
   why_it_matters: string | null;
   incumbent_summary: string | null;
   assigned_founder_slug: string | null;
+  // Parallel high-moat track. Null when the track hasn't scored this
+  // opp yet; the row falls back to the general score sort key.
+  high_moat_score: number | null;
+  // True when the high-moat scorer flagged this as a High-Probability
+  // Easy Win. Drives the gold left-border row treatment + HpewBadge.
+  is_sweet_spot: boolean;
+  // Claude-generated one-sentence scope summary, populated by the
+  // post-score worker chain for every score ≥ 60 opp. When present, the
+  // UI promotes this above the raw SAM title.
+  scope_one_sentence: string | null;
 };
 
 export type OpportunityListResponse = {

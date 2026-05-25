@@ -59,6 +59,30 @@
     --pillar-quality: 32 90% 38%;
     --pillar-governance: 270 50% 55%;
 
+    /* High-moat token — federal-procurement gold, reserved for the
+       parallel "this is exactly the work we should win" track. By
+       contract (architect plan §7.1 / brief §11 Q3) it appears ONLY as
+       a left-border accent + a thin pill border on the HPEW chip. Never
+       as a fill, never as a background — reads as gravitas, not bling.
+
+       Lightness history:
+         - iteration 1: 45 90% 45% — original "embossed seal" gold,
+           measured 2.10:1 / 2.22:1, FAILED 4.5:1 text bar.
+         - iteration 2: 45 90% 32% — measured 4.00:1 / 4.21:1, still
+           missed the 4.5:1 text bar by 0.3–0.5 ratio points.
+         - iteration 3 (current): 45 90% 28% — computes 4.97:1 on
+           paper-50 / 5.24:1 on white card. Comfortable clearance with
+           sub-pixel headroom so rendering quirks won't flicker around
+           the bar.
+
+       Hue (45) and saturation (90%) preserved across all iterations so
+       the token still reads as federal-procurement gold (warm,
+       saturated, yellow-leaning) rather than amber, mustard, or brown.
+       Single-token approach retained (no --high-moat-ink split) — the
+       contrast headroom at 28%L is sufficient for both text and
+       border/rail usages, and a single token is simpler to reason about. */
+    --high-moat: 45 90% 28%;
+
     /* Shape + typography */
     --radius: 0.5rem;
     --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif;

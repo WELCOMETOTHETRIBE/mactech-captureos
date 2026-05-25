@@ -197,6 +197,38 @@ export function Badge({
   );
 }
 
+/**
+ * HpewBadge — gold "HPEW" chip used to mark sweet-spot opportunities
+ * (`is_sweet_spot === true` on the API). HPEW stands for "High-Probability
+ * Easy Win," the label the high-moat scoring track emits for opps that
+ * combine UFGS 25 / FRCS cyber clauses, MacTech's set-aside fit, and a
+ * thin interested-vendors list.
+ *
+ * Visual contract per brief §6 + §11 Q3: the high-moat token reads as a
+ * thin gold border + gold ink only. No fill, no background tint. The
+ * chip sits beside the ScoreBadge in the same chip row.
+ *
+ * Universal across all four founders (brief §11 Q1) — not pillar-gated.
+ * Brian / James / John see the same chip even though their pillar's
+ * high-moat track isn't tuned yet; their opps just won't hit the
+ * sweet_spot flag until those tracks ship.
+ */
+export function HpewBadge({
+  size = "default"
+}: {
+  size?: "default" | "sm";
+}) {
+  const pad = size === "sm" ? "px-1.5 py-0" : "px-2 py-0.5";
+  return (
+    <span
+      title="High-Probability Easy Win — this opportunity matches MacTech's strongest win profile (UFGS 25 / FRCS cyber clauses, set-aside fit, thin interested-vendors list). Pursue with intent."
+      className={`inline-flex items-center rounded-md border border-[hsl(var(--high-moat))]/50 text-[hsl(var(--high-moat))] text-[10px] font-semibold uppercase tracking-wider ${pad} cursor-help`}
+    >
+      HPEW
+    </span>
+  );
+}
+
 export function ScoreBadge({
   score,
   size = "default"

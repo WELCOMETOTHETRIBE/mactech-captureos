@@ -81,6 +81,11 @@ const config: Config = {
           quality: "hsl(var(--pillar-quality))",
           governance: "hsl(var(--pillar-governance))"
         },
+        // High-moat — federal-procurement gold for the parallel sweet-spot
+        // track (UFGS 25 / FRCS cyber). Strict use: left-border + HPEW
+        // chip border ONLY. Never as a fill, never as a background — see
+        // architect plan §7.1 / brief §11 Q3.
+        "high-moat": "hsl(var(--high-moat))",
         // ─── Legacy aliases — DO NOT EXTEND ─────────────────────────────
         // These keep the ~100 existing `bg-paper-*` / `text-brand-*` /
         // `border-paper-*` classes compiling without a stop-the-world

@@ -3,6 +3,7 @@ import { apiFetch, type OpportunityListResponse } from "@/lib/api";
 import {
   Badge,
   EmptyState,
+  HpewBadge,
   NaicsBadge,
   NoticeTypeBadge,
   PageHeader,
@@ -26,10 +27,13 @@ type SP = Promise<{
   score_min?: string;
   score_max?: string;
   sort?: string;
+  sweet_spot_only?: string;
+  high_moat_min?: string;
 }>;
 
 const SORT_LABELS: Record<string, string> = {
   score_desc: "Score (high → low)",
+  high_moat_desc: "High-moat (sweet spots first)",
   posted_desc: "Newest posted",
   deadline_asc: "Deadline (soonest first)"
 };
@@ -43,7 +47,11 @@ export default async function OpportunitiesListPage({
   const params = new URLSearchParams();
   const limit = 25;
   const page = Math.max(1, parseInt(sp.page ?? "1", 10) || 1);
-  const sort = sp.sort ?? "score_desc";
+  // Sweet-spot toggle forces the high-moat sort so the gold rail sits
+  // at the top of the page. Otherwise honor whatever ?sort= the user
+  // selected, defaulting to general score.
+  const sweetSpotOnly = sp.sweet_spot_only === "true";
+  const sort = sweetSpotOnly ? "high_moat_desc" : sp.sort ?? "score_desc";
   const score_min = sp.score_min ?? "0";
   const score_max = sp.score_max ?? "100";
 
@@ -52,6 +60,8 @@ export default async function OpportunitiesListPage({
   params.set("sort", sort);
   params.set("score_min", score_min);
   params.set("score_max", score_max);
+  if (sweetSpotOnly) params.set("sweet_spot_only", "true");
+  if (sp.high_moat_min) params.set("high_moat_min", sp.high_moat_min);
   if (sp.q) params.set("q", sp.q);
   if (sp.naics_code) params.set("naics_code", sp.naics_code);
   if (sp.set_aside) params.set("set_aside", sp.set_aside);
@@ -74,6 +84,7 @@ export default async function OpportunitiesListPage({
   if (sp.assigned_founder) activeFilters.push(`@${sp.assigned_founder}`);
   if (score_min !== "0" || score_max !== "100")
     activeFilters.push(`score ${score_min}–${score_max}`);
+  if (sweetSpotOnly) activeFilters.push("sweet spots only");
 
   return (
     <div className="space-y-6">
@@ -93,17 +104,23 @@ export default async function OpportunitiesListPage({
         }
       />
 
-      {/* Quick filter bar — score buckets as a horizontal segmented control,
-          score buckets are the #1 filter so they get prime real estate. */}
+      {/* Quick filter bar — score buckets + sweet-spot toggle as a
+          horizontal segmented control. The sweet-spot pill is the
+          fourth option (after the three score buckets) and forces
+          ?sort=high_moat_desc so the gold rail rises to the top. */}
       <div className="rounded-lg border border-neutral-200 bg-white p-3">
         <div className="flex flex-wrap items-center gap-3">
           <p
             className="text-xs font-medium uppercase tracking-wide text-neutral-500"
-            title="≥80 = pursue now. 60–79 = worth a look. 40–59 = watch list. <40 = long shot."
+            title="≥80 = pursue now. 60–79 = worth a look. 40–59 = watch list. <40 = long shot. Sweet spots = high-probability easy wins from the parallel high-moat track."
           >
             Score
           </p>
-          <div className="flex gap-1">
+          <div
+            role="group"
+            aria-label="Score filter"
+            className="flex gap-1"
+          >
             {[
               { l: "Top fit", min: "80", max: "100" },
               { l: "Worth a look", min: "60", max: "100" },
@@ -113,13 +130,17 @@ export default async function OpportunitiesListPage({
               const qs = new URLSearchParams(params);
               qs.set("score_min", bucket.min);
               qs.set("score_max", bucket.max);
+              qs.delete("sweet_spot_only");
               qs.delete("page");
               const active =
-                score_min === bucket.min && score_max === bucket.max;
+                !sweetSpotOnly &&
+                score_min === bucket.min &&
+                score_max === bucket.max;
               return (
                 <Link
                   key={bucket.l}
                   href={`/opportunities?${qs.toString()}`}
+                  aria-pressed={active}
                   className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                     active
                       ? "bg-brand-700 text-white"
@@ -130,6 +151,31 @@ export default async function OpportunitiesListPage({
                 </Link>
               );
             })}
+            {/* Sweet-spot toggle — federal-procurement gold border + ink.
+                No fill (per brief §11 Q3 — gold reads as gravitas, not
+                bling). Forces high_moat_desc sort + sweet_spot_only=true. */}
+            {(() => {
+              const qs = new URLSearchParams(params);
+              qs.set("sweet_spot_only", "true");
+              qs.set("sort", "high_moat_desc");
+              qs.set("score_min", "0");
+              qs.set("score_max", "100");
+              qs.delete("page");
+              return (
+                <Link
+                  href={`/opportunities?${qs.toString()}`}
+                  aria-pressed={sweetSpotOnly}
+                  title="High-Probability Easy Wins: opps matching MacTech's strongest win profile (UFGS 25 / FRCS cyber, set-aside fit, thin interested-vendors list)."
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors border-2 ${
+                    sweetSpotOnly
+                      ? "border-[hsl(var(--high-moat))] text-[hsl(var(--high-moat))]"
+                      : "border-[hsl(var(--high-moat))]/30 text-[hsl(var(--high-moat))] hover:border-[hsl(var(--high-moat))]/60"
+                  }`}
+                >
+                  Sweet spots
+                </Link>
+              );
+            })()}
           </div>
 
           <div className="ml-auto flex items-center gap-2">
@@ -307,17 +353,36 @@ export default async function OpportunitiesListPage({
                 const noticeIsSourcesSought = (opp.notice_type ?? "")
                   .toLowerCase()
                   .includes("sources sought");
+                // Sweet-spot row treatment: gold left border + HPEW chip.
+                // No background fill, no shadow on hover (calmer leaderboard
+                // posture per brief §6 motion guidance).
+                const rowClass = opp.is_sweet_spot
+                  ? "group block rounded-lg border border-neutral-200 border-l-[3px] border-l-[hsl(var(--high-moat))] bg-white p-5 transition-colors hover:border-brand-300 hover:border-l-[hsl(var(--high-moat))]"
+                  : "group block rounded-lg border border-neutral-200 bg-white p-5 transition-colors hover:border-brand-300 hover:shadow-sm";
+                // Title promotion: Claude-generated scope_one_sentence
+                // (from the post-score worker chain) reads as a clean
+                // human-language title. Fall back to the raw SAM title
+                // when the brief isn't generated yet (score < 60, or
+                // ingest <20min ago).
+                const primaryTitle = opp.scope_one_sentence ?? opp.title;
+                const hasPromotedTitle = !!opp.scope_one_sentence;
                 return (
                   <li key={opp.id}>
                     <Link
                       href={`/opportunities/${opp.id}`}
                       data-kb-row
-                      className="group block rounded-lg border border-neutral-200 bg-white p-5 transition-colors hover:border-brand-300 hover:shadow-sm"
+                      className={rowClass}
+                      title={
+                        hasPromotedTitle
+                          ? `SAM title: ${opp.title}`
+                          : undefined
+                      }
                     >
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <ScoreBadge score={opp.score} size="lg" />
+                            {opp.is_sweet_spot && <HpewBadge />}
                             {noticeIsSourcesSought && (
                               <NoticeTypeBadge type={opp.notice_type} />
                             )}
@@ -343,9 +408,20 @@ export default async function OpportunitiesListPage({
                               <NaicsBadge code={opp.naics_code} />
                             </span>
                           </div>
-                          <h3 className="mt-3 text-base font-semibold leading-snug text-neutral-900">
-                            {opp.title}
+                          <h3 className="mt-3 line-clamp-2 text-[15px] font-semibold leading-snug text-neutral-900">
+                            {primaryTitle}
                           </h3>
+                          {/* When we promoted the brief sentence, show the
+                              raw SAM title as a muted second line so a BD
+                              lead can verify provenance at a glance. */}
+                          {hasPromotedTitle && (
+                            <p className="mt-1 line-clamp-1 text-xs text-neutral-500">
+                              <span className="uppercase tracking-wider text-neutral-400">
+                                SAM:
+                              </span>{" "}
+                              {opp.title}
+                            </p>
+                          )}
                           {opp.agency_short && (
                             <p className="mt-1 text-sm text-neutral-500">
                               {opp.agency_short}

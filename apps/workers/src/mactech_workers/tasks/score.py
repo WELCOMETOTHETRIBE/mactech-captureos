@@ -38,6 +38,7 @@ from mactech_db import async_session_factory
 from mactech_db.models import (
     Founder,
     NaicsCode,
+    OpportunityBrief,
     OpportunityEnriched,
     OpportunityRaw,
     OpportunityScore,
@@ -50,17 +51,21 @@ from mactech_integrations.sam_gov import (
 )
 from mactech_intelligence import (
     AnthropicLLMClient,
+    BriefExtractionError,
     ClauseFindings,
+    ExtractBriefInput,
     HighMoatConfig,
     HighMoatFacts,
     HighMoatResult,
     OpportunityFacts,
     ScoringContext,
     detect_clauses,
+    extract_structured_brief,
     generate_why_it_matters,
     score_high_moat,
     score_opportunity,
 )
+from mactech_intelligence.extract_brief import PROMPT_VERSION as BRIEF_PROMPT_VERSION
 from mactech_intelligence.why_it_matters import WhyItMattersInput
 from sqlalchemy import select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -72,6 +77,9 @@ log = logging.getLogger(__name__)
 
 DEFAULT_BATCH_SIZE = 25
 WHY_IT_MATTERS_MIN_SCORE = 60  # only spend tokens on plausible candidates
+BRIEF_MIN_SCORE = 60  # auto-extract a plain-English brief at the same gate;
+# the UI promotes brief.scope_one_sentence to the primary list title for
+# any opp at this threshold or above (architect plan §7.2 / brief §11 Q2).
 HIGH_MOAT_BASE_SCORE_GATE = 50  # only IVL-fetch when general score clears this
 IVL_REFETCH_AFTER_DAYS = 7  # don't re-poll the IVL more often than weekly
 
@@ -139,6 +147,7 @@ class ScoreStats:
     why_it_matters_generated: int
     skipped_no_naics: int
     duration_ms: int
+    briefs_generated: int = 0
 
 
 async def _build_context(session: AsyncSession, tenant: Tenant) -> ScoringContext:
@@ -382,6 +391,87 @@ async def _capability_similarity_score(
     return points, [r[0] for r in rows]
 
 
+async def _maybe_generate_brief(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    opp: OpportunityRaw,
+    base_score: int,
+    llm: AnthropicLLMClient | None,
+) -> bool:
+    """Generate a plain-English structured brief when the opportunity
+    crosses the auto-brief gate and doesn't already have one.
+
+    Mirrors the discipline of `_maybe_fetch_interested_vendors`: every
+    short-circuit returns False so a missing key / missing description /
+    pre-existing brief / single LLM failure can't tank the whole
+    scoring batch. Returns True only when we actually persisted a new
+    brief row.
+
+    Architect plan §7.2 / brief §11 Q2: ~$0.20/day at MacTech scale.
+    Cost is bounded by BRIEF_MIN_SCORE (currently 60) and by
+    `MAX_DESCRIPTION_CHARS = 12000` inside the extractor.
+    """
+    if llm is None:
+        return False
+    if base_score < BRIEF_MIN_SCORE:
+        return False
+    description = (opp.description_text or "").strip()
+    if not description:
+        return False
+
+    # Skip if we already have a brief for this (tenant, opp) — the
+    # extractor is idempotent but the LLM call isn't free.
+    existing_id = (
+        await session.execute(
+            select(OpportunityBrief.id).where(
+                OpportunityBrief.tenant_id == tenant_id,
+                OpportunityBrief.opportunity_id == opp.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing_id is not None:
+        return False
+
+    inp = ExtractBriefInput(
+        title=opp.title,
+        agency=opp.agency,
+        notice_type=opp.notice_type,
+        set_aside=opp.set_aside,
+        naics_code=opp.naics_code,
+        posted_at=opp.posted_at,
+        response_deadline=opp.response_deadline,
+        description=description,
+    )
+    try:
+        result = await extract_structured_brief(llm, inp)
+    except BriefExtractionError as exc:
+        log.warning("auto-brief: bad JSON for %s: %s", opp.id, exc)
+        return False
+    except Exception as exc:  # noqa: BLE001
+        log.warning("auto-brief: extract failed for %s: %s", opp.id, exc)
+        return False
+
+    session.add(
+        OpportunityBrief(
+            tenant_id=tenant_id,
+            opportunity_id=opp.id,
+            scope_one_sentence=result.scope_one_sentence,
+            must_have_requirements=result.must_have_requirements,
+            nice_to_have=result.nice_to_have,
+            red_flags_for_small_biz=result.red_flags_for_small_biz,
+            suggested_team_roles=result.suggested_team_roles,
+            model=result.response.model,
+            prompt_version=BRIEF_PROMPT_VERSION,
+            input_tokens=result.response.input_tokens,
+            output_tokens=result.response.output_tokens,
+            description_chars=result.description_chars,
+        )
+    )
+    await session.flush()
+    return True
+
+
 async def score_unscored_batch(
     *,
     batch_size: int = DEFAULT_BATCH_SIZE,
@@ -404,6 +494,7 @@ async def score_unscored_batch(
     scored = 0
     rationales = 0
     skipped_no_naics = 0
+    briefs = 0
 
     async with session_factory() as session, session.begin():
         tenant = (
@@ -566,6 +657,20 @@ async def score_unscored_batch(
             await session.execute(stmt)
             scored += 1
 
+            # Auto-brief: when the opp scores >= 60 and we have an
+            # Anthropic key, generate the plain-English structured brief
+            # so the list page can show a human-readable title rather
+            # than the raw SAM text. Helper is idempotent — won't fire
+            # on opps that already have a brief.
+            if await _maybe_generate_brief(
+                session,
+                tenant_id=tenant.id,
+                opp=opp,
+                base_score=result.score,
+                llm=llm,
+            ):
+                briefs += 1
+
     duration_ms = int((datetime.now(UTC) - started).total_seconds() * 1000)
     return ScoreStats(
         tenant_slug=tenant_slug,
@@ -573,6 +678,7 @@ async def score_unscored_batch(
         why_it_matters_generated=rationales,
         skipped_no_naics=skipped_no_naics,
         duration_ms=duration_ms,
+        briefs_generated=briefs,
     )
 
 
@@ -719,6 +825,20 @@ async def score_one_opportunity(opportunity_id: UUID | str) -> dict[str, Any]:
         )
         await session.execute(stmt)
 
+        # Auto-brief on the same gate as the batch path. Construct the
+        # LLM client lazily so the ad-hoc call still works when the key
+        # is missing.
+        brief_generated = False
+        if anthropic_key:
+            brief_llm = AnthropicLLMClient(api_key=anthropic_key)
+            brief_generated = await _maybe_generate_brief(
+                session,
+                tenant_id=tenant.id,
+                opp=opp,
+                base_score=result.score,
+                llm=brief_llm,
+            )
+
     return {
         "opportunity_id": str(opp_uuid),
         "score": result.score,
@@ -730,6 +850,7 @@ async def score_one_opportunity(opportunity_id: UUID | str) -> dict[str, Any]:
         "high_moat_score": hm_score,
         "high_moat_breakdown": hm_breakdown,
         "high_moat_flags": hm_flags,
+        "brief_generated": brief_generated,
     }
 
 
@@ -781,6 +902,7 @@ async def score_unscored_batch_all_tenants(
                 why_it_matters_generated=0,
                 skipped_no_naics=0,
                 duration_ms=0,
+                briefs_generated=0,
             )
         results.append(stats)
     return results

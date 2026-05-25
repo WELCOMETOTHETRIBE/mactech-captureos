@@ -197,6 +197,11 @@ class OpportunityListItem(_Out):
     # Parallel high-moat track. Null when never computed.
     high_moat_score: int | None = None
     is_sweet_spot: bool = False
+    # Claude-generated one-sentence scope summary. Populated by the
+    # post-score worker chain on score ≥ 60. When present, the UI
+    # promotes it above the raw SAM title (which is often formatted for
+    # the agency's internal system rather than human triage).
+    scope_one_sentence: str | None = None
 
 
 class OpportunityListResponse(_Out):
@@ -310,11 +315,14 @@ async def list_opportunities(
               as assigned_founder_slug,
             s.high_moat_score,
             (s.high_moat_flags->>'is_high_probability_easy_win')::bool
-              as is_sweet_spot
+              as is_sweet_spot,
+            b.scope_one_sentence
         from opportunities_raw o
         left join opportunity_scores s
           on s.opportunity_id = o.id and s.tenant_id = :tenant_id
         left join opportunities_enriched e on e.opportunity_id = o.id
+        left join opportunity_briefs b
+          on b.opportunity_id = o.id and b.tenant_id = :tenant_id
         where {where_sql}
         order by {sort_sql}
         limit :limit offset :offset
@@ -360,6 +368,7 @@ async def list_opportunities(
                 assigned_founder_slug=r[13],
                 high_moat_score=int(r[14]) if r[14] is not None else None,
                 is_sweet_spot=bool(r[15]) if r[15] is not None else False,
+                scope_one_sentence=r[16],
             )
         )
 
