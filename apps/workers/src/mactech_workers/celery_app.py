@@ -208,6 +208,7 @@ def _reset_db_engine_per_task(*args: object, **kwargs: object) -> None:
 # Side-effect imports to register tasks defined in submodules. Keep at end of file.
 import mactech_workers.tasks.apify_forecasts  # noqa: E402, F401
 import mactech_workers.tasks.apify_industry_days  # noqa: E402, F401
+import mactech_workers.tasks.attachment_fetcher  # noqa: E402, F401
 import mactech_workers.tasks.codex_sprs_sync  # noqa: E402, F401
 import mactech_workers.tasks.dhs_apfs_ingest  # noqa: E402, F401
 import mactech_workers.tasks.doe_forecast_ingest  # noqa: E402, F401

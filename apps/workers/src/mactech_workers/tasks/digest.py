@@ -54,6 +54,9 @@ class DigestRow:
     why_it_matters: str | None
     incumbent_summary: str | None
     sam_link: str | None
+    # High-moat track. Both None for rows ranked by the general score.
+    high_moat_score: int | None = None
+    is_sweet_spot: bool = False
 
 
 @dataclass
@@ -125,22 +128,40 @@ async def _load_saved_search_hits(
         naics_codes = list(filters.get("naics") or [])
         set_asides = list(filters.get("set_asides") or [])
         keywords = [k for k in (filters.get("keywords") or []) if k.strip()]
+        # Per-search score-column switch. The high-moat saved search
+        # ("Patrick — UFGS 25 / FRCS Cyber") sets this to "high_moat_score"
+        # so its alert_threshold (80) is checked against the parallel
+        # column and the result set is ranked by the OT/ICS rubric, not
+        # the general 7-component score. Default keeps the legacy behaviour
+        # for every other saved search.
+        score_field = (filters.get("score_field") or "score").strip()
+        use_high_moat = score_field == "high_moat_score"
+        score_column = (
+            OpportunityScore.high_moat_score if use_high_moat else OpportunityScore.score
+        )
 
         stmt = (
             select(OpportunityScore, OpportunityRaw)
             .join(OpportunityRaw, OpportunityRaw.id == OpportunityScore.opportunity_id)
             .where(
                 OpportunityScore.tenant_id == tenant.id,
-                OpportunityScore.score >= search.alert_threshold,
+                score_column.is_not(None),
+                score_column >= search.alert_threshold,
             )
-            .order_by(OpportunityScore.score.desc())
+            .order_by(score_column.desc())
             .limit(SAVED_SEARCH_HITS_CAP)
         )
         if naics_codes:
             stmt = stmt.where(OpportunityRaw.naics_code.in_(naics_codes))
         if set_asides:
             stmt = stmt.where(OpportunityRaw.set_aside.in_(set_asides))
-        if keywords:
+        # Keyword ILIKE pre-filter is for general saved searches that don't
+        # have a clause detector behind them. For the high-moat track the
+        # high_moat_score column already encodes a much richer match (clause
+        # detector + agency + velocity + set-aside + clearance) — adding a
+        # title/description ILIKE here would discard UFGS hits buried only
+        # in the PDF attachment_text.
+        if keywords and not use_high_moat:
             keyword_filter = None
             for kw in keywords:
                 like = f"%{kw}%"
@@ -151,7 +172,7 @@ async def _load_saved_search_hits(
             stmt = stmt.where(keyword_filter)
         if search.last_delivered_at is not None:
             # Only show new scoring activity since the last digest delivery.
-            stmt = stmt.where(OpportunityScore.created_at > search.last_delivered_at)
+            stmt = stmt.where(OpportunityScore.scored_at > search.last_delivered_at)
 
         rows = (await session.execute(stmt)).all()
         if not rows:
@@ -160,6 +181,11 @@ async def _load_saved_search_hits(
         digest_rows: list[DigestRow] = []
         for sc, opp in rows:
             raw_payload = opp.raw_payload or {}
+            row_score = sc.high_moat_score if use_high_moat else sc.score
+            sweet_spot = bool(
+                use_high_moat
+                and (sc.high_moat_flags or {}).get("is_high_probability_easy_win")
+            )
             digest_rows.append(
                 DigestRow(
                     title=opp.title,
@@ -167,10 +193,18 @@ async def _load_saved_search_hits(
                     set_aside=opp.set_aside,
                     naics_code=opp.naics_code,
                     agency_short=_short_agency(opp.agency),
-                    score=sc.score,
-                    why_it_matters=sc.why_it_matters,
+                    score=int(row_score or 0),
+                    why_it_matters=(
+                        # For high-moat rows, the seed line is more specific
+                        # than the general why_it_matters paragraph.
+                        ((sc.high_moat_flags or {}).get("why_it_matters_seed") or sc.why_it_matters)
+                        if use_high_moat
+                        else sc.why_it_matters
+                    ),
                     incumbent_summary=None,
                     sam_link=raw_payload.get("uiLink"),
+                    high_moat_score=sc.high_moat_score if use_high_moat else None,
+                    is_sweet_spot=sweet_spot,
                 )
             )
         out.append(
@@ -252,14 +286,35 @@ def _render_search_block_html(hits: SavedSearchHits) -> str:
             if r.sam_link
             else ""
         )
+        # Sober "high-probability easy win" marker for high-moat rows
+        # whose sweet-spot conditions all line up (UFGS 25 hit + construction
+        # prime + active). No emoji per the playbook copy rules.
+        sweet_marker = (
+            '<span style="display:inline-block;background:#0b3d2e;color:#fff;'
+            'font-size:10px;letter-spacing:.08em;text-transform:uppercase;'
+            'padding:2px 8px;border-radius:3px;margin-left:8px;'
+            'vertical-align:middle">High-Probability Easy Win</span>'
+            if r.is_sweet_spot
+            else ""
+        )
+        score_label = (
+            f"high-moat {r.score}" if r.high_moat_score is not None else f"score {r.score}"
+        )
+        why_block = (
+            f'<p style="margin:6px 0 0;color:#333;font-size:13px;line-height:1.5">'
+            f"{escape(r.why_it_matters)}</p>"
+            if r.why_it_matters
+            else ""
+        )
         items.append(
             f"""
             <div style="border:1px solid #e5e5e5;border-radius:6px;padding:12px 16px;margin-bottom:8px;background:#fff">
               <div style="font-size:12px;color:#666;letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px">
-                score {r.score}
+                {score_label}{sweet_marker}
               </div>
               <div style="font-size:14px;font-weight:600;color:#111;margin:0 0 4px">{escape(r.title)}</div>
               <div style="font-size:12px;color:#888">{escape(meta)}</div>
+              {why_block}
               <div style="margin-top:8px">{link}</div>
             </div>
             """.strip()
@@ -389,7 +444,13 @@ def _render_text(
         out.append("")
         out.append(f"-- Saved search: {hits.search_name} ({len(hits.rows)} new) --")
         for r in hits.rows:
-            out.append(f"  score {r.score}  {r.title}")
+            label = (
+                f"high-moat {r.score}" if r.high_moat_score is not None else f"score {r.score}"
+            )
+            tag = " [High-Probability Easy Win]" if r.is_sweet_spot else ""
+            out.append(f"  {label}{tag}  {r.title}")
+            if r.why_it_matters:
+                out.append(f"    {r.why_it_matters}")
             if r.sam_link:
                 out.append(f"    {r.sam_link}")
     out.append("")

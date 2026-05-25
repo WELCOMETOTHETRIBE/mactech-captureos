@@ -26,6 +26,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from mactech_intelligence.clause_detector import ClauseFindings
+    from mactech_intelligence.scoring_high_moat import HighMoatConfig
 
 
 @dataclass(frozen=True)
@@ -42,6 +47,10 @@ class ScoringContext:
     sweet_spot_min: int
     sweet_spot_max: int
     naics_to_founder_slug: dict[str, str]  # routing — first founder per naics
+    # Optional. When set, the scoring worker will additionally compute the
+    # parallel high_moat_score. Sourced from the tenant's
+    # config/mactech_tenant_defaults.yml ``high_moat_scoring`` block.
+    high_moat_config: "HighMoatConfig | None" = None
 
 
 @dataclass(frozen=True)
@@ -61,6 +70,16 @@ class OpportunityFacts:
     incumbent_excluded: bool | None  # None when not checked
     has_capability_match: bool  # placeholder for the embedding-similar 5pt
     has_capability_match_score: int = 0  # 0..5
+    # Fields below are only consumed by the parallel high-moat scorer.
+    # All None-tolerant so existing callers of score_opportunity stay
+    # unchanged.
+    attachment_text: str | None = None
+    interested_vendors_count: int | None = None
+    interested_vendors_cyber_count: int | None = None
+    clause_findings: "ClauseFindings | None" = None
+    agency: str | None = None
+    subagency: str | None = None
+    is_active: bool = True
 
 
 @dataclass(frozen=True)

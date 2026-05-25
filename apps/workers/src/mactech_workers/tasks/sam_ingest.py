@@ -19,19 +19,40 @@ import hashlib
 import json
 import logging
 import os
+import re
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
-
-from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from mactech_db import async_session_factory
 from mactech_db.amendments import record_amendment, snapshot_for_diff
 from mactech_db.models import IngestionState, NaicsCode, OpportunityRaw
 from mactech_integrations.sam_gov import OpportunityRecord, SamGovOpportunitiesClient
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from mactech_workers.celery_app import celery_app
+
+# Title-level heuristic for whether an opportunity is worth running the
+# attachment fetcher against. Designed to catch OT/ICS cyber work mandated
+# inside construction RFPs even when the prime title is generic ("Design
+# Build, Fort X Renovation"). Anything matching here gets a PDF fetch +
+# parse; the parsed text feeds the high-moat clause detector on next score.
+_HIGH_MOAT_TITLE_RE = re.compile(
+    r"(?:"
+    r"\bUFGS\s*25\b|"
+    r"\b25\s*05\s*11\b|\b25\s*08\s*11\b|"
+    r"\bFRCS\b|\bUMCS\b|\bSCADA\b|"
+    r"\b(?:PIT|platform\s+information\s+technology)\b|"
+    r"\bcontrol\s+system(?:s)?\b|"
+    r"\bTS/SCI\b|\bSCIF\b|"
+    r"\bISSM\b|\bISSE\b|"
+    r"\bRMF\b|\bATO\b|\b3PAO\b|"
+    r"\b(?:cyber\s*security|cybersecurity)\b"
+    r")",
+    re.IGNORECASE,
+)
 
 log = logging.getLogger(__name__)
 
@@ -111,6 +132,22 @@ def _row_from_record(record: OpportunityRecord) -> dict[str, Any]:
         "raw_payload": raw,
         "hash": _hash_payload(raw),
     }
+
+
+def _should_fetch_attachments(record: OpportunityRecord) -> bool:
+    """Cheap title-level gate for the attachment fetcher.
+
+    Matches the OT/ICS / cyber / clearance vocabulary that almost always
+    indicates a solicitation where the PDF body is worth parsing for the
+    high-moat track. Returns False for generic titles to keep PDF
+    parsing bounded; opportunities whose base score later climbs above
+    HIGH_MOAT_BASE_SCORE_GATE without this match will still get an IVL
+    fetch on the next scoring pass — just no attachment text.
+    """
+    blob = " | ".join(filter(None, [record.title, record.solicitation_number]))
+    if not blob:
+        return False
+    return bool(_HIGH_MOAT_TITLE_RE.search(blob))
 
 
 async def _upsert_record(session: AsyncSession, record: OpportunityRecord) -> str:
@@ -274,6 +311,32 @@ async def ingest_one_naics(
                         elif outcome == "updated":
                             updates += 1
                             upserts += 1
+                        # Gate the attachment fetcher on the title-level heuristic
+                        # to bound PDF parsing volume. "unchanged" rows are skipped
+                        # — we'd be repeating work the previous run did.
+                        if outcome in ("inserted", "updated") and _should_fetch_attachments(
+                            record
+                        ):
+                            row = (
+                                await session.execute(
+                                    select(OpportunityRaw.id).where(
+                                        OpportunityRaw.source == SOURCE,
+                                        OpportunityRaw.source_id == record.notice_id,
+                                    )
+                                )
+                            ).scalar_one_or_none()
+                            if row is not None:
+                                try:
+                                    celery_app.send_task(
+                                        "mactech.attachments.fetch_one",
+                                        args=[str(row)],
+                                    )
+                                except Exception as exc:
+                                    log.warning(
+                                        "sam_ingest: couldn't enqueue attachment_fetcher for %s: %s",
+                                        record.notice_id,
+                                        exc,
+                                    )
 
                 await _record_state(
                     session, naics_code, posted_to=posted_to, upserts=upserts, status="ok"
@@ -400,7 +463,7 @@ async def first_feed_ingest_for_tenant(
         try:
             s = await ingest_one_naics(code, backfill_days=backfill_days)
             stats.append(s)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.exception("first-feed ingest naics=%s failed: %s", code, exc)
 
     # Chain into scoring so the freshly-ingested opps land in the user's
@@ -412,7 +475,7 @@ async def first_feed_ingest_for_tenant(
             args=[tenant_slug],
             kwargs={"batch_size": 200},
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning(
             "first-feed ingest finished but couldn't fire score task: %s",
             exc,

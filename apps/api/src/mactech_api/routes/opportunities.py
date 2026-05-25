@@ -60,6 +60,21 @@ class IncumbentBlock(_Out):
     exclusions: ExclusionBlock | None
 
 
+class HighMoatBlock(_Out):
+    """Parallel high-moat (UFGS 25 / FRCS cyber) score block. Null on the
+    parent ScoreBlock when the tenant has no high_moat_scoring config or
+    the opportunity hasn't been re-scored since the column was added."""
+
+    score: int
+    breakdown: dict[str, int]
+    is_high_probability_easy_win: bool
+    clause_hits: list[str]
+    clearance_hits: list[str]
+    role_hits: list[str]
+    top_clearance: str  # 'TS_SCI' | 'TS' | 'S' | 'NONE'
+    why_it_matters_seed: str | None
+
+
 class ScoreBlock(_Out):
     score: int
     breakdown: dict[str, int]
@@ -67,6 +82,7 @@ class ScoreBlock(_Out):
     why_it_matters: str | None
     why_it_matters_model: str | None
     scored_at: str | None
+    high_moat: HighMoatBlock | None = None
 
 
 class OpportunityHeader(_Out):
@@ -178,6 +194,9 @@ class OpportunityListItem(_Out):
     why_it_matters: str | None
     incumbent_summary: str | None
     assigned_founder_slug: str | None
+    # Parallel high-moat track. Null when never computed.
+    high_moat_score: int | None = None
+    is_sweet_spot: bool = False
 
 
 class OpportunityListResponse(_Out):
@@ -215,7 +234,9 @@ async def list_opportunities(
     assigned_founder: str | None = None,
     score_min: int = 0,
     score_max: int = 100,
-    sort: str = "score_desc",  # 'score_desc' | 'posted_desc' | 'deadline_asc'
+    high_moat_min: int | None = None,
+    sweet_spot_only: bool = False,
+    sort: str = "score_desc",  # 'score_desc' | 'high_moat_desc' | 'posted_desc' | 'deadline_asc'
 ) -> OpportunityListResponse:
     if limit < 1 or limit > 100:
         raise HTTPException(status_code=400, detail="limit must be 1..100")
@@ -223,6 +244,8 @@ async def list_opportunities(
         raise HTTPException(status_code=400, detail="page must be >=1")
     if score_min < 0 or score_max > 100 or score_min > score_max:
         raise HTTPException(status_code=400, detail="score_min/max out of range")
+    if high_moat_min is not None and (high_moat_min < 0 or high_moat_min > 100):
+        raise HTTPException(status_code=400, detail="high_moat_min out of range")
 
     session = ctx.session
     tenant_id = ctx.tenant.id
@@ -259,11 +282,19 @@ async def list_opportunities(
     )
     params["smin"] = score_min
     params["smax"] = score_max
+    if high_moat_min is not None:
+        where_parts.append("s.high_moat_score >= :hm_min")
+        params["hm_min"] = high_moat_min
+    if sweet_spot_only:
+        where_parts.append(
+            "(s.high_moat_flags->>'is_high_probability_easy_win')::bool = true"
+        )
 
     where_sql = " and ".join(where_parts) if where_parts else "true"
 
     sort_sql = {
         "score_desc": "s.score desc nulls last, o.posted_at desc nulls last",
+        "high_moat_desc": "s.high_moat_score desc nulls last, o.posted_at desc nulls last",
         "posted_desc": "o.posted_at desc nulls last",
         "deadline_asc": "o.response_deadline asc nulls last",
     }.get(sort, "s.score desc nulls last, o.posted_at desc nulls last")
@@ -276,7 +307,10 @@ async def list_opportunities(
             s.score, s.why_it_matters,
             e.incumbent_name, e.incumbent_award_amount,
             (select f.slug from founders f where f.id = s.assigned_founder_id)
-              as assigned_founder_slug
+              as assigned_founder_slug,
+            s.high_moat_score,
+            (s.high_moat_flags->>'is_high_probability_easy_win')::bool
+              as is_sweet_spot
         from opportunities_raw o
         left join opportunity_scores s
           on s.opportunity_id = o.id and s.tenant_id = :tenant_id
@@ -324,6 +358,8 @@ async def list_opportunities(
                 why_it_matters=r[10],
                 incumbent_summary=incumbent_summary,
                 assigned_founder_slug=r[13],
+                high_moat_score=int(r[14]) if r[14] is not None else None,
+                is_sweet_spot=bool(r[15]) if r[15] is not None else False,
             )
         )
 
@@ -462,6 +498,21 @@ async def get_opportunity_detail(
     ).one_or_none()
     if sc is not None:
         score_row, founder_slug = sc
+        hm_block: HighMoatBlock | None = None
+        if score_row.high_moat_score is not None:
+            flags = score_row.high_moat_flags or {}
+            hm_block = HighMoatBlock(
+                score=score_row.high_moat_score,
+                breakdown=score_row.high_moat_breakdown or {},
+                is_high_probability_easy_win=bool(
+                    flags.get("is_high_probability_easy_win")
+                ),
+                clause_hits=list(flags.get("clause_hits") or []),
+                clearance_hits=list(flags.get("clearance_hits") or []),
+                role_hits=list(flags.get("role_hits") or []),
+                top_clearance=str(flags.get("top_clearance") or "NONE"),
+                why_it_matters_seed=flags.get("why_it_matters_seed"),
+            )
         score_block = ScoreBlock(
             score=score_row.score,
             breakdown=score_row.score_breakdown,
@@ -469,6 +520,7 @@ async def get_opportunity_detail(
             why_it_matters=score_row.why_it_matters,
             why_it_matters_model=score_row.why_it_matters_model,
             scored_at=score_row.scored_at.isoformat(),
+            high_moat=hm_block,
         )
 
     # Capability matches via pgvector cosine similarity. similarity = 1 - distance.
