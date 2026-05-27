@@ -38,7 +38,7 @@ export async function CyberScopeSamDiscovery() {
             opportunities, and enqueues cyber scope scans.
           </p>
         </div>
-        <form action={runSamSearch}>
+        <form action={runCyberScopeSamSearch}>
           <button
             type="submit"
             className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent"
@@ -78,11 +78,6 @@ export async function CyberScopeSamDiscovery() {
       </details>
     </div>
   );
-}
-
-async function runSamSearch() {
-  "use server";
-  await runCyberScopeSamSearch();
 }
 
 function shortKey(key: string): string {

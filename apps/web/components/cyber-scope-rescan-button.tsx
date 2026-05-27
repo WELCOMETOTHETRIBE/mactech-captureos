@@ -18,13 +18,8 @@ export function CyberScopeRescanButton({
 }: {
   opportunityId: string;
 }) {
-  async function action() {
-    "use server";
-    await rescanOpportunityCyberScope(opportunityId);
-  }
-
   return (
-    <form action={action}>
+    <form action={rescanOpportunityCyberScope.bind(null, opportunityId)}>
       <SubmitBtn />
     </form>
   );
