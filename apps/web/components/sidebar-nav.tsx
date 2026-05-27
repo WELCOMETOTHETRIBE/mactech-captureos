@@ -35,6 +35,12 @@ const NAV = [
     match: (p: string) => p.startsWith("/drafts")
   },
   {
+    href: "/tools/cyber-scope-parser",
+    label: "Cyber Scope",
+    sub: "FRCS / OT / UFGS feed",
+    match: (p: string) => p.startsWith("/tools")
+  },
+  {
     href: "/forecasts",
     label: "Forecasts",
     sub: "Coming to SAM 30–180d out",

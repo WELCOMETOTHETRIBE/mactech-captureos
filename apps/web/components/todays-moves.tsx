@@ -65,6 +65,7 @@ export function TodaysMoves({
   // first-thing-in-the-morning surface. Gold ink on the verb tag is the
   // only place the token bleeds into TodaysMoves (per brief §6 + §11 Q3).
   const sweetSpotsOpen = kpis.your_sweet_spots_open ?? 0;
+  const cyberScopeAlerts = kpis.your_cyber_scope_alerts ?? 0;
   if (sweetSpotsOpen > 0) {
     const ownerQ = you ? `&assigned_founder=${you.slug}` : "";
     moves.push({
@@ -80,6 +81,23 @@ export function TodaysMoves({
       detail: "high-probability easy win — UFGS 25 / FRCS cyber",
       href: `/opportunities?sweet_spot_only=true&sort=high_moat_desc${ownerQ}`,
       tone: "high_moat",
+    });
+  }
+
+  if (cyberScopeAlerts > 0) {
+    moves.push({
+      key: "cyber-scope",
+      verb: "Review",
+      label: (
+        <>
+          <strong>{cyberScopeAlerts}</strong>{" "}
+          {cyberScopeAlerts === 1 ? "cyber scope alert" : "cyber scope alerts"}{" "}
+          (HIGH / CRITICAL)
+        </>
+      ),
+      detail: "UFGS / FRCS / hidden OT scope — not yet in pipeline",
+      href: "/tools/cyber-scope-parser?filter=high",
+      tone: "brand",
     });
   }
 

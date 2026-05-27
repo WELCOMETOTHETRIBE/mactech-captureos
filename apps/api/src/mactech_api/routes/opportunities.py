@@ -28,6 +28,7 @@ from sqlalchemy import select, text
 
 from mactech_api.auth import RequestContext, get_request_context
 from mactech_db.models import (
+    CyberScopeAnalysis,
     ExclusionsCache,
     Founder,
     OpportunityEnriched,
@@ -60,6 +61,22 @@ class IncumbentBlock(_Out):
     exclusions: ExclusionBlock | None
 
 
+class CyberScopeBlock(_Out):
+    """Parallel cyber scope analysis (UFGS tiers, FRCS, hidden scope)."""
+
+    score: int
+    likelihood: str
+    pursuit_model: str
+    ufgs_center_of_gravity: bool
+    ufgs_tier_1_hit: bool
+    top_ufgs_sections: list[str]
+    top_signals: list[dict[str, Any]]
+    scan_pass: str
+    attachments_pending: bool
+    analysis_id: str | None
+    analysis_url: str | None
+
+
 class HighMoatBlock(_Out):
     """Parallel high-moat (UFGS 25 / FRCS cyber) score block. Null on the
     parent ScoreBlock when the tenant has no high_moat_scoring config or
@@ -83,6 +100,7 @@ class ScoreBlock(_Out):
     why_it_matters_model: str | None
     scored_at: str | None
     high_moat: HighMoatBlock | None = None
+    cyber_scope: CyberScopeBlock | None = None
 
 
 class OpportunityHeader(_Out):
@@ -202,6 +220,11 @@ class OpportunityListItem(_Out):
     # promotes it above the raw SAM title (which is often formatted for
     # the agency's internal system rather than human triage).
     scope_one_sentence: str | None = None
+    cyber_scope_score: int | None = None
+    cyber_scope_likelihood: str | None = None
+    cyber_scope_pursuit_model: str | None = None
+    cyber_scope_analysis_id: str | None = None
+    cyber_scope_attachments_pending: bool = False
 
 
 class OpportunityListResponse(_Out):
@@ -240,8 +263,10 @@ async def list_opportunities(
     score_min: int = 0,
     score_max: int = 100,
     high_moat_min: int | None = None,
+    cyber_scope_min: int | None = None,
+    cyber_scope_likelihood: str | None = None,
     sweet_spot_only: bool = False,
-    sort: str = "score_desc",  # 'score_desc' | 'high_moat_desc' | 'posted_desc' | 'deadline_asc'
+    sort: str = "score_desc",  # 'score_desc' | 'high_moat_desc' | 'cyber_scope_desc' | 'posted_desc' | 'deadline_asc'
 ) -> OpportunityListResponse:
     if limit < 1 or limit > 100:
         raise HTTPException(status_code=400, detail="limit must be 1..100")
@@ -251,6 +276,8 @@ async def list_opportunities(
         raise HTTPException(status_code=400, detail="score_min/max out of range")
     if high_moat_min is not None and (high_moat_min < 0 or high_moat_min > 100):
         raise HTTPException(status_code=400, detail="high_moat_min out of range")
+    if cyber_scope_min is not None and (cyber_scope_min < 0 or cyber_scope_min > 100):
+        raise HTTPException(status_code=400, detail="cyber_scope_min out of range")
 
     session = ctx.session
     tenant_id = ctx.tenant.id
@@ -294,12 +321,21 @@ async def list_opportunities(
         where_parts.append(
             "(s.high_moat_flags->>'is_high_probability_easy_win')::bool = true"
         )
+    if cyber_scope_min is not None:
+        where_parts.append("s.cyber_scope_score >= :cs_min")
+        params["cs_min"] = cyber_scope_min
+    if cyber_scope_likelihood:
+        levels = [x.strip().upper() for x in cyber_scope_likelihood.split(",") if x.strip()]
+        if levels:
+            where_parts.append("s.cyber_scope_likelihood = any(:cs_likelihood)")
+            params["cs_likelihood"] = levels
 
     where_sql = " and ".join(where_parts) if where_parts else "true"
 
     sort_sql = {
         "score_desc": "s.score desc nulls last, o.posted_at desc nulls last",
         "high_moat_desc": "s.high_moat_score desc nulls last, o.posted_at desc nulls last",
+        "cyber_scope_desc": "s.cyber_scope_score desc nulls last, o.posted_at desc nulls last",
         "posted_desc": "o.posted_at desc nulls last",
         "deadline_asc": "o.response_deadline asc nulls last",
     }.get(sort, "s.score desc nulls last, o.posted_at desc nulls last")
@@ -316,13 +352,23 @@ async def list_opportunities(
             s.high_moat_score,
             (s.high_moat_flags->>'is_high_probability_easy_win')::bool
               as is_sweet_spot,
-            b.scope_one_sentence
+            b.scope_one_sentence,
+            s.cyber_scope_score,
+            s.cyber_scope_likelihood,
+            s.cyber_scope_pursuit_model,
+            csa.id::text as cyber_scope_analysis_id,
+            (csa.id is not null
+              and csa.scan_pass = 'description_only'
+              and (o.attachment_text is null or o.attachment_text = ''))
+              as cyber_scope_attachments_pending
         from opportunities_raw o
         left join opportunity_scores s
           on s.opportunity_id = o.id and s.tenant_id = :tenant_id
         left join opportunities_enriched e on e.opportunity_id = o.id
         left join opportunity_briefs b
           on b.opportunity_id = o.id and b.tenant_id = :tenant_id
+        left join cyber_scope_analyses csa
+          on csa.opportunity_id = o.id and csa.tenant_id = :tenant_id
         where {where_sql}
         order by {sort_sql}
         limit :limit offset :offset
@@ -369,6 +415,11 @@ async def list_opportunities(
                 high_moat_score=int(r[14]) if r[14] is not None else None,
                 is_sweet_spot=bool(r[15]) if r[15] is not None else False,
                 scope_one_sentence=r[16],
+                cyber_scope_score=int(r[17]) if r[17] is not None else None,
+                cyber_scope_likelihood=r[18],
+                cyber_scope_pursuit_model=r[19],
+                cyber_scope_analysis_id=r[20],
+                cyber_scope_attachments_pending=bool(r[21]) if r[21] else False,
             )
         )
 
@@ -522,6 +573,43 @@ async def get_opportunity_detail(
                 top_clearance=str(flags.get("top_clearance") or "NONE"),
                 why_it_matters_seed=flags.get("why_it_matters_seed"),
             )
+        cs_block: CyberScopeBlock | None = None
+        if score_row.cyber_scope_score is not None:
+            csa_row = (
+                await session.execute(
+                    select(CyberScopeAnalysis).where(
+                        CyberScopeAnalysis.tenant_id == tenant_id,
+                        CyberScopeAnalysis.opportunity_id == opportunity_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            flags = score_row.cyber_scope_flags or {}
+            top_signals = (
+                (csa_row.top_signals_json or [])[:5] if csa_row is not None else []
+            )
+            attachments_pending = bool(
+                csa_row is not None
+                and csa_row.scan_pass == "description_only"
+                and not (opp.attachment_text and opp.attachment_text.strip())
+            )
+            analysis_id = str(csa_row.id) if csa_row else None
+            cs_block = CyberScopeBlock(
+                score=score_row.cyber_scope_score,
+                likelihood=score_row.cyber_scope_likelihood or "NONE",
+                pursuit_model=score_row.cyber_scope_pursuit_model or "NO_ACTION",
+                ufgs_center_of_gravity=bool(flags.get("ufgs_center_of_gravity")),
+                ufgs_tier_1_hit=bool(flags.get("ufgs_tier_1_hit")),
+                top_ufgs_sections=list(flags.get("top_ufgs_sections") or []),
+                top_signals=top_signals,
+                scan_pass=csa_row.scan_pass if csa_row else "description_only",
+                attachments_pending=attachments_pending,
+                analysis_id=analysis_id,
+                analysis_url=(
+                    f"/tools/cyber-scope-parser/{analysis_id}"
+                    if analysis_id
+                    else None
+                ),
+            )
         score_block = ScoreBlock(
             score=score_row.score,
             breakdown=score_row.score_breakdown,
@@ -530,6 +618,7 @@ async def get_opportunity_detail(
             why_it_matters_model=score_row.why_it_matters_model,
             scored_at=score_row.scored_at.isoformat(),
             high_moat=hm_block,
+            cyber_scope=cs_block,
         )
 
     # Capability matches via pgvector cosine similarity. similarity = 1 - distance.

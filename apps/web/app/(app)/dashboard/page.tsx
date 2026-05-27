@@ -271,7 +271,7 @@ export default async function DashboardPage() {
           TodaysMoves — they're work-in-flight metrics, not discovery
           questions. Sweet-spots tile is gold-inked only when count > 0;
           zero stays neutral (gravitas, not crying wolf). See brief §7.4. */}
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Link
           href={
             data.you
@@ -302,6 +302,19 @@ export default async function DashboardPage() {
             value={data.kpis.your_high_fit_open}
             hint="scored ≥60, not yet in your pipeline"
             tone={data.kpis.your_high_fit_open > 0 ? "brand" : "neutral"}
+          />
+        </Link>
+        <Link
+          href="/tools/cyber-scope-parser?filter=high"
+          className="rounded-lg transition-colors hover:ring-2 hover:ring-primary/30"
+        >
+          <Kpi
+            label="Cyber scope alerts"
+            value={data.kpis.your_cyber_scope_alerts}
+            hint="HIGH/CRITICAL, score ≥65, not in pipeline"
+            tone={
+              data.kpis.your_cyber_scope_alerts > 0 ? "brand" : "neutral"
+            }
           />
         </Link>
         <Link

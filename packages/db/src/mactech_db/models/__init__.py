@@ -1,6 +1,22 @@
 from mactech_db.models.agency_intel import AgencyNaicsIntel
 from mactech_db.models.apify import AgencyEvent, ApifyRun
+from mactech_db.models.cyber_scope import CyberScopeAnalysis
+from mactech_db.models.cyber_scope_downstream import (
+    BidNoBidReview,
+    ClauseRiskLog,
+    ClauseRiskLogEntry,
+    ProposalOutline,
+)
 from mactech_db.models.audit_event import (
+    EVENT_CYBER_SCOPE_ADDED_TO_PIPELINE,
+    EVENT_CYBER_SCOPE_CLARIFICATION_EMAIL,
+    EVENT_CYBER_SCOPE_PRIME_OUTREACH_EMAIL,
+    EVENT_CYBER_SCOPE_SAM_SEARCH_RUN,
+    EVENT_CYBER_SCOPE_SUMMARIZED,
+    EVENT_CYBER_SCOPE_ANALYSIS_RUN,
+    EVENT_CYBER_SCOPE_BID_REVIEW_CREATED,
+    EVENT_CYBER_SCOPE_CLAUSE_RISK_LOG_CREATED,
+    EVENT_CYBER_SCOPE_PROPOSAL_OUTLINE_CREATED,
     EVENT_OPPORTUNITY_AMENDMENT_DETECTED,
     EVENT_PURSUIT_BID_DECIDED,
     EVENT_PURSUIT_CREATED,
@@ -70,6 +86,20 @@ __all__ = [
     "BID_DECISIONS",
     "CapabilityStatement",
     "ComplianceMatrixItem",
+    "BidNoBidReview",
+    "ClauseRiskLog",
+    "ClauseRiskLogEntry",
+    "CyberScopeAnalysis",
+    "EVENT_CYBER_SCOPE_ADDED_TO_PIPELINE",
+    "EVENT_CYBER_SCOPE_CLARIFICATION_EMAIL",
+    "EVENT_CYBER_SCOPE_PRIME_OUTREACH_EMAIL",
+    "EVENT_CYBER_SCOPE_SAM_SEARCH_RUN",
+    "EVENT_CYBER_SCOPE_SUMMARIZED",
+    "EVENT_CYBER_SCOPE_ANALYSIS_RUN",
+    "EVENT_CYBER_SCOPE_BID_REVIEW_CREATED",
+    "EVENT_CYBER_SCOPE_CLAUSE_RISK_LOG_CREATED",
+    "EVENT_CYBER_SCOPE_PROPOSAL_OUTLINE_CREATED",
+    "ProposalOutline",
     "DRAFT_STATUSES",
     "DRAFT_TYPES",
     "EVENT_OPPORTUNITY_AMENDMENT_DETECTED",

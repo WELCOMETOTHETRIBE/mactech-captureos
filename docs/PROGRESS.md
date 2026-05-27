@@ -22,6 +22,83 @@ Format per entry:
 
 ---
 
+## 2026-05-26 — Cyber Scope Sprint 5 (proactive SAM discovery)
+
+### Shipped
+- `mactech_intelligence.cyber_scope.sam_search`: job builder from cyber saved searches (NAICS pull + SAM `title` queries via `sam_query_group` / `sam_title_queries`, client-side keyword filter)
+- SAM client: `title` query param on `search_opportunities` / `iter_opportunities`
+- Celery `mactech.cyber_scope.sam_search` + Beat `cyber-scope-sam-search` daily 05:00 ET (`lookback_days=7`, `max_jobs=24`)
+- Worker upserts `opportunities_raw`, enqueues `cyber_scope.scan_one` + `attachments.fetch_one`; `ingestion_state` keys `cyber_scope_sam:{search_id}:...`
+- Audit `cyber_scope.sam_search_run`
+- API: `GET /tools/cyber-scope/sam-search/status`, `POST .../sam-search/run`
+- Tenant defaults: `cyber_scope_search` + `sam_query_group` on UFGS Shortlist and Hidden Construction Cyber saved searches
+- Web: proactive SAM discovery panel on cyber scope feed (status + manual run)
+- Tests: `test_cyber_scope_sam_search.py`
+
+### Next up
+- Apply migrations + backfill in dev; manual `celery call mactech.cyber_scope.sam_search` with `SAM_API_KEY`
+- FPDS / Apify / Governance adapters (product roadmap)
+
+---
+
+## 2026-05-26 — Cyber Scope Sprint 4 (AI + exports)
+
+### Shipped
+- LLM prompts + `cyber_scope/llm_exports.py`: executive summary, CO/COR clarification email, prime outreach email (template fallback without API key)
+- Stored in `cyber_scope_analyses.metadata_json`: `llm_summary`, `clarification_email`, `prime_outreach_email`, GovernanceOS/PricingOS handoff stubs
+- API: `POST .../summarize`, `.../clarification-email`, `.../prime-outreach-email`, `GET .../intelligence`, `GET feed/export.csv`, `GET analyses/{id}/export.pdf`
+- Celery `mactech.cyber_scope.summarize_batch` (every 6h) for HIGH/CRITICAL rows missing summary
+- Web: intelligence panel on analysis detail, CSV export on feed, PDF proxy routes
+
+### Next up
+- Apply migrations + backfill in dev
+
+---
+
+## 2026-05-26 — Cyber Scope Sprint 3 (capture actions)
+
+### Shipped
+- Migration `0029_cyber_scope_downstream`: `clause_risk_logs`, `clause_risk_log_entries`, `bid_no_bid_reviews`, `proposal_outlines`
+- Intelligence prefill: `cyber_scope/downstream.py` (clause entries, bid/no-bid rationale, proposal outline sections)
+- API: POST create + GET for each artifact; `add-to-pipeline` (pursuit qualify + bid rationale prefill); downstream links on analysis GET
+- Web: capture action buttons on feed, analysis detail, opportunity strip; artifact pages for clause risk / bid review / outline
+
+### Next up
+- Sprint 4: LLM summaries, CSV/PDF export, clarification email drafts
+- Apply migrations `0028` + `0029` in dev and backfill scans
+
+---
+
+## 2026-05-26 — Cyber Scope Sprint 2 (live pipeline)
+
+### Shipped
+- Opportunities API: `cyber_scope_*` list fields, filters (`cyber_scope_min`, `cyber_scope_likelihood`), sort `cyber_scope_desc`, detail `CyberScopeBlock` with analysis URL + attachments pending
+- Dashboard KPI `your_cyber_scope_alerts` + 4-tile strip; Today's Moves link to cyber scope feed
+- Web: `CyberScopeStrip` on opportunity detail, list chips + "Cyber scope" quick filter, feed "Attachments pending" badge
+- Digest worker: `score_field: cyber_scope_score` for MacTech cyber saved searches
+- Tenant defaults: UFGS MacTech Shortlist + Hidden Construction Cyber saved searches (`score_field: cyber_scope_score`)
+
+### Next up
+- Apply migration `0028` + run `mactech.cyber_scope.scan_batch` backfill in dev
+- Sprint 3: clause risk log, bid/no-bid prefill, feed action buttons
+
+---
+
+## 2026-05-26 — Cyber Scope Contract Parser (Phase 1)
+
+### Shipped
+- Deterministic `mactech_intelligence.cyber_scope` package with 8-tier UFGS taxonomy (`data/cyber_scope_ufgs_tiers.yml`), general cyber dictionary, scoring, hidden-scope rules, SAM search query generator
+- DB migration `0028_cyber_scope`: `cyber_scope_analyses` + `opportunity_scores` cyber_scope_* columns; audit event `cyber_scope.analysis_run`
+- Celery worker `mactech.cyber_scope.scan_one` / `scan_batch`; hooks on `sam_ingest` and `attachment_fetcher`
+- API routes under `/tools/cyber-scope/*` (feed, rescan, supplemental paste/upload)
+- Web UI `/tools/cyber-scope-parser` feed-first + analysis detail; sidebar nav entry
+
+### Next up
+- Run migration `0028` + `0029` in dev/staging
+- Backfill: `mactech.cyber_scope.scan_batch` after deploy
+
+---
+
 ## 2026-04-24 — Project kickoff
 
 ### Shipped

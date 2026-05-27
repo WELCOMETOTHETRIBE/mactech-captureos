@@ -1,0 +1,195 @@
+# MacTech UFGS tier taxonomy — USACE/NAVFAC/AFCEC joint specs.
+# Center of gravity: 25 05 11 + companion sections from shortlist.
+
+tier_multipliers:
+  1: 1.0
+  2: 0.6
+  3: 0.7
+  4: 0.65
+  5: 0.35
+  6: 0.55
+  7: 0.6
+  8: 0.25
+
+center_of_gravity_companions:
+  - "23 09 00"
+  - "23 09 23.02"
+  - "25 10 10"
+  - "27 05 29.00 10"
+  - "28 10 05"
+  - "26 37 13"
+  - "33 09 52"
+  - "33 09 53"
+  - "33 09 54"
+  - "33 09 55"
+  - "40 60 00"
+
+sections:
+  # Tier 1 — Bullseye
+  - ufgs: "25 05 11"
+    title: Cybersecurity for Facility-Related Control Systems
+    tier: 1
+    weight: 35
+    aliases: ["UFGS 25 05 11", "25-05-11", "Cybersecurity for Facility-Related Control Systems"]
+  - ufgs: "25 08 11.00 20"
+    title: RMF for Facility-Related Control Systems
+    tier: 1
+    weight: 32
+    aliases: ["UFGS 25 08 11", "25 08 11.00 20", "Risk Management Framework for Facility-Related Control Systems"]
+  - ufgs: "25 08 10"
+    title: Utility Monitoring and Control System Testing
+    tier: 1
+    weight: 22
+    aliases: ["UFGS 25 08 10", "UMCS Testing"]
+  - ufgs: "25 10 10"
+    title: UMCS Front End and Integration
+    tier: 1
+    weight: 24
+    aliases: ["UFGS 25 10 10", "Utility Monitoring and Control System Front End"]
+
+  # Tier 2 — HVAC / BAS
+  - ufgs: "23 09 00"
+    title: Instrumentation and Control for HVAC
+    tier: 2
+    weight: 14
+    aliases: ["UFGS 23 09 00", "Division 23"]
+  - ufgs: "23 09 13"
+    title: Instrumentation and Control Devices for HVAC
+    tier: 2
+    weight: 12
+  - ufgs: "23 09 23.01"
+    title: LonWorks Direct Digital Control for HVAC
+    tier: 2
+    weight: 14
+    aliases: ["LonWorks", "Direct Digital Control"]
+  - ufgs: "23 09 23.02"
+    title: BACnet Direct Digital Control for HVAC
+    tier: 2
+    weight: 16
+    aliases: ["UFGS 23 09 23.02", "BACnet Direct Digital Control", "BACnet"]
+  - ufgs: "23 09 53.00 20"
+    title: Space Temperature Control Systems
+    tier: 2
+    weight: 10
+  - ufgs: "23 09 93"
+    title: Sequences of Operation for HVAC Control
+    tier: 2
+    weight: 10
+  - ufgs: "23 81 23"
+    title: Computer Room Air Conditioning Units
+    tier: 2
+    weight: 8
+
+  # Tier 3 — Comms / PDS
+  - ufgs: "27 05 26"
+    title: Grounding and Bonding for Communications Systems
+    tier: 3
+    weight: 10
+  - ufgs: "27 05 29.00 10"
+    title: Protected Distribution System for SIPRNET
+    tier: 3
+    weight: 22
+    aliases: ["PDS for SIPRNET", "SIPRNET", "Protected Distribution System"]
+  - ufgs: "27 10 00"
+    title: Building Telecommunications Cabling System
+    tier: 3
+    weight: 12
+  - ufgs: "27 41 00"
+    title: Audio-Visual Systems
+    tier: 3
+    weight: 8
+  - ufgs: "27 51 16"
+    title: Public Address Systems
+    tier: 3
+    weight: 6
+  - ufgs: "27 51 23"
+    title: Intercommunication System
+    tier: 3
+    weight: 6
+  - ufgs: "27 52 24"
+    title: Nurse Call System
+    tier: 3
+    weight: 6
+  - ufgs: "27 53 19.13"
+    title: First Responder Distributed Antennae Systems
+    tier: 3
+    weight: 8
+
+  # Tier 4 — ESS / fire alarm
+  - ufgs: "28 08 10"
+    title: Electronic Security System Acceptance Testing
+    tier: 4
+    weight: 18
+    aliases: ["ESS acceptance testing", "electronic security system acceptance testing"]
+  - ufgs: "28 10 05"
+    title: Electronic Security Systems
+    tier: 4
+    weight: 16
+    aliases: ["UFGS 28 10 05", "ESS", "Electronic Security Systems"]
+  - ufgs: "28 20 02"
+    title: Central Monitoring Services for ESS
+    tier: 4
+    weight: 12
+  - ufgs: "28 31 70"
+    title: Interior Fire Alarm System, Addressable
+    tier: 4
+    weight: 10
+
+  # Tier 5 — Physical security (correlate only)
+  - ufgs: "08 34 49.00 20"
+    title: HEMP Shielded Door
+    tier: 5
+    weight: 8
+  - ufgs: "08 56 46.10 20"
+    title: Radio Frequency Shielded Enclosures
+    tier: 5
+    weight: 8
+
+  # Tier 6 — Power / microgrid
+  - ufgs: "26 37 13"
+    title: Microgrid Control System
+    tier: 6
+    weight: 18
+    aliases: ["microgrid control system", "UFGS 26 37 13"]
+  - ufgs: "26 27 14.00 20"
+    title: Electricity Metering
+    tier: 6
+    weight: 10
+  - ufgs: "26 33 53"
+    title: Static Uninterruptible Power Supply
+    tier: 6
+    weight: 8
+
+  # Tier 7 — OT / utilities
+  - ufgs: "33 09 52"
+    title: Fuel Pump Control and Annunciation System
+    tier: 7
+    weight: 14
+  - ufgs: "33 09 53"
+    title: Aviation Fuel Pump Control Type III
+    tier: 7
+    weight: 14
+  - ufgs: "33 09 54"
+    title: Aviation Fuel Pump Control Type IV/V
+    tier: 7
+    weight: 14
+  - ufgs: "33 09 55"
+    title: Aviation Fuel Pump Control Cut and Cover
+    tier: 7
+    weight: 14
+  - ufgs: "40 60 00"
+    title: Process Control
+    tier: 7
+    weight: 16
+    aliases: ["UFGS 40 60 00", "process control"]
+
+  # Tier 8 — Submittals / commissioning
+  - ufgs: "01 78 24.00 10"
+    title: Facility Data Requirements
+    tier: 8
+    weight: 6
+  - ufgs: "01 91 00.15"
+    title: Building Commissioning
+    tier: 8
+    weight: 8
+    aliases: ["commissioning", "Building Commissioning"]

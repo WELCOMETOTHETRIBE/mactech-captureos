@@ -147,6 +147,24 @@ celery_app.conf.update(
             "schedule": crontab(minute=30, hour=6),
             "options": {"expires": 30 * 60},
         },
+        "cyber-scope-scan-batch": {
+            "task": "mactech.cyber_scope.scan_batch",
+            "schedule": crontab(minute="*/45"),
+            "options": {"expires": 40 * 60},
+            "kwargs": {"batch_size": 40},
+        },
+        "cyber-scope-summarize-batch": {
+            "task": "mactech.cyber_scope.summarize_batch",
+            "schedule": crontab(minute=15, hour="*/6"),
+            "options": {"expires": 60 * 60},
+            "kwargs": {"batch_size": 12},
+        },
+        "cyber-scope-sam-search": {
+            "task": "mactech.cyber_scope.sam_search",
+            "schedule": crontab(minute=0, hour=5),
+            "options": {"expires": 90 * 60},
+            "kwargs": {"lookback_days": 7, "max_jobs": 24},
+        },
     },
 )
 
@@ -209,6 +227,9 @@ def _reset_db_engine_per_task(*args: object, **kwargs: object) -> None:
 import mactech_workers.tasks.apify_forecasts  # noqa: E402, F401
 import mactech_workers.tasks.apify_industry_days  # noqa: E402, F401
 import mactech_workers.tasks.attachment_fetcher  # noqa: E402, F401
+import mactech_workers.tasks.cyber_scope_scan  # noqa: E402, F401
+import mactech_workers.tasks.cyber_scope_summarize  # noqa: E402, F401
+import mactech_workers.tasks.cyber_scope_sam_search  # noqa: E402, F401
 import mactech_workers.tasks.codex_sprs_sync  # noqa: E402, F401
 import mactech_workers.tasks.dhs_apfs_ingest  # noqa: E402, F401
 import mactech_workers.tasks.doe_forecast_ingest  # noqa: E402, F401

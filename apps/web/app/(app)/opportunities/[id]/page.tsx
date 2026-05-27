@@ -19,6 +19,7 @@ import { deleteOpportunityQuestion } from "@/lib/ask";
 import { AskStreamingPanel } from "@/components/ask-streaming";
 import { AnnotatedProse } from "@/components/annotated-prose";
 import { CyberFitCard } from "@/components/cyber-posture-card";
+import { CyberScopeStrip } from "@/components/cyber-scope-strip";
 import { StreamingDraftButton } from "@/components/draft-streaming";
 import { generateOpportunityBrief } from "@/lib/brief";
 import {
@@ -239,6 +240,7 @@ export default async function OpportunityDetailPage({
           any do-work affordance. Falls back to render nothing when
           the score is null or below threshold. */}
       <HighMoatStrip score={data.score} />
+      <CyberScopeStrip opportunityId={id} score={data.score} />
 
       {/* Two-column main: description (with brief tab) left, incumbent +
           capability right. Pre-decision evidence — brief + cyber-fit +

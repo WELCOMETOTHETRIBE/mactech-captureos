@@ -179,7 +179,7 @@ saved_searches:
         - UFGS 25
         - UFC 4-010-06
         - NIST SP 800-82
-        - DoDI 8500.01
+        - DoDI 8510.01
         - FRCS
         - UMCS
         - Facility-Related Control Systems
@@ -200,6 +200,55 @@ saved_searches:
         - 3PAO
       score_field: high_moat_score
     alert_threshold: 80
+    alert_cadence: daily
+    alert_channels: [email]
+
+  - name: Patrick — UFGS MacTech Shortlist
+    owner_slug: patrick-caruso
+    filters:
+      cyber_scope_search: true
+      sam_query_group: ufgs_shortlist
+      naics: [541519, 541512, 541513, 518210, 236220, 237310, 237990, 238210]
+      keywords:
+        - "25 05 11"
+        - "25 08 11.00 20"
+        - "25 10 10"
+        - "25 08 10"
+        - "23 09 00"
+        - "23 09 23.02"
+        - "28 10 05"
+        - "28 08 10"
+        - "27 05 29.00 10"
+        - "26 37 13"
+        - "40 60 00"
+        - "33 09 52"
+        - "33 09 53"
+        - "33 09 54"
+        - "33 09 55"
+      score_field: cyber_scope_score
+    alert_threshold: 65
+    alert_cadence: daily
+    alert_channels: [email]
+
+  - name: Patrick — Hidden Construction Cyber
+    owner_slug: patrick-caruso
+    filters:
+      cyber_scope_search: true
+      sam_query_group: hidden_construction
+      naics: [236220, 237310, 237990, 238210, 541330]
+      keywords:
+        - "HVAC controls"
+        - "building automation"
+        - "BACnet"
+        - "UMCS"
+        - "microgrid"
+        - "electronic security systems"
+        - "25 05 11"
+        - FRCS
+        - RMF
+        - UFGS
+      score_field: cyber_scope_score
+    alert_threshold: 65
     alert_cadence: daily
     alert_channels: [email]
 

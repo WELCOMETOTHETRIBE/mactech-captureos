@@ -234,6 +234,18 @@ async def _fetch_for_opportunity(opportunity_id: UUID) -> AttachmentFetchResult:
                 opportunity_id,
                 exc,
             )
+        try:
+            celery_app.send_task(
+                "mactech.cyber_scope.scan_one",
+                args=[str(opportunity_id)],
+                kwargs={"scan_pass": "with_attachments"},
+            )
+        except Exception as exc:
+            log.warning(
+                "attachment_fetcher: couldn't enqueue cyber_scope scan for %s: %s",
+                opportunity_id,
+                exc,
+            )
 
     status = "ok" if combined else "no_text"
     return AttachmentFetchResult(

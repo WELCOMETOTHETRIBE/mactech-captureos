@@ -9,6 +9,9 @@ from mactech_api.routes.ask import router as ask_router
 from mactech_api.routes.brief import router as brief_router
 from mactech_api.routes.capture_package import router as capture_package_router
 from mactech_api.routes.cyber import router as cyber_router
+from mactech_api.routes.cyber_scope import router as cyber_scope_router
+from mactech_api.routes.cyber_scope_downstream import router as cyber_scope_downstream_router
+from mactech_api.routes.cyber_scope_intelligence import router as cyber_scope_intelligence_router
 from mactech_api.routes.drafts import router as drafts_router
 from mactech_api.routes.eligibility import router as eligibility_router
 from mactech_api.routes.events import router as events_router
@@ -76,6 +79,9 @@ app.include_router(amendments_router)
 app.include_router(eligibility_router)
 app.include_router(integrations_router)
 app.include_router(cyber_router)
+app.include_router(cyber_scope_router)
+app.include_router(cyber_scope_downstream_router)
+app.include_router(cyber_scope_intelligence_router)
 app.include_router(capture_package_router)
 
 

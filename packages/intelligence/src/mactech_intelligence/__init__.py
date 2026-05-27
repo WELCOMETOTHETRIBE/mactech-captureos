@@ -46,6 +46,12 @@ from mactech_intelligence.extract_solicitation import (
     extract_solicitation,
 )
 from mactech_intelligence.llm import AnthropicLLMClient, LLMResponse, StreamChunk
+from mactech_intelligence.cyber_scope import (
+    CyberScopeAnalysis,
+    CyberScopeTextSource,
+    analyze_cyber_scope,
+)
+from mactech_intelligence.cyber_scope.scorer import PARSER_VERSION as CYBER_SCOPE_PARSER_VERSION
 from mactech_intelligence.clause_detector import (
     ClauseFindings,
     detect as detect_clauses,
@@ -85,7 +91,11 @@ __all__ = [
     "BriefExtractionError",
     "CapabilityContext",
     "CapabilityExtractionError",
+    "CYBER_SCOPE_PARSER_VERSION",
     "ClauseFindings",
+    "CyberScopeAnalysis",
+    "CyberScopeTextSource",
+    "analyze_cyber_scope",
     "ExtractBriefInput",
     "ExtractSolicitationInput",
     "ExtractedCapabilityStatement",

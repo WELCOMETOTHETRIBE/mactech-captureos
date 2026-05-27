@@ -1,0 +1,203 @@
+# General cyber / RMF / compliance terms (non-UFGS section numbers).
+
+terms:
+  - category: ufc_frcs
+    term: UFC 4-010-06
+    normalized_term: UFC 4-010-06
+    weight: 30
+    aliases: ["UFC 4 010 06", "Cybersecurity of Facility-Related Control Systems"]
+    regex: '/UFC\s*4[-\s]?010[-\s]?06/i'
+  - category: ufc_frcs
+    term: FRCS
+    normalized_term: FRCS
+    weight: 22
+    aliases: ["Facility-Related Control Systems", "Facility Related Control Systems", "FRCS Cybersecurity", "FRCS Master List"]
+    regex: '/\bFRCS\b/i'
+  - category: ufc_frcs
+    term: Cybersecurity Design Checklist
+    normalized_term: Cybersecurity Design Checklist
+    weight: 18
+    aliases: ["Cybersecurity Design Checklists", "Appendix G"]
+  - category: ufc_frcs
+    term: CCI
+    normalized_term: CCI
+    weight: 15
+    aliases: ["Control Correlation Identifier", "Control Correlation Identifiers", "CCI Tables"]
+    regex: '/\bCCI[-\s]?\d{6}\b/i'
+
+  - category: rmf_ato_emass
+    term: DoDI 8510.01
+    normalized_term: DoDI 8510.01
+    weight: 28
+    aliases: ["DODI 8510.01", "DoD Instruction 8510.01"]
+    regex: '/DoD[Ii]\s*8510\.01/i'
+  - category: rmf_ato_emass
+    term: Risk Management Framework
+    normalized_term: RMF
+    weight: 20
+    aliases: ["RMF"]
+    regex: '/Risk\s+Management\s+Framework|\bRMF\b/i'
+  - category: rmf_ato_emass
+    term: Authority to Operate
+    normalized_term: ATO
+    weight: 22
+    aliases: ["Authorization to Operate", "ATO"]
+    regex: '/Authority\s+to\s+Operate|\bATO\b/i'
+  - category: rmf_ato_emass
+    term: eMASS
+    normalized_term: eMASS
+    weight: 18
+    aliases: ["Enterprise Mission Assurance Support Service"]
+    regex: '/\beMASS\b/i'
+  - category: rmf_ato_emass
+    term: System Security Plan
+    normalized_term: SSP
+    weight: 16
+    aliases: ["SSP"]
+    regex: '/System\s+Security\s+Plan|\bSSP\b/i'
+  - category: rmf_ato_emass
+    term: Security Assessment Report
+    normalized_term: SAR
+    weight: 16
+    aliases: ["SAR", "Security Assessment"]
+    regex: '/Security\s+Assessment\s+Report|\bSAR\b/i'
+  - category: rmf_ato_emass
+    term: POA&M
+    normalized_term: POA&M
+    weight: 14
+    regex: '/POA[&\s]?M/i'
+  - category: rmf_ato_emass
+    term: ACAS
+    normalized_term: ACAS
+    weight: 12
+  - category: rmf_ato_emass
+    term: SCAP
+    normalized_term: SCAP
+    weight: 10
+  - category: rmf_ato_emass
+    term: STIG
+    normalized_term: STIG
+    weight: 12
+    aliases: ["STIGs"]
+
+  - category: nist_cnssi_fips
+    term: NIST SP 800-82
+    normalized_term: NIST SP 800-82
+    weight: 18
+    aliases: ["NIST 800-82", "SP 800-82", "Industrial Control Systems Security"]
+    regex: '/NIST\s*(SP)?\s*800[-\s]?82/i'
+  - category: nist_cnssi_fips
+    term: NIST SP 800-53
+    normalized_term: NIST SP 800-53
+    weight: 14
+    regex: '/NIST\s*(SP)?\s*800[-\s]?53/i'
+  - category: nist_cnssi_fips
+    term: NIST SP 800-171
+    normalized_term: NIST SP 800-171
+    weight: 14
+    regex: '/NIST\s*(SP)?\s*800[-\s]?171/i'
+  - category: nist_cnssi_fips
+    term: CNSSI 1253
+    normalized_term: CNSSI 1253
+    weight: 16
+    regex: '/CNSSI\s*(No\.)?\s*1253/i'
+
+  - category: far_dfars_cmmc
+    term: DFARS 252.204-7012
+    normalized_term: DFARS 252.204-7012
+    weight: 16
+    regex: '/DFARS\s*252\.204[-\s]?7012/i'
+  - category: far_dfars_cmmc
+    term: CMMC
+    normalized_term: CMMC
+    weight: 14
+    regex: '/\bCMMC\b/i'
+
+  - category: ot_ics_scada_pit
+    term: Operational Technology
+    normalized_term: OT
+    weight: 12
+    aliases: ["OT"]
+    regex: '/Operational\s+Technology|\bOT\b/i'
+  - category: ot_ics_scada_pit
+    term: Industrial Control Systems
+    normalized_term: ICS
+    weight: 14
+    aliases: ["ICS", "SCADA"]
+    regex: '/Industrial\s+Control\s+Systems?|\bICS\b|SCADA/i'
+  - category: ot_ics_scada_pit
+    term: Platform Information Technology
+    normalized_term: PIT
+    weight: 16
+    aliases: ["PIT System", "PIT Systems"]
+    regex: '/Platform\s+Information\s+Technology|\bPIT\b/i'
+  - category: ot_ics_scada_pit
+    term: UMCS
+    normalized_term: UMCS
+    weight: 14
+    aliases: ["Utility Monitoring and Control System"]
+    regex: '/Utility\s+Monitoring\s+and\s+Control|\bUMCS\b/i'
+  - category: ot_ics_scada_pit
+    term: BACnet
+    normalized_term: BACnet
+    weight: 12
+  - category: ot_ics_scada_pit
+    term: Closed Restricted Network
+    normalized_term: CRN
+    weight: 14
+    aliases: ["CRN"]
+    regex: '/Closed\s+Restricted\s+Network|\bCRN\b/i'
+  - category: ot_ics_scada_pit
+    term: Building Automation System
+    normalized_term: BAS
+    weight: 10
+    aliases: ["BAS", "EMCS"]
+    regex: '/Building\s+Automation|\bBAS\b/i'
+
+  - category: branch_specific
+    term: NAVFAC
+    normalized_term: NAVFAC
+    weight: 8
+    regex: '/\bNAVFAC\b/i'
+  - category: branch_specific
+    term: USACE
+    normalized_term: USACE
+    weight: 8
+    aliases: ["U.S. Army Corps of Engineers", "Army Corps"]
+    regex: '/\bUSACE\b|Army\s+Corps\s+of\s+Engineers/i'
+  - category: branch_specific
+    term: AFCEC
+    normalized_term: AFCEC
+    weight: 8
+    aliases: ["Air Force Civil Engineer Center"]
+    regex: '/\bAFCEC\b/i'
+  - category: branch_specific
+    term: MILCON
+    normalized_term: MILCON
+    weight: 6
+    regex: '/\bMILCON\b/i'
+
+  - category: contract_location_triggers
+    term: Performance Work Statement
+    normalized_term: PWS
+    weight: 4
+    aliases: ["PWS", "Statement of Work", "SOW", "Specifications"]
+  - category: contract_location_triggers
+    term: Division 25
+    normalized_term: Division 25
+    weight: 8
+    aliases: ["UFGS Division 25"]
+  - category: contract_location_triggers
+    term: Cybersecurity Testing
+    normalized_term: Cybersecurity Testing
+    weight: 10
+
+construction_signals:
+  - HVAC
+  - building automation
+  - MILCON
+  - construction
+  - facilities modernization
+  - electrical
+  - microgrid
+  - commissioning

@@ -89,3 +89,11 @@ class OpportunityScore(Base):
     high_moat_flags: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB, nullable=True
     )
+    cyber_scope_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cyber_scope_likelihood: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    cyber_scope_pursuit_model: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    cyber_scope_flags: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )

@@ -48,6 +48,16 @@ EVENT_OPPORTUNITY_AMENDMENT_DETECTED = "opportunity.amendment_detected"
 EVENT_SOLICITATION_EXTRACTION_COMPLETED = "solicitation.extraction_completed"
 EVENT_SOLICITATION_EXTRACTION_DELETED = "solicitation.extraction_deleted"
 
+EVENT_CYBER_SCOPE_ANALYSIS_RUN = "cyber_scope.analysis_run"
+EVENT_CYBER_SCOPE_CLAUSE_RISK_LOG_CREATED = "cyber_scope.clause_risk_log_created"
+EVENT_CYBER_SCOPE_BID_REVIEW_CREATED = "cyber_scope.bid_no_bid_review_created"
+EVENT_CYBER_SCOPE_PROPOSAL_OUTLINE_CREATED = "cyber_scope.proposal_outline_created"
+EVENT_CYBER_SCOPE_ADDED_TO_PIPELINE = "cyber_scope.added_to_pipeline"
+EVENT_CYBER_SCOPE_SUMMARIZED = "cyber_scope.summarized"
+EVENT_CYBER_SCOPE_CLARIFICATION_EMAIL = "cyber_scope.clarification_email_generated"
+EVENT_CYBER_SCOPE_PRIME_OUTREACH_EMAIL = "cyber_scope.prime_outreach_email_generated"
+EVENT_CYBER_SCOPE_SAM_SEARCH_RUN = "cyber_scope.sam_search_run"
+
 # Tenant SAM verification (B1/B2/B3-on-self).
 EVENT_TENANT_SAM_VERIFIED = "tenant.sam_verified"
 EVENT_TENANT_SAM_REGISTRATION_STATUS_CHANGED = "tenant.sam_registration_status_changed"

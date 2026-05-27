@@ -185,6 +185,7 @@ export type DashboardKpis = {
   // and not yet in the pipeline. Drives the slot-1 Move in
   // <TodaysMoves /> when > 0.
   your_sweet_spots_open: number;
+  your_cyber_scope_alerts: number;
 };
 
 export type DashboardResponse = {
@@ -222,6 +223,11 @@ export type OpportunityListItem = {
   // post-score worker chain for every score ≥ 60 opp. When present, the
   // UI promotes this above the raw SAM title.
   scope_one_sentence: string | null;
+  cyber_scope_score: number | null;
+  cyber_scope_likelihood: string | null;
+  cyber_scope_pursuit_model: string | null;
+  cyber_scope_analysis_id: string | null;
+  cyber_scope_attachments_pending: boolean;
 };
 
 export type OpportunityListResponse = {
@@ -296,6 +302,21 @@ export type ScoreBlock = {
   // column landed. The detail page renders the "Why this is high-moat"
   // strip when this is non-null AND `score >= 70`.
   high_moat: HighMoatBlock | null;
+  cyber_scope: CyberScopeBlock | null;
+};
+
+export type CyberScopeBlock = {
+  score: number;
+  likelihood: string;
+  pursuit_model: string;
+  ufgs_center_of_gravity: boolean;
+  ufgs_tier_1_hit: boolean;
+  top_ufgs_sections: string[];
+  top_signals: Array<Record<string, unknown>>;
+  scan_pass: string;
+  attachments_pending: boolean;
+  analysis_id: string | null;
+  analysis_url: string | null;
 };
 
 export type DescriptionBlock = {
@@ -1350,6 +1371,143 @@ export type CPPackageCompleteness = {
   sections_partial: string[];
   sections_missing: string[];
   gaps: string[];
+};
+
+/* ── Cyber Scope Parser ─────────────────────────────────────────── */
+
+export type CyberScopeFeedItemOut = {
+  id: string;
+  opportunity_id: string | null;
+  title: string | null;
+  agency: string | null;
+  solicitation_number: string | null;
+  response_deadline: string | null;
+  overall_cyber_likelihood: string;
+  recommended_pursuit_model: string;
+  score: number;
+  ufgs_center_of_gravity: boolean;
+  ufgs_tier_1_hit: boolean;
+  top_ufgs_sections: string[];
+  top_signals: Array<{
+    term: string;
+    normalized_term: string;
+    weight: number;
+    surrounding_text?: string;
+  }>;
+  scan_pass: string;
+  attachments_pending: boolean;
+  updated_at: string;
+  opportunity_url: string | null;
+};
+
+export type CyberScopeFeedOut = {
+  total: number;
+  items: CyberScopeFeedItemOut[];
+};
+
+export type EmailDraftOut = {
+  subject: string;
+  body: string;
+  generated_by: string;
+  model: string | null;
+};
+
+export type SummaryOut = {
+  summary: string;
+  generated_by: string;
+  model: string | null;
+  generated_at: string;
+};
+
+export type IntelligenceBundleOut = {
+  llm_summary: string | null;
+  llm_summary_generated_by: string | null;
+  llm_summary_at: string | null;
+  clarification_email: EmailDraftOut | null;
+  prime_outreach_email: EmailDraftOut | null;
+  governance_handoff: Record<string, unknown> | null;
+  pricing_handoff: Record<string, unknown> | null;
+};
+
+export type CyberScopeDownstreamOut = {
+  clause_risk_log_id: string | null;
+  bid_no_bid_review_id: string | null;
+  proposal_outline_id: string | null;
+  pursuit_id: string | null;
+};
+
+export type ClauseRiskLogOut = {
+  id: string;
+  opportunity_id: string;
+  cyber_scope_analysis_id: string;
+  title: string;
+  status: string;
+  entry_count: number;
+  entries: Array<{
+    id: string;
+    sort_order: number;
+    category: string;
+    severity: string;
+    reference: string;
+    finding: string;
+    evidence: string | null;
+    mitigation: string | null;
+  }>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BidNoBidReviewOut = {
+  id: string;
+  opportunity_id: string;
+  cyber_scope_analysis_id: string;
+  pursuit_id: string | null;
+  recommended_decision: string;
+  cyber_scope_summary: string;
+  factors: Array<{ factor: string; weight: string; note: string }>;
+  rationale_draft: string;
+  pursuit_model: string | null;
+  likelihood: string | null;
+  score: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProposalOutlineOut = {
+  id: string;
+  opportunity_id: string;
+  cyber_scope_analysis_id: string;
+  title: string;
+  sections: Array<{
+    id: string;
+    heading: string;
+    bullets: string[];
+  }>;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CyberScopeAnalysisOut = {
+  id: string;
+  opportunity_id: string | null;
+  source_type: string;
+  scan_pass: string;
+  parser_version: string;
+  overall_cyber_likelihood: string;
+  recommended_pursuit_model: string;
+  score: number;
+  ufgs_center_of_gravity: boolean;
+  ufgs_tier_1_hit: boolean;
+  detected_categories: Record<string, unknown>;
+  top_signals: Array<Record<string, unknown>>;
+  hidden_scope_indicators: Array<Record<string, unknown>>;
+  missing_but_likely_requirements: string[];
+  suggested_actions: Array<Record<string, unknown>>;
+  evidence_snippets: Array<Record<string, unknown>>;
+  metadata: Record<string, unknown>;
+  updated_at: string;
+  downstream?: CyberScopeDownstreamOut | null;
 };
 
 export type CapturePackageOut = {

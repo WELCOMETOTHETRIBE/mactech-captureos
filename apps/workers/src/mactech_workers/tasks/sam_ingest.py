@@ -314,9 +314,7 @@ async def ingest_one_naics(
                         # Gate the attachment fetcher on the title-level heuristic
                         # to bound PDF parsing volume. "unchanged" rows are skipped
                         # — we'd be repeating work the previous run did.
-                        if outcome in ("inserted", "updated") and _should_fetch_attachments(
-                            record
-                        ):
+                        if outcome in ("inserted", "updated"):
                             row = (
                                 await session.execute(
                                     select(OpportunityRaw.id).where(
@@ -328,15 +326,28 @@ async def ingest_one_naics(
                             if row is not None:
                                 try:
                                     celery_app.send_task(
-                                        "mactech.attachments.fetch_one",
+                                        "mactech.cyber_scope.scan_one",
                                         args=[str(row)],
+                                        kwargs={"scan_pass": "description_only"},
                                     )
                                 except Exception as exc:
                                     log.warning(
-                                        "sam_ingest: couldn't enqueue attachment_fetcher for %s: %s",
+                                        "sam_ingest: couldn't enqueue cyber_scope for %s: %s",
                                         record.notice_id,
                                         exc,
                                     )
+                                if _should_fetch_attachments(record):
+                                    try:
+                                        celery_app.send_task(
+                                            "mactech.attachments.fetch_one",
+                                            args=[str(row)],
+                                        )
+                                    except Exception as exc:
+                                        log.warning(
+                                            "sam_ingest: couldn't enqueue attachment_fetcher for %s: %s",
+                                            record.notice_id,
+                                            exc,
+                                        )
 
                 await _record_state(
                     session, naics_code, posted_to=posted_to, upserts=upserts, status="ok"

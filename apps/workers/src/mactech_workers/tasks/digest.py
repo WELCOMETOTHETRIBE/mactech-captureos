@@ -136,9 +136,13 @@ async def _load_saved_search_hits(
         # for every other saved search.
         score_field = (filters.get("score_field") or "score").strip()
         use_high_moat = score_field == "high_moat_score"
-        score_column = (
-            OpportunityScore.high_moat_score if use_high_moat else OpportunityScore.score
-        )
+        use_cyber_scope = score_field == "cyber_scope_score"
+        if use_cyber_scope:
+            score_column = OpportunityScore.cyber_scope_score
+        elif use_high_moat:
+            score_column = OpportunityScore.high_moat_score
+        else:
+            score_column = OpportunityScore.score
 
         stmt = (
             select(OpportunityScore, OpportunityRaw)
@@ -161,7 +165,7 @@ async def _load_saved_search_hits(
         # detector + agency + velocity + set-aside + clearance) — adding a
         # title/description ILIKE here would discard UFGS hits buried only
         # in the PDF attachment_text.
-        if keywords and not use_high_moat:
+        if keywords and not use_high_moat and not use_cyber_scope:
             keyword_filter = None
             for kw in keywords:
                 like = f"%{kw}%"
@@ -181,7 +185,12 @@ async def _load_saved_search_hits(
         digest_rows: list[DigestRow] = []
         for sc, opp in rows:
             raw_payload = opp.raw_payload or {}
-            row_score = sc.high_moat_score if use_high_moat else sc.score
+            if use_cyber_scope:
+                row_score = sc.cyber_scope_score
+            elif use_high_moat:
+                row_score = sc.high_moat_score
+            else:
+                row_score = sc.score
             sweet_spot = bool(
                 use_high_moat
                 and (sc.high_moat_flags or {}).get("is_high_probability_easy_win")

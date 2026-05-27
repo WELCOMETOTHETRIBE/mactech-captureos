@@ -93,6 +93,7 @@ class SamGovOpportunitiesClient:
         zip_code: str | None = None,
         response_deadline_from: date | None = None,
         response_deadline_to: date | None = None,
+        title: str | None = None,
         limit: int = 1000,
         offset: int = 0,
     ) -> OpportunitySearchResponse:
@@ -120,6 +121,8 @@ class SamGovOpportunitiesClient:
             params["rdlfrom"] = _fmt_date(response_deadline_from)
         if response_deadline_to:
             params["rdlto"] = _fmt_date(response_deadline_to)
+        if title:
+            params["title"] = title
 
         url = f"{self._base_url}/opportunities/v2/search"
 

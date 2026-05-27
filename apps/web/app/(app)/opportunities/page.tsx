@@ -35,12 +35,14 @@ type SP = Promise<{
   sort?: string;
   sweet_spot_only?: string;
   high_moat_min?: string;
+  cyber_scope_min?: string;
   saved_search?: string;
 }>;
 
 const SORT_LABELS: Record<string, string> = {
   score_desc: "Score (high → low)",
   high_moat_desc: "High-moat (sweet spots first)",
+  cyber_scope_desc: "Cyber scope (high → low)",
   posted_desc: "Newest posted",
   deadline_asc: "Deadline (soonest first)"
 };
@@ -57,6 +59,16 @@ const SORT_LABELS: Record<string, string> = {
 function isHighMoatSavedSearch(s: SavedSearchOut): boolean {
   const haystack = `${s.name} ${s.keywords.join(" ")}`.toUpperCase();
   return /\b(UFGS|FRCS|UMCS|HIGH[-\s]?MOAT)\b/.test(haystack);
+}
+
+function isCyberScopeSavedSearch(s: SavedSearchOut): boolean {
+  const n = s.name.toUpperCase();
+  return (
+    n.includes("CYBER SCOPE") ||
+    n.includes("MACTECH SHORTLIST") ||
+    n.includes("HIDDEN CONSTRUCTION CYBER") ||
+    (n.includes("UFGS") && n.includes("SHORTLIST"))
+  );
 }
 
 export default async function OpportunitiesListPage({
@@ -113,11 +125,22 @@ export default async function OpportunitiesListPage({
   const isHighMoat = activePerspective
     ? isHighMoatSavedSearch(activePerspective)
     : false;
+  const isCyberScope = activePerspective
+    ? isCyberScopeSavedSearch(activePerspective)
+    : false;
   const sweetSpotOnly =
     sp.sweet_spot_only === "true" || (activePerspective !== null && isHighMoat);
+  const cyberScopeMinExplicit = sp.cyber_scope_min;
+  const cyberScopeMin =
+    cyberScopeMinExplicit ??
+    (activePerspective && isCyberScope
+      ? String(activePerspective.alert_threshold)
+      : undefined);
   const sort = sweetSpotOnly
     ? "high_moat_desc"
-    : sp.sort ?? (activePerspective && isHighMoat ? "high_moat_desc" : "score_desc");
+    : cyberScopeMin
+      ? sp.sort ?? "cyber_scope_desc"
+      : sp.sort ?? (activePerspective && isHighMoat ? "high_moat_desc" : "score_desc");
   const score_min =
     sp.score_min ??
     (activePerspective ? String(activePerspective.alert_threshold) : "0");
@@ -138,6 +161,7 @@ export default async function OpportunitiesListPage({
   params.set("score_max", score_max);
   if (sweetSpotOnly) params.set("sweet_spot_only", "true");
   if (highMoatMin) params.set("high_moat_min", highMoatMin);
+  if (cyberScopeMin) params.set("cyber_scope_min", cyberScopeMin);
   if (sp.q) params.set("q", sp.q);
   if (sp.naics_code) params.set("naics_code", sp.naics_code);
   if (sp.set_aside) params.set("set_aside", sp.set_aside);
@@ -161,6 +185,7 @@ export default async function OpportunitiesListPage({
   if (score_min !== "0" || score_max !== "100")
     activeFilters.push(`score ${score_min}–${score_max}`);
   if (sweetSpotOnly) activeFilters.push("sweet spots only");
+  if (cyberScopeMin) activeFilters.push(`cyber scope ≥${cyberScopeMin}`);
 
   // Subtitle: when a perspective is active, lead with the perspective
   // name so a logged-in user sees "where am I" at a glance.
@@ -255,6 +280,33 @@ export default async function OpportunitiesListPage({
                   }`}
                 >
                   Sweet spots
+                </Link>
+              );
+            })()}
+            {(() => {
+              const qs = new URLSearchParams(params);
+              qs.set("cyber_scope_min", "65");
+              qs.set("sort", "cyber_scope_desc");
+              qs.set("score_min", "0");
+              qs.set("score_max", "100");
+              qs.delete("sweet_spot_only");
+              qs.delete("page");
+              const active =
+                !sweetSpotOnly &&
+                cyberScopeMin === "65" &&
+                sort === "cyber_scope_desc";
+              return (
+                <Link
+                  href={`/opportunities?${qs.toString()}`}
+                  aria-pressed={active}
+                  title="Opportunities with cyber scope score ≥65 (UFGS / FRCS / hidden OT scope)."
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors border-2 ${
+                    active
+                      ? "border-primary text-primary"
+                      : "border-primary/30 text-primary hover:border-primary/60"
+                  }`}
+                >
+                  Cyber scope
                 </Link>
               );
             })()}
@@ -479,6 +531,18 @@ export default async function OpportunitiesListPage({
                           <div className="flex flex-wrap items-center gap-2">
                             <ScoreBadge score={opp.score} size="lg" />
                             {opp.is_sweet_spot && <HpewBadge />}
+                            {opp.cyber_scope_score != null &&
+                              opp.cyber_scope_score >= 65 && (
+                                <Badge
+                                  tone="violet"
+                                  title={`Cyber scope: ${opp.cyber_scope_likelihood ?? ""}`}
+                                >
+                                  CS {opp.cyber_scope_score}
+                                </Badge>
+                              )}
+                            {opp.cyber_scope_attachments_pending && (
+                              <Badge tone="amber">PDF pending</Badge>
+                            )}
                             {noticeIsSourcesSought && (
                               <NoticeTypeBadge type={opp.notice_type} />
                             )}

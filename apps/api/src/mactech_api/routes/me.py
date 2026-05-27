@@ -109,6 +109,8 @@ class DashboardKpis(_Out):
     # High-probability easy wins (HPEW): sweet-spot opps assigned to me
     # and not in pipeline. Drives the slot-1 Move on the dashboard.
     your_sweet_spots_open: int = 0
+    # CRITICAL + HIGH cyber scope analyses for opps in your lane, not in pipeline.
+    your_cyber_scope_alerts: int = 0
 
 
 class DashboardResponse(_Out):
@@ -318,6 +320,7 @@ async def dashboard(
     your_deadlines_lt_7d = 0
     your_active_pursuits = 0
     your_sweet_spots_open = 0
+    your_cyber_scope_alerts = 0
     if ctx.founder is not None:
         your_high_fit_open = int(
             (
@@ -400,6 +403,31 @@ async def dashboard(
             ).scalar_one()
             or 0
         )
+        your_cyber_scope_alerts = int(
+            (
+                await session.execute(
+                    text(
+                        """
+                        select count(*) from opportunity_scores s
+                        where s.tenant_id = :tenant
+                          and s.assigned_founder_id = :founder
+                          and s.cyber_scope_score >= 65
+                          and s.cyber_scope_likelihood in ('HIGH', 'CRITICAL')
+                          and not exists (
+                            select 1 from pursuits p
+                            where p.tenant_id = :tenant
+                              and p.opportunity_id = s.opportunity_id
+                          )
+                        """
+                    ),
+                    {
+                        "tenant": str(tenant_id),
+                        "founder": str(ctx.founder.id),
+                    },
+                )
+            ).scalar_one()
+            or 0
+        )
 
     drafts_awaiting_review = int(
         (
@@ -440,5 +468,6 @@ async def dashboard(
             your_active_pursuits=your_active_pursuits,
             drafts_awaiting_review=drafts_awaiting_review,
             your_sweet_spots_open=your_sweet_spots_open,
+            your_cyber_scope_alerts=your_cyber_scope_alerts,
         ),
     )
