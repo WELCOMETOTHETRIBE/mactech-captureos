@@ -30,6 +30,9 @@ type SBIRTopicDetail = {
   description: string | null;
   url: string | null;
   close_date: string | null;
+  dsip_enriched_at: string | null;
+  dsip_pdf_url: string | null;
+  dsip_pdf_text: string | null;
 };
 
 const STATUS_TONE: Record<
@@ -73,15 +76,26 @@ export default async function SBIRSubmitPage({
   if (topic_id) {
     try {
       const t = await apiFetch<SBIRTopicDetail>(`/sbir/topics/${topic_id}`);
+      // Prefer the verbatim PDF text from DSIP when we have it; fall back
+      // to the extracted description; final fallback is the source URL.
+      const payload =
+        t.dsip_pdf_text && t.dsip_pdf_text.length > 100
+          ? t.dsip_pdf_text
+          : (t.description ?? t.url ?? "");
       initial = {
         topicNumber: t.topic_number,
         topicTitle: t.title,
         component: coerceComponent(t.component),
-        topicPayload: t.description ?? t.url ?? "",
-        sourceKind: t.description ? "text" : t.url ? "url" : "text",
+        topicPayload: payload,
+        sourceKind: t.dsip_pdf_text ? "pdf" : payload ? "text" : "text",
         topicCloseDate: t.close_date
       };
-      prefillNote = `Pre-filled from topic ${t.topic_number}${t.title ? ` — ${t.title}` : ""}.`;
+      const sourceLabel = t.dsip_pdf_text
+        ? "DSIP PDF source"
+        : t.dsip_enriched_at
+          ? "DSIP rendered text"
+          : "sbirdashboard listing";
+      prefillNote = `Pre-filled from topic ${t.topic_number}${t.title ? ` — ${t.title}` : ""} (${sourceLabel}).`;
     } catch (err) {
       console.error("topic prefill failed", err);
       prefillNote = `Could not load topic ${topic_id}; starting blank.`;

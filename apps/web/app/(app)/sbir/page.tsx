@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import {
   Badge,
@@ -8,6 +7,7 @@ import {
   fmtDate
 } from "@/components/ui";
 import { SBIRTopicsRefreshButton } from "@/components/sbir-topics-refresh";
+import { SBIRUseTopicButton } from "@/components/sbir-use-topic-button";
 
 export const dynamic = "force-dynamic";
 
@@ -123,11 +123,11 @@ export default async function SBIRTopicsPage({
         title="SBIR/STTR topic finder"
         subtitle={
           <>
-            Open DoD SBIR and STTR topics. The sbirdashboard.com feed auto-
-            refreshes on every visit (sub-second). DSIP, SBIR.gov, and the
-            component portals are covered by the slower Apify crawl — click{" "}
-            <em>Refresh feed</em> to kick it. Click <em>Use this topic</em> on
-            any row to pre-fill the submitter.
+            Open DoD SBIR and STTR topics. sbirdashboard.com gives us the
+            discovery list (auto-refreshed every visit). Clicking{" "}
+            <em>Use this topic</em> pulls the full topic detail + official
+            PDF from DSIP via Apify Playwright (~30–60s, cached 24h), then
+            opens the submitter pre-filled with the canonical source text.
           </>
         }
         trailing={<SBIRTopicsRefreshButton />}
@@ -252,12 +252,10 @@ export default async function SBIRTopicsPage({
                       closes <span className="text-foreground">{fmtDate(t.close_date)}</span>
                     </p>
                   )}
-                  <Link
-                    href={`/sbir/submit?topic_id=${t.id}`}
-                    className="rounded-md border border-primary bg-primary/10 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/20"
-                  >
-                    Use this topic →
-                  </Link>
+                  <SBIRUseTopicButton
+                    topicId={t.id}
+                    topicNumber={t.topic_number}
+                  />
                 </div>
               </li>
             ))}

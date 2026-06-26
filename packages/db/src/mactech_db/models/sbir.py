@@ -157,3 +157,14 @@ class SBIRTopic(Base):
     last_seen_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
+
+    # DSIP enrichment — populated lazily by apify_dsip_lookup when the user
+    # clicks 'Use this topic'. Stays null on rows that were never enriched
+    # (e.g. sbirdashboard-only rows the user never pursued).
+    dsip_enriched_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    dsip_tpoc: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    dsip_pdf_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    dsip_pdf_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    dsip_apify_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)

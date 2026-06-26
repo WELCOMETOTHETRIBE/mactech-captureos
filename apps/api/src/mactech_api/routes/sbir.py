@@ -645,6 +645,10 @@ class SBIRTopicDetail(_Out):
     phase_i_duration_months: int | None
     first_seen_at: str
     last_seen_at: str
+    dsip_enriched_at: str | None
+    dsip_tpoc: str | None
+    dsip_pdf_url: str | None
+    dsip_pdf_text: str | None
 
 
 def _serialize_topic_list(t: SBIRTopic) -> SBIRTopicListItem:
@@ -687,6 +691,12 @@ def _serialize_topic_detail(t: SBIRTopic) -> SBIRTopicDetail:
         phase_i_duration_months=t.phase_i_duration_months,
         first_seen_at=t.first_seen_at.isoformat(),
         last_seen_at=t.last_seen_at.isoformat(),
+        dsip_enriched_at=(
+            t.dsip_enriched_at.isoformat() if t.dsip_enriched_at else None
+        ),
+        dsip_tpoc=t.dsip_tpoc,
+        dsip_pdf_url=t.dsip_pdf_url,
+        dsip_pdf_text=t.dsip_pdf_text,
     )
 
 
@@ -755,6 +765,107 @@ async def get_sbir_topic(
     if row is None:
         raise HTTPException(status_code=404, detail="topic not found")
     return _serialize_topic_detail(row)
+
+
+class SBIRTopicEnrichResponse(_Out):
+    topic_id: str
+    topic_number: str
+    enriched: bool
+    cached: bool
+    error: str | None
+    pdf_url: str | None
+    pdf_text_chars: int | None
+    dsip_enriched_at: str | None
+
+
+# A second enrichment of the same topic within this window returns the
+# cached row without re-running Apify — Apify costs money per run, the
+# user clicking 'Use this topic' twice in a row shouldn't burn credits.
+_ENRICH_CACHE_WINDOW_HOURS = 24
+
+
+@router.post(
+    "/sbir/topics/{topic_id}/enrich", response_model=SBIRTopicEnrichResponse
+)
+async def enrich_sbir_topic(
+    topic_id: UUID,
+    ctx: Annotated[RequestContext, Depends(get_request_context)],
+) -> SBIRTopicEnrichResponse:
+    """Pull full topic detail + PDF from DSIP via Apify Playwright.
+
+    Runs inline with a 90s budget. If the row was enriched in the last
+    24h, returns the cached state without re-running. On failure (Apify
+    down, DSIP changed selectors, etc.) returns enriched=False with the
+    error string so the caller can degrade gracefully.
+    """
+    _ = ctx
+    row = (
+        await ctx.session.execute(select(SBIRTopic).where(SBIRTopic.id == topic_id))
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="topic not found")
+
+    if row.dsip_enriched_at is not None:
+        age = datetime.now(UTC) - row.dsip_enriched_at
+        if age.total_seconds() < _ENRICH_CACHE_WINDOW_HOURS * 3600:
+            return SBIRTopicEnrichResponse(
+                topic_id=str(row.id),
+                topic_number=row.topic_number,
+                enriched=True,
+                cached=True,
+                error=None,
+                pdf_url=row.dsip_pdf_url,
+                pdf_text_chars=(
+                    len(row.dsip_pdf_text) if row.dsip_pdf_text else 0
+                ),
+                dsip_enriched_at=row.dsip_enriched_at.isoformat(),
+            )
+
+    # Imported lazily so importing the routes module doesn't pull in the
+    # workers package (Celery + Apify) for callers that only list topics.
+    try:
+        from mactech_workers.tasks.apify_dsip_lookup import run_dsip_lookup
+    except ImportError as exc:  # pragma: no cover
+        raise HTTPException(
+            status_code=500, detail=f"workers package unavailable: {exc}"
+        ) from exc
+
+    topic_number = row.topic_number
+    try:
+        result = await run_dsip_lookup(topic_number)
+    except Exception as exc:
+        log.exception("dsip enrichment crashed for %s", topic_number)
+        return SBIRTopicEnrichResponse(
+            topic_id=str(row.id),
+            topic_number=topic_number,
+            enriched=False,
+            cached=False,
+            error=f"{exc.__class__.__name__}: {exc}"[:300],
+            pdf_url=None,
+            pdf_text_chars=None,
+            dsip_enriched_at=None,
+        )
+
+    # `run_dsip_lookup` upserts the row itself on success — re-read so
+    # we return the canonical timestamp.
+    refreshed = (
+        await ctx.session.execute(select(SBIRTopic).where(SBIRTopic.id == topic_id))
+    ).scalar_one_or_none()
+    refreshed_at = (
+        refreshed.dsip_enriched_at.isoformat()
+        if refreshed and refreshed.dsip_enriched_at
+        else None
+    )
+    return SBIRTopicEnrichResponse(
+        topic_id=str(row.id),
+        topic_number=topic_number,
+        enriched=result.success,
+        cached=False,
+        error=result.error,
+        pdf_url=result.pdf_url,
+        pdf_text_chars=len(result.pdf_text) if result.pdf_text else 0,
+        dsip_enriched_at=refreshed_at,
+    )
 
 
 class SBIRTopicsRefreshResponse(_Out):
