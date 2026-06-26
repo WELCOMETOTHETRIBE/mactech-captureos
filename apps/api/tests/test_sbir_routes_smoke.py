@@ -16,6 +16,16 @@ def test_router_mounted_listing() -> None:
     routes = [r.path for r in app.routes]  # type: ignore[attr-defined]
     assert "/sbir/submissions" in routes
     assert "/sbir/generate/stream" in routes
+    assert "/sbir/decode/file" in routes
+
+
+def test_decode_file_requires_auth() -> None:
+    client = TestClient(app)
+    res = client.post(
+        "/sbir/decode/file",
+        files={"file": ("note.txt", b"hello body that is long enough", "text/plain")},
+    )
+    assert res.status_code == 401
 
 
 def test_list_submissions_requires_auth() -> None:

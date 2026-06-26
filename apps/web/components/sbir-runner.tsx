@@ -16,6 +16,21 @@ const COMPONENTS = [
 type Depth = "scaffold" | "standard" | "complete";
 type SourceKind = "text" | "url" | "pdf";
 
+type Attachment = {
+  name: string;
+  text: string;
+  kind: string;
+  truncated: boolean;
+};
+
+type DecodedFile = {
+  name: string;
+  kind: string;
+  text: string;
+  char_count: number;
+  truncated: boolean;
+};
+
 type Phase =
   | { kind: "form" }
   | { kind: "streaming" }
@@ -23,11 +38,7 @@ type Phase =
   | { kind: "error"; message: string };
 
 type ProgressEvent =
-  | {
-      type: "phase_start";
-      phase: string;
-      label: string;
-    }
+  | { type: "phase_start"; phase: string; label: string }
   | { type: "delta"; phase: string; text: string }
   | {
       type: "file_written";
@@ -35,11 +46,7 @@ type ProgressEvent =
       path: string;
       bytes: number;
     }
-  | {
-      type: "phase_complete";
-      phase: string;
-      duration_ms: number;
-    }
+  | { type: "phase_complete"; phase: string; duration_ms: number }
   | { type: "error"; message: string }
   | {
       type: "final";
@@ -62,11 +69,11 @@ type PhaseRow = {
 };
 
 const SCAFFOLD_HELP =
-  "Vol 1 cover sheet + DSIP cheat sheet only. ~10 min. Smallest token spend.";
+  "Vol 1 cover sheet + DSIP cheat sheet only. ~10 min.";
 const STANDARD_HELP =
-  "All 7 volumes, supporting docs, evidence-pack scaffold. Markdown only. ~20-40 min.";
+  "All 7 volumes + supporting docs + audit files. Markdown. ~20–40 min.";
 const COMPLETE_HELP =
-  "Same as Standard. PDF/Excel/DOCX rendering is not yet implemented — engine surfaces a verify flag.";
+  "Same as Standard. PDF/Excel/DOCX rendering is deferred — flagged in output.";
 
 export function SBIRRunner() {
   const router = useRouter();
@@ -89,8 +96,107 @@ export function SBIRRunner() {
   const [resourceLinks, setResourceLinks] = useState("");
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [depth, setDepth] = useState<Depth>("scaffold");
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+
+  // Per-control upload state.
+  const [topicPdfStatus, setTopicPdfStatus] = useState<
+    | { kind: "idle" }
+    | { kind: "uploading"; name: string }
+    | { kind: "ready"; name: string; chars: number; truncated: boolean }
+    | { kind: "error"; message: string }
+  >({ kind: "idle" });
+  const [attachUploading, setAttachUploading] = useState<string | null>(null);
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const topicPdfInputRef = useRef<HTMLInputElement>(null);
+  const attachInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  async function decodeFile(file: File): Promise<DecodedFile> {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/sbir/decode-file", {
+      method: "POST",
+      body: fd
+    });
+    if (!res.ok) {
+      let detail = `decode failed (${res.status})`;
+      try {
+        const j = (await res.json()) as { detail?: string; error?: string };
+        if (j.detail) detail = j.detail;
+        else if (j.error) detail = j.error;
+      } catch {
+        // ignore
+      }
+      throw new Error(detail);
+    }
+    return (await res.json()) as DecodedFile;
+  }
+
+  async function onTopicPdfChosen(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setTopicPdfStatus({ kind: "uploading", name: file.name });
+    try {
+      const decoded = await decodeFile(file);
+      setTopicPayload(decoded.text);
+      setTopicPdfStatus({
+        kind: "ready",
+        name: decoded.name,
+        chars: decoded.char_count,
+        truncated: decoded.truncated
+      });
+    } catch (err) {
+      setTopicPdfStatus({
+        kind: "error",
+        message: err instanceof Error ? err.message : "decode failed"
+      });
+    } finally {
+      // Reset the input so the same file can be re-picked after clearing.
+      if (topicPdfInputRef.current) topicPdfInputRef.current.value = "";
+    }
+  }
+
+  function clearTopicPdf() {
+    setTopicPdfStatus({ kind: "idle" });
+    setTopicPayload("");
+  }
+
+  async function onAttachmentsChosen(
+    e: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    setAttachError(null);
+    for (const file of files) {
+      // Skip duplicates by filename.
+      if (attachments.some((a) => a.name === file.name)) continue;
+      setAttachUploading(file.name);
+      try {
+        const decoded = await decodeFile(file);
+        setAttachments((prev) => [
+          ...prev,
+          {
+            name: decoded.name,
+            text: decoded.text,
+            kind: decoded.kind,
+            truncated: decoded.truncated
+          }
+        ]);
+      } catch (err) {
+        setAttachError(
+          `${file.name}: ${err instanceof Error ? err.message : "decode failed"}`
+        );
+        break;
+      }
+    }
+    setAttachUploading(null);
+    if (attachInputRef.current) attachInputRef.current.value = "";
+  }
+
+  function removeAttachment(name: string) {
+    setAttachments((prev) => prev.filter((a) => a.name !== name));
+  }
 
   function updatePhase(key: string, patch: Partial<PhaseRow>) {
     setProgress((rows) =>
@@ -119,7 +225,7 @@ export function SBIRRunner() {
       topic_payload: topicPayload,
       topic_close_date: topicCloseDate.trim() || null,
       synergy_hypothesis: synergy,
-      attachments: [],
+      attachments: attachments.map((a) => ({ name: a.name, text: a.text })),
       resource_links: linksList,
       sister_proposals: sisterList,
       special_instructions: specialInstructions.trim() || null,
@@ -154,8 +260,9 @@ export function SBIRRunner() {
     if (!res.ok || !res.body) {
       let detail = `request failed (${res.status})`;
       try {
-        const j = (await res.json()) as { error?: string };
+        const j = (await res.json()) as { error?: string; detail?: string };
         if (j.error) detail = j.error;
+        else if (j.detail) detail = j.detail;
       } catch {
         // ignore
       }
@@ -224,10 +331,7 @@ export function SBIRRunner() {
               r.key === evt.phase
                 ? {
                     ...r,
-                    files: [
-                      ...r.files,
-                      { path: evt.path, bytes: evt.bytes }
-                    ]
+                    files: [...r.files, { path: evt.path, bytes: evt.bytes }]
                   }
                 : r
             )
@@ -250,9 +354,6 @@ export function SBIRRunner() {
         }
       }
     }
-    // Stream ended naturally without a `final` event — surface that as an
-    // error so the user knows the run didn't complete. (`phase` is the
-    // render-time value, so we can't gate on it here.)
     setPhase({ kind: "error", message: "stream ended unexpectedly" });
   }
 
@@ -268,157 +369,311 @@ export function SBIRRunner() {
   const streaming = phase.kind === "streaming";
   const formDisabled = streaming;
 
+  // PDF source tab disables the textarea (text comes from the upload);
+  // text/URL keep it editable.
+  const payloadEditable = sourceKind !== "pdf";
+
   return (
-    <section className="rounded-md border border-border bg-card p-5">
-      <form className="grid gap-4 md:grid-cols-2" onSubmit={onSubmit}>
-        <Field label="Topic number" required>
-          <input
-            type="text"
-            value={topicNumber}
-            onChange={(e) => setTopicNumber(e.target.value)}
-            placeholder="DLA26BZ02-NV007"
-            maxLength={64}
-            required
-            disabled={formDisabled}
-            className={inputCls}
-          />
-        </Field>
-        <Field label="Topic title (optional)">
-          <input
-            type="text"
-            value={topicTitle}
-            onChange={(e) => setTopicTitle(e.target.value)}
-            maxLength={512}
-            disabled={formDisabled}
-            className={inputCls}
-          />
-        </Field>
-        <Field label="Component" required>
-          <select
-            value={component}
-            onChange={(e) =>
-              setComponent(e.target.value as (typeof COMPONENTS)[number])
-            }
-            disabled={formDisabled}
-            className={inputCls}
-          >
-            {COMPONENTS.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Topic close date (ET)">
-          <input
-            type="text"
-            value={topicCloseDate}
-            onChange={(e) => setTopicCloseDate(e.target.value)}
-            placeholder="2026-07-15 14:00 ET"
-            maxLength={64}
-            disabled={formDisabled}
-            className={inputCls}
-          />
-        </Field>
-
-        <Field
-          label="Topic source"
-          hint="Paste the topic text, the topic announcement URL, or the PDF text (extracted)."
-          className="md:col-span-2"
+    <section className="rounded-md border border-border bg-card">
+      <form onSubmit={onSubmit} className="divide-y divide-border">
+        {/* ─── Section: Topic ─── */}
+        <FormSection
+          title="Topic"
+          subtitle="Identify the SBIR announcement and paste its text or upload the PDF."
         >
-          <div className="mb-2 flex gap-2 text-xs">
-            {(["text", "url", "pdf"] as const).map((k) => (
-              <button
-                key={k}
-                type="button"
-                onClick={() => setSourceKind(k)}
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Topic number" required>
+              <input
+                type="text"
+                value={topicNumber}
+                onChange={(e) => setTopicNumber(e.target.value)}
+                placeholder="DLA26BZ02-NV007"
+                maxLength={64}
+                required
                 disabled={formDisabled}
-                className={
-                  "rounded-md border px-3 py-1 " +
-                  (sourceKind === k
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border bg-background text-foreground")
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Topic title (optional)">
+              <input
+                type="text"
+                value={topicTitle}
+                onChange={(e) => setTopicTitle(e.target.value)}
+                maxLength={512}
+                disabled={formDisabled}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Component" required>
+              <select
+                value={component}
+                onChange={(e) =>
+                  setComponent(e.target.value as (typeof COMPONENTS)[number])
                 }
+                disabled={formDisabled}
+                className={inputCls}
               >
-                {k.toUpperCase()}
-              </button>
-            ))}
+                {COMPONENTS.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Topic close date (ET)">
+              <input
+                type="text"
+                value={topicCloseDate}
+                onChange={(e) => setTopicCloseDate(e.target.value)}
+                placeholder="2026-07-15 14:00 ET"
+                maxLength={64}
+                disabled={formDisabled}
+                className={inputCls}
+              />
+            </Field>
           </div>
-          <textarea
-            value={topicPayload}
-            onChange={(e) => setTopicPayload(e.target.value)}
-            minLength={10}
-            required
-            rows={6}
-            disabled={formDisabled}
-            placeholder={
-              sourceKind === "url"
-                ? "https://www.dodsbirsttr.mil/topics-app/#/topic-details/..."
-                : "Paste the topic announcement text here…"
-            }
-            className={textareaCls}
-          />
-        </Field>
 
-        <Field
-          label="Synergy hypothesis"
-          required
-          hint="1-3 paragraphs on how the topic fits MacTech's platforms. The engine validates this against the topic; expect refinement or rejection if the fit is weak."
-          className="md:col-span-2"
-        >
-          <textarea
-            value={synergy}
-            onChange={(e) => setSynergy(e.target.value)}
-            minLength={10}
-            maxLength={8000}
-            required
-            rows={5}
-            disabled={formDisabled}
-            className={textareaCls}
-          />
-        </Field>
+          <Field
+            label="Topic source"
+            hint="Paste the topic text, supply the announcement URL, or upload the topic PDF."
+            className="mt-4"
+          >
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+              {(["text", "url", "pdf"] as const).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => {
+                    setSourceKind(k);
+                    if (k !== "pdf") setTopicPdfStatus({ kind: "idle" });
+                  }}
+                  disabled={formDisabled}
+                  className={
+                    "rounded-md border px-3 py-1 transition-colors " +
+                    (sourceKind === k
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-background text-foreground hover:border-foreground/30")
+                  }
+                >
+                  {k.toUpperCase()}
+                </button>
+              ))}
+              {sourceKind === "pdf" && (
+                <div className="ml-auto flex items-center gap-2">
+                  <input
+                    ref={topicPdfInputRef}
+                    type="file"
+                    accept=".pdf,application/pdf"
+                    onChange={onTopicPdfChosen}
+                    disabled={formDisabled || topicPdfStatus.kind === "uploading"}
+                    className="hidden"
+                    id="topic-pdf-input"
+                  />
+                  <label
+                    htmlFor="topic-pdf-input"
+                    className={
+                      "cursor-pointer rounded-md border border-border bg-background px-3 py-1 text-xs hover:border-foreground/30 " +
+                      (formDisabled || topicPdfStatus.kind === "uploading"
+                        ? "opacity-50"
+                        : "")
+                    }
+                  >
+                    {topicPdfStatus.kind === "uploading"
+                      ? "Decoding…"
+                      : topicPdfStatus.kind === "ready"
+                        ? "Replace PDF"
+                        : "Choose PDF"}
+                  </label>
+                  {topicPdfStatus.kind === "ready" && (
+                    <button
+                      type="button"
+                      onClick={clearTopicPdf}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      clear
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
 
-        <Field
-          label="Sister proposals"
-          hint="One per line — every other pending federal proposal in this solicitation cycle. Required for the BAA §3.5 disclosure in Vol 2 §11.3 and Vol 4 §4."
-        >
-          <textarea
-            value={sister}
-            onChange={(e) => setSister(e.target.value)}
-            rows={3}
-            disabled={formDisabled}
-            className={textareaCls}
-          />
-        </Field>
-        <Field
-          label="Resource links"
-          hint="One URL per line — GitHub repos, deployed product URLs, public standards references."
-        >
-          <textarea
-            value={resourceLinks}
-            onChange={(e) => setResourceLinks(e.target.value)}
-            rows={3}
-            disabled={formDisabled}
-            className={textareaCls}
-          />
-        </Field>
+            {sourceKind === "pdf" && topicPdfStatus.kind === "ready" && (
+              <p className="mb-2 text-[11px] text-muted-foreground">
+                <span className="font-medium text-foreground">
+                  {topicPdfStatus.name}
+                </span>{" "}
+                · {topicPdfStatus.chars.toLocaleString()} chars decoded
+                {topicPdfStatus.truncated && " (truncated)"}
+              </p>
+            )}
+            {sourceKind === "pdf" && topicPdfStatus.kind === "error" && (
+              <p className="mb-2 text-[11px] text-destructive">
+                {topicPdfStatus.message}
+              </p>
+            )}
 
-        <Field
-          label="Special instructions"
-          hint="Overrides — e.g. 'PI = Brian', 'drop the subcontract', 'use Trust Codex as primary platform'."
-          className="md:col-span-2"
-        >
-          <textarea
-            value={specialInstructions}
-            onChange={(e) => setSpecialInstructions(e.target.value)}
-            maxLength={4000}
-            rows={3}
-            disabled={formDisabled}
-            className={textareaCls}
-          />
-        </Field>
+            <textarea
+              value={topicPayload}
+              onChange={(e) => setTopicPayload(e.target.value)}
+              minLength={10}
+              required
+              rows={sourceKind === "pdf" ? 4 : 6}
+              disabled={formDisabled || !payloadEditable}
+              readOnly={!payloadEditable}
+              placeholder={
+                sourceKind === "url"
+                  ? "https://www.dodsbirsttr.mil/topics-app/#/topic-details/…"
+                  : sourceKind === "pdf"
+                    ? "Upload a PDF above; decoded text appears here."
+                    : "Paste the topic announcement text here…"
+              }
+              className={textareaCls + (!payloadEditable ? " bg-muted/40" : "")}
+            />
+          </Field>
+        </FormSection>
 
-        <Field label="Generation depth" required className="md:col-span-2">
+        {/* ─── Section: Synergy ─── */}
+        <FormSection
+          title="Synergy"
+          subtitle="Tell the engine how this topic fits MacTech. It will validate the hypothesis against the topic and refine or reject if the fit is weak."
+        >
+          <Field label="Synergy hypothesis" required>
+            <textarea
+              value={synergy}
+              onChange={(e) => setSynergy(e.target.value)}
+              minLength={10}
+              maxLength={8000}
+              required
+              rows={5}
+              disabled={formDisabled}
+              className={textareaCls}
+              placeholder="e.g. 'This RMF documentation-grading topic is a direct fit for Codex RMF-AIR — the four-agent pipeline already grades 800-171 SSP language for completeness, corroboration, and consistency…'"
+            />
+          </Field>
+        </FormSection>
+
+        {/* ─── Section: Disclosures & context ─── */}
+        <FormSection
+          title="Disclosures & context"
+          subtitle="Sister-proposal disclosures (BAA §3.5) are required. Attachments and links sharpen the engine's grounding."
+        >
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field
+              label="Sister proposals"
+              hint="One per line — every other pending federal proposal in this solicitation cycle."
+            >
+              <textarea
+                value={sister}
+                onChange={(e) => setSister(e.target.value)}
+                rows={3}
+                disabled={formDisabled}
+                className={textareaCls}
+                placeholder="DLA26BZ02-NV005 — Continuous CMMC L2 evidence&#10;DLA26BZ02-NV006 — Pentest validation"
+              />
+            </Field>
+            <Field
+              label="Resource links"
+              hint="One URL per line — GitHub repos, deployed products, public standards."
+            >
+              <textarea
+                value={resourceLinks}
+                onChange={(e) => setResourceLinks(e.target.value)}
+                rows={3}
+                disabled={formDisabled}
+                className={textareaCls}
+                placeholder="https://github.com/mactech/trust-codex&#10;https://capture.mactechsolutionsllc.com"
+              />
+            </Field>
+          </div>
+
+          <Field
+            label="Attachments"
+            hint="PDF or text (txt / md / json / yaml / csv). Decoded and sent inline to the engine. Each capped at 200,000 chars."
+            className="mt-4"
+          >
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  ref={attachInputRef}
+                  type="file"
+                  multiple
+                  accept=".pdf,.txt,.md,.markdown,.json,.yaml,.yml,.csv,.tsv,.log"
+                  onChange={onAttachmentsChosen}
+                  disabled={formDisabled || attachUploading !== null}
+                  className="hidden"
+                  id="attach-input"
+                />
+                <label
+                  htmlFor="attach-input"
+                  className={
+                    "cursor-pointer rounded-md border border-border bg-background px-3 py-1.5 text-xs hover:border-foreground/30 " +
+                    (formDisabled || attachUploading
+                      ? "opacity-50"
+                      : "")
+                  }
+                >
+                  {attachUploading ? `Decoding ${attachUploading}…` : "Add files"}
+                </label>
+                {attachments.length > 0 && (
+                  <span className="text-[11px] text-muted-foreground">
+                    {attachments.length} attached
+                  </span>
+                )}
+              </div>
+              {attachError && (
+                <p className="text-[11px] text-destructive">{attachError}</p>
+              )}
+              {attachments.length > 0 && (
+                <ul className="space-y-1">
+                  {attachments.map((a) => (
+                    <li
+                      key={a.name}
+                      className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-1.5 text-xs"
+                    >
+                      <span className="min-w-0 truncate">
+                        <span className="text-muted-foreground">[{a.kind}]</span>{" "}
+                        <span className="text-foreground">{a.name}</span>
+                        <span className="ml-2 text-muted-foreground">
+                          {a.text.length.toLocaleString()} chars
+                          {a.truncated && " (truncated)"}
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment(a.name)}
+                        disabled={formDisabled}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </Field>
+
+          <Field
+            label="Special instructions"
+            hint="Overrides — e.g. 'PI = Brian', 'drop the subcontract', 'use Trust Codex as primary platform'."
+            className="mt-4"
+          >
+            <textarea
+              value={specialInstructions}
+              onChange={(e) => setSpecialInstructions(e.target.value)}
+              maxLength={4000}
+              rows={3}
+              disabled={formDisabled}
+              className={textareaCls}
+            />
+          </Field>
+        </FormSection>
+
+        {/* ─── Section: Generate ─── */}
+        <FormSection
+          title="Generate"
+          subtitle="Pick a depth. The engine streams progress and writes artifacts to disk as it goes."
+        >
           <div className="grid gap-2 md:grid-cols-3">
             <DepthCard
               value="scaffold"
@@ -439,45 +694,45 @@ export function SBIRRunner() {
             <DepthCard
               value="complete"
               current={depth}
-              label="Complete (markdown only)"
+              label="Complete"
               help={COMPLETE_HELP}
               onChange={setDepth}
               disabled={formDisabled}
             />
           </div>
-        </Field>
-
-        <div className="md:col-span-2 flex flex-wrap items-center gap-3 pt-2">
-          <button
-            type="submit"
-            disabled={formDisabled}
-            className="rounded-md border border-primary bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
-          >
-            {streaming ? "Generating…" : "Generate submission package"}
-          </button>
-          {(phase.kind === "done" || phase.kind === "error") && (
+          <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
-              type="button"
-              onClick={reset}
-              className="text-xs text-muted-foreground hover:underline"
+              type="submit"
+              disabled={formDisabled}
+              className="rounded-md border border-primary bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
             >
-              Reset form
+              {streaming ? "Generating…" : "Generate submission package"}
             </button>
-          )}
-          {phase.kind === "error" && (
-            <span className="text-xs text-destructive">{phase.message}</span>
-          )}
-        </div>
+            {(phase.kind === "done" || phase.kind === "error") && (
+              <button
+                type="button"
+                onClick={reset}
+                className="text-xs text-muted-foreground hover:underline"
+              >
+                Reset form
+              </button>
+            )}
+            {phase.kind === "error" && (
+              <span className="text-xs text-destructive">{phase.message}</span>
+            )}
+          </div>
+        </FormSection>
       </form>
 
       {(streaming || phase.kind === "done" || progress.length > 0) && (
-        <div className="mt-6 space-y-3">
+        <div className="space-y-3 border-t border-border p-5">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Run progress
           </h3>
           {outputDir && (
             <p className="text-xs text-muted-foreground">
-              Writing to <code className="rounded bg-muted px-1.5 py-0.5">{outputDir}</code>
+              Writing to{" "}
+              <code className="rounded bg-muted px-1.5 py-0.5">{outputDir}</code>
             </p>
           )}
           <ul className="space-y-2">
@@ -494,7 +749,9 @@ export function SBIRRunner() {
                     {p.charCount > 0 && (
                       <>
                         {p.charCount.toLocaleString()} chars
-                        {p.durationMs ? ` · ${(p.durationMs / 1000).toFixed(1)}s` : ""}
+                        {p.durationMs
+                          ? ` · ${(p.durationMs / 1000).toFixed(1)}s`
+                          : ""}
                       </>
                     )}
                   </p>
@@ -544,6 +801,30 @@ export function SBIRRunner() {
   );
 }
 
+function FormSection({
+  title,
+  subtitle,
+  children
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="p-5">
+      <div className="mb-4">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-primary">
+          {title}
+        </h3>
+        {subtitle && (
+          <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 function Field({
   label,
   hint,
@@ -559,7 +840,7 @@ function Field({
 }) {
   return (
     <div className={"flex flex-col gap-1 " + (className ?? "")}>
-      <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
         {label}
         {required && <span className="ml-1 text-destructive">*</span>}
       </label>

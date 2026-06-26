@@ -6,14 +6,15 @@ real product feature in the captureOS web app.
 Endpoints:
 
   POST /sbir/generate/stream                  SSE: phase-by-phase run
+  POST /sbir/decode/file                      multipart upload → decoded text
   GET  /sbir/submissions                      list (newest first)
   GET  /sbir/submissions/{id}                 single
   GET  /sbir/submissions/{id}/files/{path}    download one artifact file
 
-The streaming endpoint accepts JSON (no file uploads in MVP) — attachments
-are pre-decoded by the client and POSTed as `{name, text}` pairs. PDF
-upload + decode happens via a separate /sbir/decode/pdf helper if/when
-needed (deferred).
+The streaming endpoint accepts JSON — attachments are pre-decoded by the
+client via /sbir/decode/file and POSTed as `{name, text}` pairs in the
+generate request body. Keeping decode out-of-band means the streaming
+endpoint stays pure-JSON (browsers can't multipart-POST an SSE response).
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from mactech_db.models import SBIR_DEPTHS, SBIRSubmission
 from mactech_intelligence import (
@@ -125,6 +126,103 @@ class SBIRSubmissionListItem(_Out):
 class SBIRSubmissionListResponse(_Out):
     total: int
     items: list[SBIRSubmissionListItem]
+
+
+class SBIRDecodedFile(_Out):
+    name: str
+    kind: str  # "pdf" | "text"
+    text: str
+    char_count: int
+    truncated: bool
+
+
+# ---------- file decode (PDF + text-shaped attachments) ----------
+
+
+_MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
+_MAX_DECODED_CHARS = 200_000  # matches generate request attachment limit
+_TEXT_EXTS = {".txt", ".md", ".markdown", ".json", ".yaml", ".yml", ".csv", ".tsv"}
+
+
+@router.post("/sbir/decode/file", response_model=SBIRDecodedFile)
+async def decode_sbir_file(
+    _ctx: Annotated[RequestContext, Depends(get_request_context)],
+    file: UploadFile = File(...),  # noqa: B008 — FastAPI's required idiom
+) -> SBIRDecodedFile:
+    """Decode an uploaded PDF or text file to plain text.
+
+    The web form uses this for the topic-source PDF tab and the
+    attachments multi-file picker so the generate endpoint can stay
+    pure-JSON. Rejects images and unknown binary formats — the engine
+    only consumes text.
+    """
+    blob = await file.read()
+    if len(blob) == 0:
+        raise HTTPException(status_code=400, detail="empty file")
+    if len(blob) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"file too large (max {_MAX_UPLOAD_BYTES // (1024 * 1024)} MB)",
+        )
+
+    name = (file.filename or "upload").strip() or "upload"
+    lower = name.lower()
+    text = ""
+    kind = "text"
+
+    if lower.endswith(".pdf"):
+        try:
+            import fitz  # type: ignore[import-untyped]
+        except ImportError as exc:  # pragma: no cover — pymupdf is in deps
+            raise HTTPException(
+                status_code=500, detail="PDF decoding unavailable on this host"
+            ) from exc
+        try:
+            with fitz.open(stream=blob, filetype="pdf") as doc:
+                text = "\n".join(page.get_text() for page in doc)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400, detail=f"could not parse PDF: {exc}"[:200]
+            ) from exc
+        kind = "pdf"
+    elif any(lower.endswith(ext) for ext in _TEXT_EXTS) or lower.endswith(
+        (".log", ".html", ".htm", ".xml")
+    ):
+        text = blob.decode("utf-8", errors="replace")
+    else:
+        # No extension or unrecognized — try utf-8 decode but fail if the
+        # result is mostly binary noise (>5% replacement chars = reject).
+        candidate = blob.decode("utf-8", errors="replace")
+        noise_ratio = candidate.count("�") / max(len(candidate), 1)
+        if noise_ratio > 0.05:
+            raise HTTPException(
+                status_code=415,
+                detail=(
+                    "unsupported file type — engine accepts PDF or text "
+                    "(txt / md / json / yaml / csv). Images and binaries "
+                    "are not supported."
+                ),
+            )
+        text = candidate
+
+    text = text.strip()
+    if len(text) < 10:
+        raise HTTPException(
+            status_code=400, detail="could not extract enough text (less than 10 chars)"
+        )
+
+    truncated = False
+    if len(text) > _MAX_DECODED_CHARS:
+        text = text[:_MAX_DECODED_CHARS]
+        truncated = True
+
+    return SBIRDecodedFile(
+        name=name,
+        kind=kind,
+        text=text,
+        char_count=len(text),
+        truncated=truncated,
+    )
 
 
 # ---------- helpers ----------
