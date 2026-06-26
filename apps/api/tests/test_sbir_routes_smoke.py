@@ -19,6 +19,13 @@ def test_router_mounted_listing() -> None:
     assert "/sbir/decode/file" in routes
     assert "/sbir/topics" in routes
     assert "/sbir/topics/refresh" in routes
+    assert "/sbir/topics/refresh-fast" in routes
+
+
+def test_refresh_fast_requires_auth() -> None:
+    client = TestClient(app)
+    res = client.post("/sbir/topics/refresh-fast")
+    assert res.status_code == 401
 
 
 def test_topics_list_requires_auth() -> None:

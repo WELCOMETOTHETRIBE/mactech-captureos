@@ -10,9 +10,14 @@ Endpoints:
   GET  /sbir/submissions                      list (newest first)
   GET  /sbir/submissions/{id}                 single
   GET  /sbir/submissions/{id}/files/{path}    download one artifact file
-  GET  /sbir/topics                           topic feed (filter + paginate)
+  GET  /sbir/topics                           topic feed (filter + paginate);
+                                              auto-refreshes sbirdashboard.com
+                                              inline when its rows are stale
   GET  /sbir/topics/{id}                      one topic
   POST /sbir/topics/refresh                   kick the Apify ingest worker
+                                              (covers DSIP / sbir.gov / etc.)
+  POST /sbir/topics/refresh-fast              inline sbirdashboard.com fetch
+                                              (sub-second; no Celery / Apify)
 
 The streaming endpoint accepts JSON — attachments are pre-decoded by the
 client via /sbir/decode/file and POSTed as `{name, text}` pairs in the
@@ -44,6 +49,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import desc, select
 
 from mactech_api.auth import RequestContext, get_request_context
+from mactech_api.sbir_topics_sync import (
+    is_stale as sbirdashboard_is_stale,
+)
+from mactech_api.sbir_topics_sync import (
+    refresh_sbirdashboard_topics,
+)
 from mactech_api.sbir_workspace import SBIRWorkspace
 
 log = logging.getLogger(__name__)
@@ -690,8 +701,20 @@ async def list_sbir_topics(
 ) -> SBIRTopicListResponse:
     """List SBIR topics with optional filtering. Default sort: open
     topics by soonest close date, then everything else by most recently
-    seen."""
-    _ = ctx  # topics are shared, but we still require auth via the dep
+    seen.
+
+    Auto-refreshes the sbirdashboard.com source inline when its rows are
+    older than 15 minutes. The fetch is sub-second; any failure is
+    swallowed so the cached topic list still renders.
+    """
+    if await sbirdashboard_is_stale():
+        result = await refresh_sbirdashboard_topics()
+        if result.error:
+            log.info(
+                "sbirdashboard inline refresh failed (degrading to cache): %s",
+                result.error,
+            )
+
     stmt = select(SBIRTopic)
     if status and status != "all":
         stmt = stmt.where(SBIRTopic.status == status)
@@ -706,6 +729,7 @@ async def list_sbir_topics(
             | (SBIRTopic.title.ilike(like))
             | (SBIRTopic.description.ilike(like))
         )
+    _ = ctx  # auth required via dep; topics are shared across tenants
     # Open topics with a close date first, soonest close on top, then
     # everything else by most-recently-seen.
     stmt = stmt.order_by(
@@ -737,6 +761,30 @@ class SBIRTopicsRefreshResponse(_Out):
     queued: bool
     task_id: str | None
     detail: str | None
+
+
+class SBIRTopicsRefreshFastResponse(_Out):
+    fetched: int
+    upserted: int
+    elapsed_secs: float
+    error: str | None
+
+
+@router.post(
+    "/sbir/topics/refresh-fast", response_model=SBIRTopicsRefreshFastResponse
+)
+async def refresh_sbir_topics_fast(
+    ctx: Annotated[RequestContext, Depends(get_request_context)],
+) -> SBIRTopicsRefreshFastResponse:
+    """Inline sbirdashboard.com fetch — no Celery, no Apify, sub-second."""
+    _ = ctx
+    result = await refresh_sbirdashboard_topics()
+    return SBIRTopicsRefreshFastResponse(
+        fetched=result.fetched,
+        upserted=result.upserted,
+        elapsed_secs=result.elapsed_secs,
+        error=result.error,
+    )
 
 
 @router.post("/sbir/topics/refresh", response_model=SBIRTopicsRefreshResponse)
