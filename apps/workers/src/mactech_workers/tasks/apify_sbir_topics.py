@@ -50,6 +50,10 @@ SBIR_TOPICS_RUN_TIMEOUT_SECS = 540
 # open. The crawler walks depth=2 from each so it follows into individual
 # topic detail pages.
 SBIR_TOPIC_SEED_URLS = [
+    # SBIR Dashboard — community-maintained aggregator with ~40 open DoD
+    # topics on a single page. Highest signal-to-noise of any seed:
+    # every row is a topic_number + title + branch + deadline.
+    "https://www.sbirdashboard.com/",
     # DSIP — canonical, but JS-heavy. playwright:adaptive renders it.
     "https://www.dodsbirsttr.mil/topics-app/",
     # SBIR.gov topic + solicitation lists.
@@ -77,11 +81,22 @@ Return STRICT JSON: an object with one key, "topics", which is an array.
 For each distinct topic on the page, emit one object:
 
   {
-    "topic_number":   string — canonical topic id (e.g. "DLA26BZ02-NV007",
-                      "AF254-D001", "N252-001", "ARMY26-001")
+    "topic_number":   string — canonical topic id. Accept all DoD SBIR/STTR
+                      naming conventions, including the newer
+                      department-prefixed style: e.g. "DAF26BX03-DV505",
+                      "DAF26BZ03-DV019" (Department of Air Force),
+                      "DON26BX03-NP002", "DON26BZ03-NV054" (Department of
+                      Navy), "DPA26BZ03-DV011" (DARPA), "ARM26BX01-NP003"
+                      (Army), "DHA26BZ03-NV006" (Defense Health Agency),
+                      "DLA26BZ03-NV011" (DLA); and the older style:
+                      "DLA26BZ02-NV007", "AF254-D001", "N252-001",
+                      "ARMY26-001", "SOCOM254-001", "DARPA254-001"
     "title":          string — the topic title
     "component":      "Army" | "Navy" | "Air Force" | "DLA" | "DARPA"
-                      | "SOCOM" | "Space Force" | "MDA" | "OSD" | "Other" | null
+                      | "SOCOM" | "Space Force" | "MDA" | "DHA" | "OSD"
+                      | "Other" | null
+                      — map prefixes: DAF→"Air Force", DON→"Navy",
+                      DPA→"DARPA", ARM→"Army", DHA→"DHA", DLA→"DLA"
     "program":        "SBIR" | "STTR" | null
     "phase":          "I" | "II" | "DP2" | "III" | null
     "status":         "prerelease" | "open" | "closed" | null
