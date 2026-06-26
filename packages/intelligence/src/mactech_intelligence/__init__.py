@@ -8,15 +8,33 @@ Prime/Enterprise volume) are hit.
 
 from mactech_intelligence.ask_about_opportunity import (
     STARTERS as ASK_STARTERS,
+)
+from mactech_intelligence.ask_about_opportunity import (
     AskFirmContext,
     AskInput,
     AskOpportunityContext,
     ask_about_opportunity,
     stream_ask_about_opportunity,
 )
+from mactech_intelligence.clause_detector import (
+    ClauseFindings,
+)
+from mactech_intelligence.clause_detector import (
+    detect as detect_clauses,
+)
+from mactech_intelligence.cyber_scope import (
+    CyberScopeAnalysis,
+    CyberScopeTextSource,
+    analyze_cyber_scope,
+)
+from mactech_intelligence.cyber_scope.scorer import PARSER_VERSION as CYBER_SCOPE_PARSER_VERSION
 from mactech_intelligence.explain_term import (
     TermExplanation as TermExplanationOut,
+)
+from mactech_intelligence.explain_term import (
     explain_term,
+)
+from mactech_intelligence.explain_term import (
     parse_slug as parse_explain_slug,
 )
 from mactech_intelligence.extract_brief import (
@@ -46,15 +64,17 @@ from mactech_intelligence.extract_solicitation import (
     extract_solicitation,
 )
 from mactech_intelligence.llm import AnthropicLLMClient, LLMResponse, StreamChunk
-from mactech_intelligence.cyber_scope import (
-    CyberScopeAnalysis,
-    CyberScopeTextSource,
-    analyze_cyber_scope,
+from mactech_intelligence.sbir_submission_engine import (
+    PROMPT_VERSION as SBIR_PROMPT_VERSION,
 )
-from mactech_intelligence.cyber_scope.scorer import PARSER_VERSION as CYBER_SCOPE_PARSER_VERSION
-from mactech_intelligence.clause_detector import (
-    ClauseFindings,
-    detect as detect_clauses,
+from mactech_intelligence.sbir_submission_engine import (
+    Depth as SBIRDepth,
+)
+from mactech_intelligence.sbir_submission_engine import (
+    SBIRAttachment,
+    SBIREvent,
+    SBIRInput,
+    run_sbir_submission,
 )
 from mactech_intelligence.scoring import (
     OpportunityFacts,
@@ -84,6 +104,8 @@ from mactech_intelligence.why_it_matters import generate_why_it_matters
 
 __all__ = [
     "ASK_STARTERS",
+    "CYBER_SCOPE_PARSER_VERSION",
+    "SBIR_PROMPT_VERSION",
     "AnthropicLLMClient",
     "AskFirmContext",
     "AskInput",
@@ -91,11 +113,9 @@ __all__ = [
     "BriefExtractionError",
     "CapabilityContext",
     "CapabilityExtractionError",
-    "CYBER_SCOPE_PARSER_VERSION",
     "ClauseFindings",
     "CyberScopeAnalysis",
     "CyberScopeTextSource",
-    "analyze_cyber_scope",
     "ExtractBriefInput",
     "ExtractSolicitationInput",
     "ExtractedCapabilityStatement",
@@ -113,6 +133,10 @@ __all__ = [
     "OpportunityFacts",
     "PastPerformanceContext",
     "PastPerformanceExtractionError",
+    "SBIRAttachment",
+    "SBIRDepth",
+    "SBIREvent",
+    "SBIRInput",
     "ScoringContext",
     "ScoringResult",
     "SolicitationExtractionError",
@@ -123,6 +147,7 @@ __all__ = [
     "TeamingPartnerContext",
     "TenantIdentity",
     "TermExplanationOut",
+    "analyze_cyber_scope",
     "ask_about_opportunity",
     "context_hash",
     "detect_clauses",
@@ -134,6 +159,7 @@ __all__ = [
     "generate_sources_sought_draft",
     "generate_why_it_matters",
     "parse_explain_slug",
+    "run_sbir_submission",
     "score_high_moat",
     "score_opportunity",
     "stream_ask_about_opportunity",

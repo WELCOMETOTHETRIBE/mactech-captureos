@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from mactech_db import async_session_factory
 from sqlalchemy import text
 
 from mactech_api.routes.agency_intel import router as agency_intel_router
@@ -15,10 +16,10 @@ from mactech_api.routes.cyber_scope_intelligence import router as cyber_scope_in
 from mactech_api.routes.drafts import router as drafts_router
 from mactech_api.routes.eligibility import router as eligibility_router
 from mactech_api.routes.events import router as events_router
-from mactech_api.routes.forecasts import router as forecasts_router
-from mactech_api.routes.integrations import router as integrations_router
 from mactech_api.routes.explain import router as explain_router
+from mactech_api.routes.forecasts import router as forecasts_router
 from mactech_api.routes.founders import router as founders_router
+from mactech_api.routes.integrations import router as integrations_router
 from mactech_api.routes.library import router as library_router
 from mactech_api.routes.library_import import router as library_import_router
 from mactech_api.routes.me import router as me_router
@@ -27,6 +28,7 @@ from mactech_api.routes.opportunities import router as opportunities_router
 from mactech_api.routes.past_performance import router as past_performance_router
 from mactech_api.routes.pursuit_links import router as pursuit_links_router
 from mactech_api.routes.pursuits import router as pursuits_router
+from mactech_api.routes.sbir import router as sbir_router
 from mactech_api.routes.search import router as search_router
 from mactech_api.routes.settings import router as settings_router
 from mactech_api.routes.solicitation import router as solicitation_router
@@ -34,7 +36,6 @@ from mactech_api.routes.teaming_partners import router as teaming_partners_route
 from mactech_api.routes.web_mentions import router as web_mentions_router
 from mactech_api.routes.webhooks import router as webhooks_router
 from mactech_api.settings import settings
-from mactech_db import async_session_factory
 
 app = FastAPI(
     title="MacTech CaptureOS API",
@@ -83,6 +84,7 @@ app.include_router(cyber_scope_router)
 app.include_router(cyber_scope_downstream_router)
 app.include_router(cyber_scope_intelligence_router)
 app.include_router(capture_package_router)
+app.include_router(sbir_router)
 
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)

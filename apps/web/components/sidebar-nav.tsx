@@ -35,6 +35,12 @@ const NAV = [
     match: (p: string) => p.startsWith("/drafts")
   },
   {
+    href: "/sbir",
+    label: "SBIR Submission",
+    sub: "Topic → certifiable package",
+    match: (p: string) => p.startsWith("/sbir")
+  },
+  {
     href: "/tools/cyber-scope-parser",
     label: "Cyber Scope",
     sub: "FRCS / OT / UFGS feed",
