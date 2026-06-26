@@ -75,7 +75,16 @@ const STANDARD_HELP =
 const COMPLETE_HELP =
   "Same as Standard. PDF/Excel/DOCX rendering is deferred — flagged in output.";
 
-export function SBIRRunner() {
+export type SBIRRunnerInitial = {
+  topicNumber?: string;
+  topicTitle?: string | null;
+  component?: (typeof COMPONENTS)[number];
+  topicPayload?: string;
+  topicCloseDate?: string | null;
+  sourceKind?: SourceKind;
+};
+
+export function SBIRRunner({ initial }: { initial?: SBIRRunnerInitial } = {}) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>({ kind: "form" });
   const [progress, setProgress] = useState<PhaseRow[]>([]);
@@ -84,13 +93,19 @@ export function SBIRRunner() {
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Form state.
-  const [topicNumber, setTopicNumber] = useState("");
-  const [topicTitle, setTopicTitle] = useState("");
-  const [component, setComponent] = useState<(typeof COMPONENTS)[number]>("DLA");
-  const [sourceKind, setSourceKind] = useState<SourceKind>("text");
-  const [topicPayload, setTopicPayload] = useState("");
-  const [topicCloseDate, setTopicCloseDate] = useState("");
+  // Form state — pre-filled when the user lands here via /sbir/submit?topic_id=…
+  const [topicNumber, setTopicNumber] = useState(initial?.topicNumber ?? "");
+  const [topicTitle, setTopicTitle] = useState(initial?.topicTitle ?? "");
+  const [component, setComponent] = useState<(typeof COMPONENTS)[number]>(
+    initial?.component ?? "DLA"
+  );
+  const [sourceKind, setSourceKind] = useState<SourceKind>(
+    initial?.sourceKind ?? "text"
+  );
+  const [topicPayload, setTopicPayload] = useState(initial?.topicPayload ?? "");
+  const [topicCloseDate, setTopicCloseDate] = useState(
+    initial?.topicCloseDate ?? ""
+  );
   const [synergy, setSynergy] = useState("");
   const [sister, setSister] = useState("");
   const [resourceLinks, setResourceLinks] = useState("");

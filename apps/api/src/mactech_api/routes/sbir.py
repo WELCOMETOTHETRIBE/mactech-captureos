@@ -10,6 +10,9 @@ Endpoints:
   GET  /sbir/submissions                      list (newest first)
   GET  /sbir/submissions/{id}                 single
   GET  /sbir/submissions/{id}/files/{path}    download one artifact file
+  GET  /sbir/topics                           topic feed (filter + paginate)
+  GET  /sbir/topics/{id}                      one topic
+  POST /sbir/topics/refresh                   kick the Apify ingest worker
 
 The streaming endpoint accepts JSON — attachments are pre-decoded by the
 client via /sbir/decode/file and POSTed as `{name, text}` pairs in the
@@ -27,9 +30,9 @@ from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
-from mactech_db.models import SBIR_DEPTHS, SBIRSubmission
+from mactech_db.models import SBIR_DEPTHS, SBIRSubmission, SBIRTopic
 from mactech_intelligence import (
     AnthropicLLMClient,
     SBIRAttachment,
@@ -585,4 +588,187 @@ async def download_sbir_artifact(
         path=target,
         filename=target.name,
         headers={"Cache-Control": "no-store"},
+    )
+
+
+# ---------- topic feed (populated by apify_sbir_topics worker) ----------
+
+
+class SBIRTopicListItem(_Out):
+    id: str
+    source: str
+    topic_number: str
+    title: str | None
+    component: str | None
+    program: str | None
+    phase: str | None
+    status: str
+    close_date: str | None
+    url: str | None
+
+
+class SBIRTopicListResponse(_Out):
+    total: int
+    items: list[SBIRTopicListItem]
+
+
+class SBIRTopicDetail(_Out):
+    id: str
+    source: str
+    topic_number: str
+    title: str | None
+    component: str | None
+    program: str | None
+    phase: str | None
+    status: str
+    prerelease_date: str | None
+    open_date: str | None
+    close_date: str | None
+    description: str | None
+    url: str | None
+    technology_areas: list[str] | None
+    modernization_priorities: list[str] | None
+    keywords: list[str] | None
+    itar_export_status: str | None
+    phase_i_ceiling: int | None
+    phase_i_duration_months: int | None
+    first_seen_at: str
+    last_seen_at: str
+
+
+def _serialize_topic_list(t: SBIRTopic) -> SBIRTopicListItem:
+    return SBIRTopicListItem(
+        id=str(t.id),
+        source=t.source,
+        topic_number=t.topic_number,
+        title=t.title,
+        component=t.component,
+        program=t.program,
+        phase=t.phase,
+        status=t.status,
+        close_date=t.close_date.isoformat() if t.close_date else None,
+        url=t.url,
+    )
+
+
+def _serialize_topic_detail(t: SBIRTopic) -> SBIRTopicDetail:
+    return SBIRTopicDetail(
+        id=str(t.id),
+        source=t.source,
+        topic_number=t.topic_number,
+        title=t.title,
+        component=t.component,
+        program=t.program,
+        phase=t.phase,
+        status=t.status,
+        prerelease_date=t.prerelease_date.isoformat() if t.prerelease_date else None,
+        open_date=t.open_date.isoformat() if t.open_date else None,
+        close_date=t.close_date.isoformat() if t.close_date else None,
+        description=t.description,
+        url=t.url,
+        technology_areas=list(t.technology_areas) if t.technology_areas else None,
+        modernization_priorities=(
+            list(t.modernization_priorities) if t.modernization_priorities else None
+        ),
+        keywords=list(t.keywords) if t.keywords else None,
+        itar_export_status=t.itar_export_status,
+        phase_i_ceiling=t.phase_i_ceiling,
+        phase_i_duration_months=t.phase_i_duration_months,
+        first_seen_at=t.first_seen_at.isoformat(),
+        last_seen_at=t.last_seen_at.isoformat(),
+    )
+
+
+@router.get("/sbir/topics", response_model=SBIRTopicListResponse)
+async def list_sbir_topics(
+    ctx: Annotated[RequestContext, Depends(get_request_context)],
+    status: str | None = Query(None, pattern=r"^(prerelease|open|closed|unknown|all)$"),
+    component: str | None = Query(None, max_length=64),
+    program: str | None = Query(None, pattern=r"^(SBIR|STTR)$"),
+    q: str | None = Query(None, max_length=200),
+    limit: int = Query(100, ge=1, le=500),
+) -> SBIRTopicListResponse:
+    """List SBIR topics with optional filtering. Default sort: open
+    topics by soonest close date, then everything else by most recently
+    seen."""
+    _ = ctx  # topics are shared, but we still require auth via the dep
+    stmt = select(SBIRTopic)
+    if status and status != "all":
+        stmt = stmt.where(SBIRTopic.status == status)
+    if component:
+        stmt = stmt.where(SBIRTopic.component == component)
+    if program:
+        stmt = stmt.where(SBIRTopic.program == program)
+    if q:
+        like = f"%{q.strip()}%"
+        stmt = stmt.where(
+            (SBIRTopic.topic_number.ilike(like))
+            | (SBIRTopic.title.ilike(like))
+            | (SBIRTopic.description.ilike(like))
+        )
+    # Open topics with a close date first, soonest close on top, then
+    # everything else by most-recently-seen.
+    stmt = stmt.order_by(
+        SBIRTopic.close_date.is_(None).asc(),
+        SBIRTopic.close_date.asc(),
+        desc(SBIRTopic.last_seen_at),
+    ).limit(limit)
+    rows = (await ctx.session.execute(stmt)).scalars().all()
+    return SBIRTopicListResponse(
+        total=len(rows),
+        items=[_serialize_topic_list(t) for t in rows],
+    )
+
+
+@router.get("/sbir/topics/{topic_id}", response_model=SBIRTopicDetail)
+async def get_sbir_topic(
+    topic_id: UUID,
+    ctx: Annotated[RequestContext, Depends(get_request_context)],
+) -> SBIRTopicDetail:
+    row = (
+        await ctx.session.execute(select(SBIRTopic).where(SBIRTopic.id == topic_id))
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="topic not found")
+    return _serialize_topic_detail(row)
+
+
+class SBIRTopicsRefreshResponse(_Out):
+    queued: bool
+    task_id: str | None
+    detail: str | None
+
+
+@router.post("/sbir/topics/refresh", response_model=SBIRTopicsRefreshResponse)
+async def refresh_sbir_topics(
+    ctx: Annotated[RequestContext, Depends(get_request_context)],
+) -> SBIRTopicsRefreshResponse:
+    """Kick the Apify SBIR topics ingest worker.
+
+    Returns immediately with the Celery task id. The user polls
+    /sbir/topics (or the ApifyRun audit table) to see when results
+    materialize — the run itself can take 5-10 minutes.
+    """
+    _ = ctx  # auth required; future: gate to founders only.
+    try:
+        from mactech_workers.tasks.apify_sbir_topics import (
+            kick_sbir_topics_run_task,
+        )
+    except ImportError as exc:  # pragma: no cover
+        raise HTTPException(
+            status_code=500, detail=f"workers package unavailable: {exc}"
+        ) from exc
+    try:
+        async_result = kick_sbir_topics_run_task.delay()
+    except Exception as exc:
+        log.warning("could not enqueue sbir-topics kick: %s", exc)
+        return SBIRTopicsRefreshResponse(
+            queued=False,
+            task_id=None,
+            detail=f"broker unavailable: {exc.__class__.__name__}",
+        )
+    return SBIRTopicsRefreshResponse(
+        queued=True,
+        task_id=str(async_result.id),
+        detail=None,
     )

@@ -17,6 +17,31 @@ def test_router_mounted_listing() -> None:
     assert "/sbir/submissions" in routes
     assert "/sbir/generate/stream" in routes
     assert "/sbir/decode/file" in routes
+    assert "/sbir/topics" in routes
+    assert "/sbir/topics/refresh" in routes
+
+
+def test_topics_list_requires_auth() -> None:
+    client = TestClient(app)
+    res = client.get("/sbir/topics")
+    assert res.status_code == 401
+
+
+def test_topics_list_rejects_bogus_status_without_auth() -> None:
+    """Without a bearer token we get 401 regardless of query validity —
+    auth runs before Pydantic Query validation in the dependency order.
+    We assert the call doesn't 200 (which would indicate an unguarded
+    endpoint). The Query pattern itself is enforced once auth is set."""
+    client = TestClient(app)
+    res = client.get("/sbir/topics?status=bogus")
+    assert res.status_code in (401, 422)
+    assert res.status_code != 200
+
+
+def test_topics_refresh_requires_auth() -> None:
+    client = TestClient(app)
+    res = client.post("/sbir/topics/refresh")
+    assert res.status_code == 401
 
 
 def test_decode_file_requires_auth() -> None:

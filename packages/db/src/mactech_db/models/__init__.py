@@ -62,7 +62,13 @@ from mactech_db.models.pursuit_links import (
     PursuitTeamingPartner,
 )
 from mactech_db.models.saved_search import SavedSearch
-from mactech_db.models.sbir import SBIR_DEPTHS, SBIR_STATUSES, SBIRSubmission
+from mactech_db.models.sbir import (
+    SBIR_DEPTHS,
+    SBIR_STATUSES,
+    SBIR_TOPIC_STATUSES,
+    SBIRSubmission,
+    SBIRTopic,
+)
 from mactech_db.models.scoring import CapabilityStatement, OpportunityScore
 from mactech_db.models.solicitation_extraction import (
     EXTRACTION_STATUSES,
@@ -115,6 +121,7 @@ __all__ = [
     "REQUIREMENT_CATEGORIES",
     "SBIR_DEPTHS",
     "SBIR_STATUSES",
+    "SBIR_TOPIC_STATUSES",
     "WEB_MENTION_KINDS",
     "AgencyEvent",
     "AgencyNaicsIntel",
@@ -152,6 +159,7 @@ __all__ = [
     "PursuitTeamingPartner",
     "RequirementMatrixItem",
     "SBIRSubmission",
+    "SBIRTopic",
     "SavedSearch",
     "SolicitationExtraction",
     "TeamingPartner",

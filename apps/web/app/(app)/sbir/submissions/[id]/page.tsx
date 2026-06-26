@@ -136,7 +136,7 @@ export default async function SBIRDetailPage({
 
       <p className="text-xs text-muted-foreground">
         <Link href="/sbir" className="hover:underline">
-          ← back to SBIR Submission Engine
+          ← back to SBIR topics
         </Link>
       </p>
     </div>

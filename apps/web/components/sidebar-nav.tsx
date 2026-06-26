@@ -36,9 +36,17 @@ const NAV = [
   },
   {
     href: "/sbir",
+    label: "SBIR Topics",
+    sub: "Open DoD SBIR/STTR topics",
+    match: (p: string) =>
+      p === "/sbir" || (p.startsWith("/sbir") && !p.startsWith("/sbir/submit") && !p.startsWith("/sbir/submissions"))
+  },
+  {
+    href: "/sbir/submit",
     label: "SBIR Submission",
     sub: "Topic → certifiable package",
-    match: (p: string) => p.startsWith("/sbir")
+    match: (p: string) =>
+      p.startsWith("/sbir/submit") || p.startsWith("/sbir/submissions")
   },
   {
     href: "/tools/cyber-scope-parser",
