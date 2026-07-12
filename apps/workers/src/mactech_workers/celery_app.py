@@ -165,6 +165,23 @@ celery_app.conf.update(
             "options": {"expires": 90 * 60},
             "kwargs": {"lookback_days": 7, "max_jobs": 24},
         },
+        # DSIP (dodsbirsttr.mil) direct ingest of open + pre-release SBIR/STTR
+        # topics with full content — daily 0510 ET. Public JSON API, no Apify,
+        # no LLM; ~70 topics in ~50s. This is the actionable topic feed.
+        "dsip-ingest-open": {
+            "task": "mactech.dsip.ingest_open",
+            "schedule": crontab(minute=10, hour=5),
+            "options": {"expires": 30 * 60},
+        },
+        # DSIP closed-topic archive backfill — weekly Sunday 0400 ET.
+        # Metadata-only (details fetched lazily on demand); takes the most
+        # recently-closed slice, capped, since the full archive is ~32k.
+        "dsip-ingest-closed": {
+            "task": "mactech.dsip.ingest_closed",
+            "schedule": crontab(minute=0, hour=4, day_of_week="sun"),
+            "options": {"expires": 2 * 60 * 60},
+            "kwargs": {"max_topics": 3000},
+        },
     },
 )
 
@@ -219,26 +236,27 @@ def _reset_db_engine_per_task(*args: object, **kwargs: object) -> None:
 
         get_engine.cache_clear()
         async_session_factory.cache_clear()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning("task_prerun engine reset failed: %s", exc)
 
 
 # Side-effect imports to register tasks defined in submodules. Keep at end of file.
-import mactech_workers.tasks.apify_forecasts  # noqa: E402, F401
-import mactech_workers.tasks.apify_industry_days  # noqa: E402, F401
-import mactech_workers.tasks.attachment_fetcher  # noqa: E402, F401
-import mactech_workers.tasks.cyber_scope_scan  # noqa: E402, F401
-import mactech_workers.tasks.cyber_scope_summarize  # noqa: E402, F401
-import mactech_workers.tasks.cyber_scope_sam_search  # noqa: E402, F401
-import mactech_workers.tasks.codex_sprs_sync  # noqa: E402, F401
-import mactech_workers.tasks.dhs_apfs_ingest  # noqa: E402, F401
-import mactech_workers.tasks.doe_forecast_ingest  # noqa: E402, F401
-import mactech_workers.tasks.edgar_signals  # noqa: E402, F401
-import mactech_workers.tasks.nasa_naf_ingest  # noqa: E402, F401
-import mactech_workers.tasks.digest  # noqa: E402, F401
-import mactech_workers.tasks.embed  # noqa: E402, F401
-import mactech_workers.tasks.enrich  # noqa: E402, F401
-import mactech_workers.tasks.library_import  # noqa: E402, F401
-import mactech_workers.tasks.sam_descriptions  # noqa: E402, F401
-import mactech_workers.tasks.sam_ingest  # noqa: E402, F401
+import mactech_workers.tasks.apify_forecasts  # noqa: E402
+import mactech_workers.tasks.apify_industry_days  # noqa: E402
+import mactech_workers.tasks.attachment_fetcher  # noqa: E402
+import mactech_workers.tasks.codex_sprs_sync  # noqa: E402
+import mactech_workers.tasks.cyber_scope_sam_search  # noqa: E402
+import mactech_workers.tasks.cyber_scope_scan  # noqa: E402
+import mactech_workers.tasks.cyber_scope_summarize  # noqa: E402
+import mactech_workers.tasks.dhs_apfs_ingest  # noqa: E402
+import mactech_workers.tasks.digest  # noqa: E402
+import mactech_workers.tasks.doe_forecast_ingest  # noqa: E402
+import mactech_workers.tasks.dsip_ingest  # noqa: E402
+import mactech_workers.tasks.edgar_signals  # noqa: E402
+import mactech_workers.tasks.embed  # noqa: E402
+import mactech_workers.tasks.enrich  # noqa: E402
+import mactech_workers.tasks.library_import  # noqa: E402
+import mactech_workers.tasks.nasa_naf_ingest  # noqa: E402
+import mactech_workers.tasks.sam_descriptions  # noqa: E402
+import mactech_workers.tasks.sam_ingest  # noqa: E402
 import mactech_workers.tasks.score  # noqa: E402, F401

@@ -22,6 +22,50 @@ Format per entry:
 
 ---
 
+## 2026-07-12 — DSIP direct scraper (replaces Apify for SBIR/STTR topics)
+
+### Shipped
+- **Discovery:** `dodsbirsttr.mil`'s public JSON API is reachable server-side
+  after all — the old `apify_dsip_lookup.py` comment ("firewalls direct
+  server-side calls") is wrong. Verified 200s (not 403) from plain curl.
+  Endpoints: `/topics/search?searchParam=<URL-encoded JSON>&size=&page=`
+  (list + `total`), `/topics/{id}/details` (objective, description, phase
+  1/2/3, keywords, tech + focus areas, ITAR), `/topics/{id}/questions`,
+  `/topics/{id}/download/PDF`.
+- `mactech_integrations.dsip.DsipClient` — throttled + retrying (tenacity;
+  DSIP is 503-flaky) async client mirroring `usaspending/client.py`. Search
+  pagination, number→id resolve, details, Q&A, PDF. Dataclasses parse
+  epoch-ms dates, TPOC from `topicManagers`, phases from `phaseHierarchy`,
+  HTML→text for the long-form fields. 12 hermetic tests (MockTransport).
+- `mactech_api.sbir_dsip_sync` — `refresh_dsip_topics()` bulk-ingests every
+  open/pre-release topic with full content (source='dsip'); `enrich_dsip_topic()`
+  single-topic enrich. No LLM extraction needed (API returns structured fields).
+- Rewired `POST /sbir/topics/{id}/enrich` to use DSIP direct first, Apify
+  worker as fallback. New `POST /sbir/topics/refresh-dsip`. "Refresh feed"
+  button + proxy now pull full content from DSIP in ~30–60s (was 5–10 min
+  Apify). Live E2E verified: 73 topics, 5–9k-char descriptions, PDFs.
+- **Ingest core lives in workers** (`mactech_workers/tasks/dsip_ingest.py`),
+  not the API — matches the DHS APFS / DOE direct-ingest precedent so Beat
+  can drive it. API imports the async helpers lazily (api depends on workers).
+- **Scopes:** `SCOPE_OPEN` (open+pre-release, with details) and `SCOPE_CLOSED`
+  (the ~32k historical archive — reported total clamps at 32767 — metadata-only,
+  newest-first by close date, capped via `max_topics`; details lazy on demand).
+- **Celery Beat:** `mactech.dsip.ingest_open` daily 05:10 ET (full details);
+  `mactech.dsip.ingest_closed` weekly Sun 04:00 ET (metadata, cap 3000). Both
+  verified registered + scheduled. Truncation is logged, never silent.
+
+### Half-done
+- Bulk DSIP ingest is sequential (~0.35s throttle → ~50s for 73 open topics;
+  closed metadata cap of 3000 ≈ ~7 min once/week). Could parallelize with a
+  bounded semaphore if it ever needs to be faster.
+
+### Next up
+- Consider deprecating `apify_dsip_lookup.py` once DSIP-direct proves stable.
+- If closed-topic intel proves valuable, raise the weekly cap or add a
+  one-time full-archive backfill (deep pagination to page ~655 works).
+
+---
+
 ## 2026-05-26 — Cyber Scope Sprint 5 (proactive SAM discovery)
 
 ### Shipped

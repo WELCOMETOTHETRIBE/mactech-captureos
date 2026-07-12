@@ -7,9 +7,10 @@ const CLERK_JWT_TEMPLATE =
   process.env.NEXT_PUBLIC_CLERK_JWT_TEMPLATE ?? "mactech";
 
 /**
- * Proxy for POST /sbir/topics/{id}/enrich. Forwards the Clerk JWT and
- * waits up to ~100s (Apify Playwright can take up to 90s; the API caps
- * at 90 and we add headroom for network + DB roundtrip).
+ * Proxy for POST /sbir/topics/{id}/enrich. Forwards the Clerk JWT. The API
+ * now enriches via DSIP's public API directly (seconds), falling back to
+ * the Apify Playwright worker (up to ~90s) only if that fails — so we keep
+ * a ~100s budget for the worst case.
  */
 export async function POST(
   _req: Request,

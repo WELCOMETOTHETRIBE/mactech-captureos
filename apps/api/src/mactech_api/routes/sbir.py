@@ -15,9 +15,16 @@ Endpoints:
                                               inline when its rows are stale
   GET  /sbir/topics/{id}                      one topic
   POST /sbir/topics/refresh                   kick the Apify ingest worker
-                                              (covers DSIP / sbir.gov / etc.)
+                                              (covers sbir.gov / AFWERX / etc.)
   POST /sbir/topics/refresh-fast              inline sbirdashboard.com fetch
                                               (sub-second; no Celery / Apify)
+  POST /sbir/topics/refresh-dsip              inline DSIP full-content pull —
+                                              every open/pre-release topic with
+                                              objective/description/phases, via
+                                              dodsbirsttr.mil's public API
+                                              (no Apify, no LLM)
+  POST /sbir/topics/{id}/enrich               per-topic full detail + PDF from
+                                              DSIP direct (Apify fallback)
 
 The streaming endpoint accepts JSON — attachments are pre-decoded by the
 client via /sbir/decode/file and POSTed as `{name, text}` pairs in the
@@ -791,12 +798,12 @@ async def enrich_sbir_topic(
     topic_id: UUID,
     ctx: Annotated[RequestContext, Depends(get_request_context)],
 ) -> SBIRTopicEnrichResponse:
-    """Pull full topic detail + PDF from DSIP via Apify Playwright.
+    """Pull full topic detail + PDF from DSIP's public API directly.
 
-    Runs inline with a 90s budget. If the row was enriched in the last
-    24h, returns the cached state without re-running. On failure (Apify
-    down, DSIP changed selectors, etc.) returns enriched=False with the
-    error string so the caller can degrade gracefully.
+    Runs inline in a few seconds. If the row was enriched in the last 24h,
+    returns the cached state without re-fetching. The direct DSIP path is
+    primary; the Apify/Playwright worker is a fallback used only if the
+    direct path fails (DSIP schema change, egress block, etc.).
     """
     _ = ctx
     row = (
@@ -821,36 +828,37 @@ async def enrich_sbir_topic(
                 dsip_enriched_at=row.dsip_enriched_at.isoformat(),
             )
 
-    # Imported lazily so importing the routes module doesn't pull in the
-    # workers package (Celery + Apify) for callers that only list topics.
-    try:
-        from mactech_workers.tasks.apify_dsip_lookup import run_dsip_lookup
-    except ImportError as exc:  # pragma: no cover
-        raise HTTPException(
-            status_code=500, detail=f"workers package unavailable: {exc}"
-        ) from exc
-
     topic_number = row.topic_number
+
+    # Primary: direct DSIP public API — no Apify, no LLM, seconds not minutes.
+    # Imported lazily so the routes module doesn't pull in the workers package
+    # (Celery) for callers that only list topics.
     try:
-        result = await run_dsip_lookup(topic_number)
+        from mactech_workers.tasks.dsip_ingest import enrich_dsip_topic
+
+        direct = await enrich_dsip_topic(topic_number)
     except Exception as exc:
-        log.exception("dsip enrichment crashed for %s", topic_number)
+        log.warning("direct dsip enrich crashed for %s: %s", topic_number, exc)
+        direct = None
+
+    if direct is None or not direct.success:
+        fallback = await _enrich_via_apify_fallback(topic_number)
+        if fallback is not None:
+            return _finish_enrich(await _reread_topic(ctx, topic_id), row, fallback)
+        # Both paths failed — surface the direct error (or a generic one).
+        err = direct.error if direct else "dsip enrichment unavailable"
         return SBIRTopicEnrichResponse(
             topic_id=str(row.id),
             topic_number=topic_number,
             enriched=False,
             cached=False,
-            error=f"{exc.__class__.__name__}: {exc}"[:300],
+            error=err,
             pdf_url=None,
             pdf_text_chars=None,
             dsip_enriched_at=None,
         )
 
-    # `run_dsip_lookup` upserts the row itself on success — re-read so
-    # we return the canonical timestamp.
-    refreshed = (
-        await ctx.session.execute(select(SBIRTopic).where(SBIRTopic.id == topic_id))
-    ).scalar_one_or_none()
+    refreshed = await _reread_topic(ctx, topic_id)
     refreshed_at = (
         refreshed.dsip_enriched_at.isoformat()
         if refreshed and refreshed.dsip_enriched_at
@@ -859,6 +867,50 @@ async def enrich_sbir_topic(
     return SBIRTopicEnrichResponse(
         topic_id=str(row.id),
         topic_number=topic_number,
+        enriched=True,
+        cached=False,
+        error=None,
+        pdf_url=direct.pdf_url,
+        pdf_text_chars=direct.pdf_text_chars,
+        dsip_enriched_at=refreshed_at,
+    )
+
+
+async def _reread_topic(
+    ctx: RequestContext, topic_id: UUID
+) -> SBIRTopic | None:
+    ctx.session.expire_all()
+    return (
+        await ctx.session.execute(select(SBIRTopic).where(SBIRTopic.id == topic_id))
+    ).scalar_one_or_none()
+
+
+async def _enrich_via_apify_fallback(topic_number: str):
+    """Last resort if the direct DSIP API path fails. Imported lazily so the
+    routes module doesn't pull in the workers package (Celery + Apify) on the
+    common path where the direct fetch succeeds."""
+    try:
+        from mactech_workers.tasks.apify_dsip_lookup import run_dsip_lookup
+    except ImportError as exc:  # pragma: no cover
+        log.warning("apify fallback unavailable: %s", exc)
+        return None
+    try:
+        return await run_dsip_lookup(topic_number)
+    except Exception as exc:
+        log.warning("apify fallback crashed for %s: %s", topic_number, exc)
+        return None
+
+
+def _finish_enrich(refreshed, row, result) -> SBIRTopicEnrichResponse:
+    """Build the response from an Apify-fallback `DSIPLookupResult`."""
+    refreshed_at = (
+        refreshed.dsip_enriched_at.isoformat()
+        if refreshed and refreshed.dsip_enriched_at
+        else None
+    )
+    return SBIRTopicEnrichResponse(
+        topic_id=str(row.id),
+        topic_number=row.topic_number,
         enriched=result.success,
         cached=False,
         error=result.error,
@@ -881,6 +933,14 @@ class SBIRTopicsRefreshFastResponse(_Out):
     error: str | None
 
 
+class SBIRTopicsRefreshDsipResponse(_Out):
+    fetched: int
+    upserted: int
+    details_ok: int
+    elapsed_secs: float
+    error: str | None
+
+
 @router.post(
     "/sbir/topics/refresh-fast", response_model=SBIRTopicsRefreshFastResponse
 )
@@ -893,6 +953,29 @@ async def refresh_sbir_topics_fast(
     return SBIRTopicsRefreshFastResponse(
         fetched=result.fetched,
         upserted=result.upserted,
+        elapsed_secs=result.elapsed_secs,
+        error=result.error,
+    )
+
+
+@router.post(
+    "/sbir/topics/refresh-dsip", response_model=SBIRTopicsRefreshDsipResponse
+)
+async def refresh_sbir_topics_dsip(
+    ctx: Annotated[RequestContext, Depends(get_request_context)],
+    details: Annotated[bool, Query()] = True,
+) -> SBIRTopicsRefreshDsipResponse:
+    """Inline DSIP (dodsbirsttr.mil) ingest of every open/pre-release topic
+    with full content — direct public API, no Apify, no LLM. Set
+    details=false for a fast metadata-only pass (skips per-topic /details)."""
+    _ = ctx
+    from mactech_workers.tasks.dsip_ingest import refresh_dsip_topics
+
+    result = await refresh_dsip_topics(fetch_details=details)
+    return SBIRTopicsRefreshDsipResponse(
+        fetched=result.fetched,
+        upserted=result.upserted,
+        details_ok=result.details_ok,
         elapsed_secs=result.elapsed_secs,
         error=result.error,
     )

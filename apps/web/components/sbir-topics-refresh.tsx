@@ -5,9 +5,8 @@ import { useRouter } from "next/navigation";
 
 type State =
   | { kind: "idle" }
-  | { kind: "kicking" }
-  | { kind: "queued"; taskId: string }
-  | { kind: "noop"; detail: string }
+  | { kind: "pulling" }
+  | { kind: "done"; fetched: number; upserted: number; detailsOk: number; elapsed: number }
   | { kind: "error"; message: string };
 
 export function SBIRTopicsRefreshButton() {
@@ -15,7 +14,7 @@ export function SBIRTopicsRefreshButton() {
   const [state, setState] = useState<State>({ kind: "idle" });
 
   async function refresh() {
-    setState({ kind: "kicking" });
+    setState({ kind: "pulling" });
     let res: Response;
     try {
       res = await fetch("/sbir/topics-refresh", { method: "POST" });
@@ -39,19 +38,24 @@ export function SBIRTopicsRefreshButton() {
       return;
     }
     const body = (await res.json()) as {
-      queued: boolean;
-      task_id: string | null;
-      detail: string | null;
+      fetched: number;
+      upserted: number;
+      details_ok: number;
+      elapsed_secs: number;
+      error: string | null;
     };
-    if (body.queued && body.task_id) {
-      setState({ kind: "queued", taskId: body.task_id });
-      router.refresh();
-    } else {
-      setState({
-        kind: "noop",
-        detail: body.detail ?? "broker unavailable"
-      });
+    if (body.error) {
+      setState({ kind: "error", message: body.error });
+      return;
     }
+    setState({
+      kind: "done",
+      fetched: body.fetched,
+      upserted: body.upserted,
+      detailsOk: body.details_ok,
+      elapsed: body.elapsed_secs
+    });
+    router.refresh();
   }
 
   return (
@@ -59,18 +63,21 @@ export function SBIRTopicsRefreshButton() {
       <button
         type="button"
         onClick={refresh}
-        disabled={state.kind === "kicking"}
+        disabled={state.kind === "pulling"}
         className="rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:border-foreground/30 disabled:opacity-50"
       >
-        {state.kind === "kicking" ? "Queuing…" : "Refresh feed"}
+        {state.kind === "pulling" ? "Pulling from DSIP…" : "Refresh feed"}
       </button>
-      {state.kind === "queued" && (
+      {state.kind === "pulling" && (
         <span className="text-[11px] text-muted-foreground">
-          Queued · run takes 5–10 min
+          Pulling full topic content · ~30–60s
         </span>
       )}
-      {state.kind === "noop" && (
-        <span className="text-[11px] text-warning">{state.detail}</span>
+      {state.kind === "done" && (
+        <span className="text-[11px] text-muted-foreground">
+          {state.upserted} topics · {state.detailsOk} with full detail ·{" "}
+          {state.elapsed.toFixed(0)}s
+        </span>
       )}
       {state.kind === "error" && (
         <span className="text-[11px] text-destructive">{state.message}</span>
