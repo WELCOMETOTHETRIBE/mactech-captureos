@@ -22,6 +22,52 @@ Format per entry:
 
 ---
 
+## 2026-07-14 — Bid invites by email (Postmark inbound webhook)
+
+### Shipped
+- **Flow:** Gmail filter (subject "Bid Invite:") → auto-forward to the
+  Postmark inbound address → Postmark POSTs parsed JSON to
+  `POST /webhooks/postmark/inbound` on the API service → stored as a
+  `bid_invites` row on the MacTech tenant.
+- `bid_invites` table + migration `0033_bid_invites` — from, subject,
+  text/html body, attachment *metadata* (name/type/size only, no
+  content), status (`new`/`reviewed`/`archived`), unique
+  `postmark_message_id` so Postmark retries are idempotent.
+- `POST /webhooks/postmark/inbound` in `routes/webhooks.py` — auth via
+  basic-auth password in the webhook URL (`POSTMARK_WEBHOOK_SECRET`,
+  Postmark can't send custom headers). Subject filter is
+  case-insensitive prefix match on "bid invite"; non-matching mail and
+  duplicates are ACKed with 200 (`stored: false`) so Postmark never
+  retries.
+- `GET /bid-invites` + `PATCH /bid-invites/{id}` (status triage) —
+  tenant-scoped via the standard `RequestContext` auth.
+- 7 tests (`tests/test_postmark_inbound.py`): route mounting, secret
+  enforcement, basic-auth parsing, subject filter. Storage path needs
+  the (still missing) Postgres test harness.
+
+### Half-done
+- No UI page for bid invites yet — API only.
+- Attachment contents are dropped; wiring them to S3/MinIO is a
+  follow-up if the team wants spec PDFs captured.
+
+### Blocked / Needs decision
+- **Ops steps (Patrick):** (1) set `POSTMARK_WEBHOOK_SECRET` on the
+  `mactech-api` Railway service (`openssl rand -hex 32`); (2) point the
+  Postmark inbound webhook at
+  `https://postmark:<secret>@<api-host>/webhooks/postmark/inbound` —
+  note the URL currently saved in Postmark
+  (`https://mactechsolutionsllc.com/api/inbound`) targets the marketing
+  site and can never work; (3) Gmail → Settings → Forwarding: add the
+  Postmark inbound address, confirm via the verification mail (visible
+  in Postmark → Activity → Inbound), then create the filter
+  `subject:("Bid Invite:")` → forward.
+
+### Next up
+- Bid invites inbox page in the web app; auto-link an invite to an
+  opportunity/pursuit when a solicitation number is detected in the body.
+
+---
+
 ## 2026-07-12 — DSIP direct scraper (replaces Apify for SBIR/STTR topics)
 
 ### Shipped

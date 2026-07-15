@@ -1,9 +1,11 @@
-"""Inbound webhooks — Apify ingest + Codex SPRS push.
+"""Inbound webhooks — Apify ingest + Codex SPRS push + Postmark email.
 
 Sprint 19/24. Each webhook is unauthenticated for Clerk (the source
 can't carry our JWT) and instead verifies its own shared secret:
   - Apify: HMAC-SHA256 of body with APIFY_WEBHOOK_SECRET
   - Codex: bearer secret in Authorization header (CODEX_WEBHOOK_SECRET)
+  - Postmark: basic-auth password in the webhook URL
+    (POSTMARK_WEBHOOK_SECRET)
 
 Routes:
 
@@ -21,17 +23,31 @@ Routes:
        Effect: updates tenants.sprs_* for the matching clerk_org_id.
        Replaces the daily 0610 ET pull as the primary refresh path —
        the beat now exists only as a safety-net reconciler.
+
+  POST /webhooks/postmark/inbound
+       Auth:   basic auth carried in the webhook URL Postmark is
+               configured with (password == POSTMARK_WEBHOOK_SECRET)
+       Body:   Postmark inbound message JSON (Subject, FromFull,
+               TextBody, HtmlBody, MessageID, Date, Attachments)
+       Effect: stores emails whose subject starts with "bid invite"
+               as bid_invites rows on the MacTech tenant. Everything
+               returns 200 so Postmark never retries — non-matching
+               subjects are acknowledged and dropped.
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
 import logging
+import secrets as _secrets
 from datetime import UTC, date, datetime
+from email.utils import parsedate_to_datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Header, HTTPException, Request, status
 from mactech_db import unscoped_session
-from mactech_db.models import ApifyRun, Tenant
+from mactech_db.models import ApifyRun, BidInvite, Tenant
 from mactech_integrations.apify import verify_webhook_signature
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
@@ -346,3 +362,160 @@ async def codex_sprs_webhook(
             updated=True,
             reason=body.reason or "sprs_changed",
         )
+
+
+# ────────────────────────────────────────────────────────────────────────
+# Postmark inbound email — "Bid Invite:" capture
+# ────────────────────────────────────────────────────────────────────────
+
+BID_INVITE_SUBJECT_PREFIX = "bid invite"
+
+
+class PostmarkFromFull(BaseModel):
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    email: str | None = Field(default=None, alias="Email")
+    name: str | None = Field(default=None, alias="Name")
+
+
+class PostmarkAttachment(BaseModel):
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    name: str | None = Field(default=None, alias="Name")
+    content_type: str | None = Field(default=None, alias="ContentType")
+    content_length: int | None = Field(default=None, alias="ContentLength")
+
+
+class PostmarkInboundBody(BaseModel):
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    message_id: str = Field(alias="MessageID")
+    subject: str = Field(default="", alias="Subject")
+    from_full: PostmarkFromFull | None = Field(default=None, alias="FromFull")
+    text_body: str | None = Field(default=None, alias="TextBody")
+    html_body: str | None = Field(default=None, alias="HtmlBody")
+    date: str | None = Field(default=None, alias="Date")
+    attachments: list[PostmarkAttachment] = Field(
+        default_factory=list, alias="Attachments"
+    )
+
+
+class PostmarkInboundAck(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    stored: bool
+    reason: str
+    bid_invite_id: str | None = None
+
+
+def _check_postmark_basic_auth(authorization: str | None) -> bool:
+    """Postmark can't send custom headers; the shared secret rides in the
+    webhook URL as basic auth (https://postmark:<secret>@host/...), which
+    arrives as an `Authorization: Basic <b64>` header. Username is ignored."""
+    expected = settings.postmark_webhook_secret
+    if not expected:
+        return False
+    if not authorization or not authorization.startswith("Basic "):
+        return False
+    try:
+        decoded = base64.b64decode(authorization[len("Basic ") :]).decode()
+    except (binascii.Error, UnicodeDecodeError):
+        return False
+    _, _, password = decoded.partition(":")
+    return _secrets.compare_digest(password, expected)
+
+
+@router.post(
+    "/webhooks/postmark/inbound",
+    response_model=PostmarkInboundAck,
+    status_code=status.HTTP_200_OK,
+)
+async def postmark_inbound_webhook(
+    body: PostmarkInboundBody,
+    authorization: Annotated[str | None, Header()] = None,
+) -> PostmarkInboundAck:
+    """Receive a forwarded email from Postmark's inbound stream.
+
+    Always returns 200 once authenticated — Postmark retries on any
+    other status, and "not a bid invite" / "already stored" are
+    outcomes, not errors.
+    """
+    if not settings.postmark_webhook_secret:
+        log.error("POSTMARK_WEBHOOK_SECRET not configured; rejecting webhook")
+        raise HTTPException(
+            status_code=503,
+            detail="POSTMARK_WEBHOOK_SECRET not configured on the API service.",
+        )
+    if not _check_postmark_basic_auth(authorization):
+        raise HTTPException(status_code=401, detail="bad basic auth")
+
+    subject = (body.subject or "").strip()
+    if not subject.lower().startswith(BID_INVITE_SUBJECT_PREFIX):
+        log.info(
+            "postmark inbound: ignoring non-bid-invite subject %r from %s",
+            subject[:120],
+            body.from_full.email if body.from_full else "unknown",
+        )
+        return PostmarkInboundAck(stored=False, reason="subject_filter")
+
+    sent_at: datetime | None = None
+    if body.date:
+        try:
+            sent_at = parsedate_to_datetime(body.date)
+        except (TypeError, ValueError):
+            sent_at = None
+
+    attachments_meta = [
+        {
+            "name": a.name,
+            "content_type": a.content_type,
+            "size": a.content_length,
+        }
+        for a in body.attachments
+    ]
+
+    async with unscoped_session() as session:
+        tenant = (
+            await session.execute(
+                select(Tenant).where(Tenant.slug == settings.mactech_tenant_slug)
+            )
+        ).scalar_one_or_none()
+        if tenant is None:
+            log.error(
+                "postmark inbound: no tenant with slug=%s; dropping message %s",
+                settings.mactech_tenant_slug,
+                body.message_id,
+            )
+            return PostmarkInboundAck(stored=False, reason="no_tenant")
+
+        stmt = (
+            pg_insert(BidInvite)
+            .values(
+                tenant_id=tenant.id,
+                postmark_message_id=body.message_id,
+                from_email=body.from_full.email if body.from_full else None,
+                from_name=body.from_full.name if body.from_full else None,
+                subject=subject[:1024],
+                text_body=body.text_body,
+                html_body=body.html_body,
+                attachments=attachments_meta,
+                sent_at=sent_at,
+            )
+            .on_conflict_do_nothing(index_elements=["postmark_message_id"])
+            .returning(BidInvite.id)
+        )
+        result = await session.execute(stmt)
+        new_id = result.scalar_one_or_none()
+
+    if new_id is None:
+        return PostmarkInboundAck(stored=False, reason="duplicate")
+
+    log.info(
+        "postmark inbound: stored bid invite %s (%r from %s)",
+        new_id,
+        subject[:120],
+        body.from_full.email if body.from_full else "unknown",
+    )
+    return PostmarkInboundAck(
+        stored=True, reason="stored", bid_invite_id=str(new_id)
+    )

@@ -7,6 +7,7 @@ from sqlalchemy import text
 from mactech_api.routes.agency_intel import router as agency_intel_router
 from mactech_api.routes.amendments import router as amendments_router
 from mactech_api.routes.ask import router as ask_router
+from mactech_api.routes.bid_invites import router as bid_invites_router
 from mactech_api.routes.brief import router as brief_router
 from mactech_api.routes.capture_package import router as capture_package_router
 from mactech_api.routes.cyber import router as cyber_router
@@ -73,6 +74,7 @@ app.include_router(onboarding_router)
 app.include_router(founders_router)
 app.include_router(web_mentions_router)
 app.include_router(webhooks_router)
+app.include_router(bid_invites_router)
 app.include_router(events_router)
 app.include_router(forecasts_router)
 app.include_router(solicitation_router)

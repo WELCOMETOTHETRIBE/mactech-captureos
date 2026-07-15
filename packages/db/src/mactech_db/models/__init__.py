@@ -28,6 +28,7 @@ from mactech_db.models.audit_event import (
     EVENT_TENANT_SAM_VERIFIED,
     AuditEvent,
 )
+from mactech_db.models.bid_invite import BID_INVITE_STATUSES, BidInvite
 from mactech_db.models.cyber_scope import CyberScopeAnalysis
 from mactech_db.models.cyber_scope_downstream import (
     BidNoBidReview,
@@ -86,6 +87,7 @@ from mactech_db.models.web_mention import WEB_MENTION_KINDS, WebMentionCache
 
 __all__ = [
     "BID_DECISIONS",
+    "BID_INVITE_STATUSES",
     "DRAFT_STATUSES",
     "DRAFT_TYPES",
     "EVENT_CYBER_SCOPE_ADDED_TO_PIPELINE",
@@ -128,6 +130,7 @@ __all__ = [
     "ApifyRun",
     "AuditEvent",
     "AwardHistory",
+    "BidInvite",
     "BidNoBidReview",
     "CapabilityStatement",
     "ClauseRiskLog",

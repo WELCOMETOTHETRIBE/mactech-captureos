@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     # value lives in Codex env as CAPTUREOS_WEBHOOK_SECRET.
     codex_webhook_secret: str = Field(default="")
 
+    # Shared secret Postmark presents when POSTing inbound email to
+    # /webhooks/postmark/inbound. Postmark can't set custom headers, so
+    # it travels as HTTP basic auth in the webhook URL itself:
+    #   https://postmark:<secret>@<api-host>/webhooks/postmark/inbound
+    postmark_webhook_secret: str = Field(default="")
+
     @field_validator("database_url")
     @classmethod
     def _ensure_asyncpg(cls, v: str) -> str:
