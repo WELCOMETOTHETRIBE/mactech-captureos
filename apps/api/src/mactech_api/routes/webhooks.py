@@ -29,10 +29,13 @@ Routes:
                configured with (password == POSTMARK_WEBHOOK_SECRET)
        Body:   Postmark inbound message JSON (Subject, FromFull,
                TextBody, HtmlBody, MessageID, Date, Attachments)
-       Effect: stores emails whose subject starts with "bid invite"
-               as bid_invites rows on the MacTech tenant. Everything
-               returns 200 so Postmark never retries — non-matching
-               subjects are acknowledged and dropped.
+       Effect: stores every forwarded email as a bid_invites row on
+               the MacTech tenant (the inbound address is dedicated —
+               Gmail's forwarding filter is the selector, since the
+               "Bid Invite" label covers many subject shapes). Only
+               setup plumbing (Gmail forwarding confirmations,
+               Postmark check pings) is dropped. Everything returns
+               200 so Postmark never retries.
 """
 
 from __future__ import annotations
@@ -365,10 +368,19 @@ async def codex_sprs_webhook(
 
 
 # ────────────────────────────────────────────────────────────────────────
-# Postmark inbound email — "Bid Invite:" capture
+# Postmark inbound email — bid invite capture
 # ────────────────────────────────────────────────────────────────────────
 
-BID_INVITE_SUBJECT_PREFIX = "bid invite"
+# The Gmail "Bid Invite" label is the selector, not the subject line —
+# labeled invites arrive with subjects like "BID NOTICE: ..." or
+# "Due Date Extended - ..." too. The inbound address is dedicated to
+# this flow, so anything forwarded to it is intentional and gets
+# stored. The only mail we drop is plumbing noise around the
+# forwarding setup itself:
+IGNORED_SENDERS = {
+    "forwarding-noreply@google.com",  # Gmail forwarding confirmations
+    "support@postmarkapp.com",  # Postmark's webhook "Check" test ping
+}
 
 
 class PostmarkFromFull(BaseModel):
@@ -437,7 +449,7 @@ async def postmark_inbound_webhook(
     """Receive a forwarded email from Postmark's inbound stream.
 
     Always returns 200 once authenticated — Postmark retries on any
-    other status, and "not a bid invite" / "already stored" are
+    other status, and "plumbing mail" / "already stored" are
     outcomes, not errors.
     """
     if not settings.postmark_webhook_secret:
@@ -450,13 +462,16 @@ async def postmark_inbound_webhook(
         raise HTTPException(status_code=401, detail="bad basic auth")
 
     subject = (body.subject or "").strip()
-    if not subject.lower().startswith(BID_INVITE_SUBJECT_PREFIX):
+    from_email = (
+        (body.from_full.email or "").strip().lower() if body.from_full else ""
+    )
+    if from_email in IGNORED_SENDERS:
         log.info(
-            "postmark inbound: ignoring non-bid-invite subject %r from %s",
+            "postmark inbound: ignoring plumbing mail from %s (%r)",
+            from_email,
             subject[:120],
-            body.from_full.email if body.from_full else "unknown",
         )
-        return PostmarkInboundAck(stored=False, reason="subject_filter")
+        return PostmarkInboundAck(stored=False, reason="sender_ignored")
 
     sent_at: datetime | None = None
     if body.date:
@@ -495,7 +510,7 @@ async def postmark_inbound_webhook(
                 postmark_message_id=body.message_id,
                 from_email=body.from_full.email if body.from_full else None,
                 from_name=body.from_full.name if body.from_full else None,
-                subject=subject[:1024],
+                subject=(subject or "(no subject)")[:1024],
                 text_body=body.text_body,
                 html_body=body.html_body,
                 attachments=attachments_meta,

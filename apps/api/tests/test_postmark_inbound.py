@@ -1,9 +1,13 @@
-"""Postmark inbound webhook — auth, subject filter, and wiring smoke.
+"""Postmark inbound webhook — auth, sender filter, and wiring smoke.
 
 No Postgres test harness exists in this repo yet, so the storage path
 (tenant lookup + insert) isn't exercised here; we cover everything in
 front of the DB: route mounting, secret enforcement, basic-auth
-parsing, and the subject filter (which returns before any DB work).
+parsing, and the plumbing-sender filter (which returns before any DB
+work). Everything else forwarded to the dedicated inbound address is
+stored regardless of subject — the Gmail "Bid Invite" label filter is
+the selector, and labeled invites arrive with many subject shapes
+("Bid Invite: ...", "BID NOTICE: ...", "Due Date Extended - ...").
 """
 
 from __future__ import annotations
@@ -60,38 +64,47 @@ def test_rejects_missing_or_bad_auth(monkeypatch) -> None:
     assert res.status_code == 401
 
 
-def test_non_bid_invite_subject_is_acked_not_stored(monkeypatch) -> None:
+def test_plumbing_senders_are_acked_not_stored(monkeypatch) -> None:
     monkeypatch.setattr(settings, "postmark_webhook_secret", "s3cret")
     client = TestClient(app)
-    res = client.post(
-        "/webhooks/postmark/inbound",
-        json={**PAYLOAD, "Subject": "RE: lunch on Friday?"},
-        headers=_basic("postmark", "s3cret"),
-    )
-    assert res.status_code == 200
-    assert res.json() == {
-        "stored": False,
-        "reason": "subject_filter",
-        "bid_invite_id": None,
-    }
+    for sender in (
+        "forwarding-noreply@google.com",
+        "Support@PostmarkApp.com",  # case-insensitive match
+    ):
+        res = client.post(
+            "/webhooks/postmark/inbound",
+            json={
+                **PAYLOAD,
+                "FromFull": {"Email": sender, "Name": "Plumbing"},
+                "Subject": "(#1234567) Gmail Forwarding Confirmation",
+            },
+            headers=_basic("postmark", "s3cret"),
+        )
+        assert res.status_code == 200
+        assert res.json() == {
+            "stored": False,
+            "reason": "sender_ignored",
+            "bid_invite_id": None,
+        }
 
 
-def test_subject_match_is_case_insensitive_and_trims(monkeypatch) -> None:
-    """'bid invite: ...' with leading whitespace still passes the filter.
-    It then proceeds to the DB (which isn't available in unit tests), so
-    we only assert it does NOT short-circuit as subject_filter."""
+def test_any_subject_from_real_sender_heads_for_storage(monkeypatch) -> None:
+    """Subjects no longer gate storage — 'BID NOTICE: ...' and
+    'Due Date Extended - ...' invites must get through. The request
+    proceeds to the DB (unavailable in unit tests), so we only assert
+    it does NOT short-circuit with a filtered reason."""
     monkeypatch.setattr(settings, "postmark_webhook_secret", "s3cret")
     client = TestClient(app)
     try:
         res = client.post(
             "/webhooks/postmark/inbound",
-            json={**PAYLOAD, "Subject": "  bid invite: paving IDIQ"},
+            json={**PAYLOAD, "Subject": "Due Date Extended - Cheatham Hills"},
             headers=_basic("postmark", "s3cret"),
         )
     except Exception:
         return  # no DB in unit tests — passing the filter is the assertion
     if res.status_code == 200:
-        assert res.json()["reason"] != "subject_filter"
+        assert res.json()["reason"] not in ("subject_filter", "sender_ignored")
 
 
 def test_basic_auth_parser(monkeypatch) -> None:
