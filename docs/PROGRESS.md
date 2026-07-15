@@ -66,6 +66,25 @@ Format per entry:
 - Bid invites inbox page in the web app; auto-link an invite to an
   opportunity/pursuit when a solicitation number is detected in the body.
 
+### Update (same day, night) — bid invites wired into the pipeline
+- `POST /bid-invites/{id}/pursue` promotes an invite's project into the
+  capture pipeline: buildingconnected-sourced `opportunities_raw` row
+  (source_id = normalized project group key) + `Pursuit`, owner
+  defaulted by keyword routing (`bid_invite_routing.suggest_founder`:
+  security→Patrick, testing/quality→Brian, systems/BMS→James), every
+  email in the group linked + auto-reviewed, audit event recorded.
+  Idempotent.
+- Webhook ingest stamps `group_key`, inherits the pipeline link for
+  new mail in a linked group, and refreshes the opportunity's
+  response_deadline when a reminder/extension states one — a "Due Date
+  Extended" email now updates the pursuit card by itself.
+- Migration `0035` (group_key, opportunity_id); reparse re-run in prod
+  (60/60, group keys set). UI: "Add to pipeline" / "In pipeline →" on
+  group cards + detail, with the "Routes to {founder}" suggestion line.
+- **Heads-up:** a concurrent session is editing SBIR files in this
+  working tree (incl. untracked destructive migration
+  `0036_drop_sbirdashboard_topics`). Deliberately NOT committed here.
+
 ### Update (same day, late evening) — parse + enrich + dashboard UX
 - `mactech_intelligence.bid_invite_parser` — deterministic template
   parser for BuildingConnected mail (invite/message shapes): kind,
