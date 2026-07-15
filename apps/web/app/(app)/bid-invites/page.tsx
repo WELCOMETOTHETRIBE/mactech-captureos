@@ -6,7 +6,11 @@ import {
   type BidInviteStatus,
   type BidInvitesResponse
 } from "@/lib/api";
-import { setBidInviteGroupStatus, setBidInviteStatus } from "@/lib/bid-invites";
+import {
+  pursueBidInvite,
+  setBidInviteGroupStatus,
+  setBidInviteStatus
+} from "@/lib/bid-invites";
 import {
   KIND_LABEL,
   KIND_TONE,
@@ -106,6 +110,13 @@ function ProjectCard({ group }: { group: BidInviteGroup }) {
   const newIds = group.items
     .filter((i) => i.status === "new")
     .map((i) => i.id);
+  // Promote from the original invite when the thread has one — it
+  // carries the fullest parse (package, location, due date); reminders
+  // and replies can be sparse.
+  const pursueFrom =
+    group.items.find((i) => i.kind === "invite") ??
+    group.items.find((i) => i.project_name) ??
+    group.items[0];
   const meta = [
     group.gcCompany,
     group.leadName &&
@@ -143,6 +154,15 @@ function ProjectCard({ group }: { group: BidInviteGroup }) {
               ))}
             </p>
           )}
+          {!group.opportunityId && group.suggestedFounderName && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Routes to{" "}
+              <span className="font-medium text-foreground">
+                {group.suggestedFounderName}
+              </span>{" "}
+              — {group.suggestionReason}
+            </p>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {group.leadEmail && (
@@ -163,10 +183,24 @@ function ProjectCard({ group }: { group: BidInviteGroup }) {
               Open RFP ↗
             </a>
           )}
+          {group.opportunityId ? (
+            <Link
+              href={`/opportunities/${group.opportunityId}`}
+              className="inline-flex items-center rounded-md border border-success/40 bg-success/10 px-3 py-1.5 text-xs font-medium text-success transition-colors hover:bg-success/20"
+            >
+              In pipeline →
+            </Link>
+          ) : (
+            <BidInviteAction
+              action={pursueBidInvite.bind(null, pursueFrom.id)}
+              label="Add to pipeline"
+            />
+          )}
           {newIds.length > 0 && (
             <BidInviteAction
               action={setBidInviteGroupStatus.bind(null, newIds, "reviewed")}
               label="Mark reviewed"
+              variant="ghost"
             />
           )}
         </div>

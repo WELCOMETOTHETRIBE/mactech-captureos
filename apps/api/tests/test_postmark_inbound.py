@@ -43,6 +43,16 @@ def test_router_mounted() -> None:
     assert "/webhooks/postmark/inbound" in routes
     assert "/bid-invites" in routes
     assert "/bid-invites/{invite_id}" in routes
+    assert "/bid-invites/{invite_id}/pursue" in routes
+    assert "/bid-invites/reparse" in routes
+
+
+def test_pursue_requires_auth() -> None:
+    client = TestClient(app)
+    res = client.post(
+        "/bid-invites/00000000-0000-0000-0000-000000000000/pursue", json={}
+    )
+    assert res.status_code == 401
 
 
 def test_rejects_when_secret_unconfigured(monkeypatch) -> None:

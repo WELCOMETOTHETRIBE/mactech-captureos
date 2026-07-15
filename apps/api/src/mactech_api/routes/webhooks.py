@@ -53,6 +53,7 @@ from mactech_db import unscoped_session
 from mactech_db.models import ApifyRun, BidInvite, Tenant
 from mactech_integrations.apify import verify_webhook_signature
 from mactech_intelligence.bid_invite_parser import parse_bid_invite
+from mactech_intelligence.bid_invite_routing import project_group_key
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -505,6 +506,7 @@ async def postmark_inbound_webhook(
             return PostmarkInboundAck(stored=False, reason="no_tenant")
 
         parsed = parse_bid_invite(subject, body.text_body)
+        group_key = project_group_key(parsed.project_name, subject)
         stmt = (
             pg_insert(BidInvite)
             .values(
@@ -530,12 +532,22 @@ async def postmark_inbound_webhook(
                 rfp_url=parsed.rfp_url,
                 headline=parsed.headline,
                 parsed_at=datetime.now(UTC),
+                group_key=group_key,
             )
             .on_conflict_do_nothing(index_elements=["postmark_message_id"])
             .returning(BidInvite.id)
         )
         result = await session.execute(stmt)
         new_id = result.scalar_one_or_none()
+
+        if new_id is not None:
+            await _link_to_pipeline(
+                session,
+                tenant_id=tenant.id,
+                invite_id=new_id,
+                group_key=group_key,
+                bid_due_on=parsed.bid_due_on,
+            )
 
     if new_id is None:
         return PostmarkInboundAck(stored=False, reason="duplicate")
@@ -549,3 +561,58 @@ async def postmark_inbound_webhook(
     return PostmarkInboundAck(
         stored=True, reason="stored", bid_invite_id=str(new_id)
     )
+
+
+async def _link_to_pipeline(
+    session,
+    *,
+    tenant_id,
+    invite_id,
+    group_key: str,
+    bid_due_on,
+) -> None:
+    """If this invite's project is already in the pipeline, inherit the
+    link — and keep the opportunity's deadline current when a reminder
+    or due-date-change email states one. This is what makes a "Due Date
+    Extended" email silently update the pursuit card's deadline."""
+    from datetime import time as dt_time
+
+    from mactech_db.models import OpportunityRaw
+
+    sibling_opp_id = (
+        await session.execute(
+            select(BidInvite.opportunity_id)
+            .where(
+                BidInvite.tenant_id == tenant_id,
+                BidInvite.group_key == group_key,
+                BidInvite.opportunity_id.is_not(None),
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if sibling_opp_id is None:
+        return
+
+    invite = (
+        await session.execute(
+            select(BidInvite).where(BidInvite.id == invite_id)
+        )
+    ).scalar_one()
+    invite.opportunity_id = sibling_opp_id
+
+    if bid_due_on is not None:
+        opp = (
+            await session.execute(
+                select(OpportunityRaw).where(OpportunityRaw.id == sibling_opp_id)
+            )
+        ).scalar_one_or_none()
+        if opp is not None:
+            opp.response_deadline = datetime.combine(
+                bid_due_on, dt_time(17, 0), tzinfo=UTC
+            )
+            log.info(
+                "bid invite %s refreshed deadline of opportunity %s to %s",
+                invite_id,
+                sibling_opp_id,
+                bid_due_on,
+            )

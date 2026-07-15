@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from mactech_db.models import BidInvite
 from mactech_intelligence.bid_invite_parser import parse_bid_invite
+from mactech_intelligence.bid_invite_routing import project_group_key
 
 
 def _database_url() -> str:
@@ -57,6 +58,7 @@ async def main() -> None:
             inv.rfp_id = parsed.rfp_id
             inv.rfp_url = parsed.rfp_url
             inv.headline = parsed.headline
+            inv.group_key = project_group_key(parsed.project_name, inv.subject)
             inv.parsed_at = now
     await engine.dispose()
     print(f"reparsed {len(rows)} bid invites")

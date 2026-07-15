@@ -39,6 +39,7 @@ class BidInvite(Base):
         ),
         Index("ix_bid_invites_tenant_status", "tenant_id", "status"),
         Index("ix_bid_invites_tenant_due", "tenant_id", "bid_due_on"),
+        Index("ix_bid_invites_tenant_group", "tenant_id", "group_key"),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -96,4 +97,16 @@ class BidInvite(Base):
     headline: Mapped[str | None] = mapped_column(String(512), nullable=True)
     parsed_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
+    )
+    # Normalized project identity (bid_invite_routing.project_group_key):
+    # ties an invite + its reminders + due-date changes to one
+    # solicitation for linking and the UI's card grouping.
+    group_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # Set when the invite's project is promoted into the pipeline — the
+    # buildingconnected-sourced opportunities_raw row the pursuit hangs
+    # off. All emails in a group share the link.
+    opportunity_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("opportunities_raw.id", ondelete="SET NULL"),
+        nullable=True,
     )

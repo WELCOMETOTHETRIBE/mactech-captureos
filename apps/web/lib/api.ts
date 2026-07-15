@@ -1574,11 +1574,22 @@ export type BidInviteListItem = {
   rfp_id: string | null;
   rfp_url: string | null;
   headline: string | null;
+  opportunity_id: string | null;
+  suggested_founder_slug: string | null;
+  suggested_founder_name: string | null;
+  suggestion_reason: string | null;
 };
 
 export type BidInviteDetail = BidInviteListItem & {
   text_body: string | null;
   html_body: string | null;
+};
+
+export type BidInvitePursueResult = {
+  opportunity_id: string;
+  pursuit_id: string;
+  created: boolean;
+  owner_founder_slug: string | null;
 };
 
 export type BidInvitesResponse = {

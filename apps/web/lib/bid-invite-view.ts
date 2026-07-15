@@ -25,6 +25,10 @@ export type BidInviteGroup = {
    * so a "Due Date Extended" supersedes the original invite. */
   bidDueOn: string | null;
   rfpUrl: string | null;
+  /** Set once the project has been promoted into the pipeline. */
+  opportunityId: string | null;
+  suggestedFounderName: string | null;
+  suggestionReason: string | null;
   latestReceived: string;
   newCount: number;
   /** Newest first. */
@@ -72,6 +76,9 @@ export function groupBidInvites(items: BidInviteListItem[]): BidInviteGroup[] {
       location: first((i) => i.location),
       bidDueOn: first((i) => i.bid_due_on),
       rfpUrl: first((i) => i.rfp_url),
+      opportunityId: first((i) => i.opportunity_id),
+      suggestedFounderName: first((i) => i.suggested_founder_name),
+      suggestionReason: first((i) => i.suggestion_reason),
       latestReceived: bucket[0].received_at,
       newCount: bucket.filter((i) => i.status === "new").length,
       items: bucket

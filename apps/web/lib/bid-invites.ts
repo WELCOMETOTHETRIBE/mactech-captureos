@@ -1,7 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { apiFetch, type BidInviteStatus } from "@/lib/api";
+import {
+  apiFetch,
+  type BidInvitePursueResult,
+  type BidInviteStatus
+} from "@/lib/api";
 
 /**
  * Server actions for bid-invite triage. Same contract as lib/pursuits:
@@ -29,6 +33,19 @@ export async function setBidInviteStatus(
  * on a card holding an invite + two reminders). Sequential on purpose:
  * groups are small (2–6 emails) and it keeps the API's session
  * handling simple. */
+/** Promote an invite's project into the capture pipeline. The API
+ * creates (or reuses) a buildingconnected-sourced opportunity + pursuit,
+ * links the whole email group, and flips new emails to reviewed —
+ * owner defaults to the keyword-routed founder suggestion. */
+export async function pursueBidInvite(inviteId: string): Promise<void> {
+  await apiFetch<BidInvitePursueResult>(`/bid-invites/${inviteId}/pursue`, {
+    method: "POST",
+    body: JSON.stringify({})
+  });
+  revalidateInviteSurfaces();
+  revalidatePath("/pipeline");
+}
+
 export async function setBidInviteGroupStatus(
   inviteIds: string[],
   status: BidInviteStatus

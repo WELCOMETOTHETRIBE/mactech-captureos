@@ -1,7 +1,8 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BidInviteAction } from "@/components/bid-invite-actions";
 import { apiFetch, type BidInviteDetail } from "@/lib/api";
-import { setBidInviteStatus } from "@/lib/bid-invites";
+import { pursueBidInvite, setBidInviteStatus } from "@/lib/bid-invites";
 import { KIND_LABEL, KIND_TONE, dueMeta } from "@/lib/bid-invite-view";
 import { BackLink, Badge, PageHeader, fmtDate } from "@/components/ui";
 
@@ -41,10 +42,32 @@ export default async function BidInviteDetailPage({
                 Scope: {invite.bid_package}
               </span>
             )}
+            {!invite.opportunity_id && invite.suggested_founder_name && (
+              <span className="text-sm text-muted-foreground">
+                · Routes to{" "}
+                <span className="font-medium text-foreground">
+                  {invite.suggested_founder_name}
+                </span>{" "}
+                — {invite.suggestion_reason}
+              </span>
+            )}
           </span>
         }
         trailing={
           <div className="flex items-center gap-2">
+            {invite.opportunity_id ? (
+              <Link
+                href={`/opportunities/${invite.opportunity_id}`}
+                className="inline-flex items-center rounded-md border border-success/40 bg-success/10 px-3.5 py-2 text-sm font-medium text-success transition-colors hover:bg-success/20"
+              >
+                In pipeline →
+              </Link>
+            ) : (
+              <BidInviteAction
+                action={pursueBidInvite.bind(null, invite.id)}
+                label="Add to pipeline"
+              />
+            )}
             {invite.rfp_url && (
               <a
                 href={invite.rfp_url}
