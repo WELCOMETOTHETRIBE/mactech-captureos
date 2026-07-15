@@ -66,6 +66,23 @@ Format per entry:
 - Bid invites inbox page in the web app; auto-link an invite to an
   opportunity/pursuit when a solicitation number is detected in the body.
 
+### Update (same day, evening)
+- Requirement clarified: the Gmail **label** "Bid Invite" is the
+  selector, not the subject — webhook now stores everything forwarded
+  (only Gmail-confirmation / Postmark-ping plumbing dropped).
+- Fully wired end-to-end in prod: POSTMARK_WEBHOOK_SECRET set on
+  mactech-api, Postmark inbound webhook saved, Gmail forwarding
+  address verified, and the `from:(team@buildingconnected.com)`
+  filter now applies the label **and** forwards to the Postmark
+  inbound address.
+- Retroactive backfill done: Takeout mbox of the label (59 messages)
+  imported via `scripts/import_bid_invites_mbox.py` — 59 stored,
+  0 failed. Plus 1 synthetic e2e test row (subject "...safe to
+  archive") from deploy verification.
+- Cruft: a duplicate Gmail filter with a stray `>`
+  (`from:(team@buildingconnected.com>)`) still exists; harmless,
+  Patrick may delete it.
+
 ---
 
 ## 2026-07-12 — DSIP direct scraper (replaces Apify for SBIR/STTR topics)
