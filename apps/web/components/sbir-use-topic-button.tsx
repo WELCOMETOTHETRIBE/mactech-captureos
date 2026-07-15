@@ -22,12 +22,12 @@ type EnrichResponse = {
 
 /**
  * Wraps the "Use this topic →" CTA on the topics page. On click:
- *   1. POST /sbir/topics/{id}/enrich (Apify Playwright DSIP scrape,
- *      up to ~90s — backend caches for 24h so repeat clicks return fast)
+ *   1. POST /sbir/topics/{id}/enrich (direct DSIP public API — seconds;
+ *      backend caches for 24h so repeat clicks return fast)
  *   2. Show "Pulling from DSIP…" spinner with elapsed time
  *   3. Navigate to /sbir/submit?topic_id=… regardless of enrichment
  *      outcome — the submitter pre-fill uses enriched fields when
- *      available and falls back to sbirdashboard data when not.
+ *      available and falls back to the topic's metadata when not.
  *
  * The user can always click again on the same row; a cached enrichment
  * returns instantly.
@@ -52,7 +52,7 @@ export function SBIRUseTopicButton({
       });
     } catch (err) {
       // Network failure — still navigate so the user can submit with
-      // sbirdashboard-only data. Stash the error in sessionStorage so
+      // the topic's metadata only. Stash the error in sessionStorage so
       // the submit page can show a notice.
       stashNotice(
         `DSIP enrichment network error: ${
@@ -80,7 +80,7 @@ export function SBIRUseTopicButton({
       stashNotice(
         body.error
           ? `DSIP enrichment did not complete: ${body.error}`
-          : "DSIP enrichment did not complete — submitting with sbirdashboard data only."
+          : "DSIP enrichment did not complete — submitting with topic metadata only."
       );
     } else if (body.cached) {
       stashNotice(

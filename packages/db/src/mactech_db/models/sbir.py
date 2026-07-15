@@ -7,10 +7,11 @@ Two tables:
   duplicate-submission guard. Artifact files live on disk under
   `output_dir` (relative to the repo).
 
-  `sbir_topics` — shared (untenanted) feed of open DoD SBIR/STTR topics,
-  populated by the Apify ingest worker. Mirrors the `agency_events`
-  pattern. Unique (source, topic_number). Consumed by the /sbir topics
-  page and the submitter's pre-fill flow (`/sbir/submit?topic_id=…`).
+  `sbir_topics` — shared (untenanted) feed of DoD SBIR/STTR topics,
+  populated directly from DSIP (dodsbirsttr.mil) by the dsip_ingest worker.
+  Mirrors the `agency_events` pattern. Unique (source, topic_number).
+  Consumed by the /sbir topics page and the submitter's pre-fill flow
+  (`/sbir/submit?topic_id=…`).
 """
 
 from datetime import datetime
@@ -100,7 +101,7 @@ SBIR_TOPIC_STATUSES = ("prerelease", "open", "closed", "unknown")
 
 
 class SBIRTopic(Base):
-    """One SBIR/STTR topic discovered by the Apify ingest.
+    """One SBIR/STTR topic ingested directly from DSIP.
 
     Shared across tenants — same way `opportunities_raw` and
     `agency_events` are shared. The submitter is tenant-scoped and
@@ -158,9 +159,9 @@ class SBIRTopic(Base):
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
 
-    # DSIP enrichment — populated lazily by apify_dsip_lookup when the user
-    # clicks 'Use this topic'. Stays null on rows that were never enriched
-    # (e.g. sbirdashboard-only rows the user never pursued).
+    # DSIP full-detail enrichment. The daily open-topic ingest fills these on
+    # every row; metadata-only rows (e.g. the closed-topic backfill) get them
+    # lazily when the user clicks 'Use this topic'. Null until then.
     dsip_enriched_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )

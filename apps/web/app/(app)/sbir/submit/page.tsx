@@ -93,8 +93,8 @@ export default async function SBIRSubmitPage({
       const sourceLabel = t.dsip_pdf_text
         ? "DSIP PDF source"
         : t.dsip_enriched_at
-          ? "DSIP rendered text"
-          : "sbirdashboard listing";
+          ? "DSIP topic detail"
+          : "DSIP listing (metadata only)";
       prefillNote = `Pre-filled from topic ${t.topic_number}${t.title ? ` — ${t.title}` : ""} (${sourceLabel}).`;
     } catch (err) {
       console.error("topic prefill failed", err);

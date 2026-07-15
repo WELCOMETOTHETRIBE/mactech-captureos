@@ -30,8 +30,8 @@ Celery tasks:
   mactech.dsip.ingest_open    — daily open+pre-release with details
   mactech.dsip.ingest_closed  — weekly closed metadata backfill (capped)
 
-Source name is 'dsip' so a DSIP row coexists with any 'sbirdashboard' row
-for the same topic_number (different source ⇒ different uniqueness key).
+Rows are keyed (source='dsip', topic_number) — DSIP is now the sole topic
+source; the old sbirdashboard.com ingest was removed.
 """
 
 from __future__ import annotations
@@ -65,8 +65,24 @@ DEFAULT_STALE_AFTER = timedelta(hours=6)
 # The weekly backfill takes the most-recently-closed slice, not all of it.
 DEFAULT_CLOSED_MAX = 3000
 
+# On-conflict update guards. The uniqueness key is never updated. A
+# metadata-only pass additionally leaves detail-owned columns untouched so it
+# can't wipe content a prior detailed ingest stored for the same topic.
+_NEVER_UPDATE = ("source", "topic_number")
+_METADATA_ONLY_SKIP = (
+    *_NEVER_UPDATE,
+    "description",
+    "technology_areas",
+    "modernization_priorities",
+    "keywords",
+    "itar_export_status",
+    "dsip_enriched_at",
+    "dsip_tpoc",
+    "dsip_pdf_url",
+)
+
 # DSIP component codes → the submission engine's component vocabulary, so
-# /sbir/submit pre-fill and founder routing work the same as sbirdashboard.
+# /sbir/submit pre-fill and founder routing get a consistent component name.
 _COMPONENT_MAP = {
     "ARMY": "Army",
     "USA": "Army",
@@ -241,16 +257,16 @@ async def refresh_dsip_topics(
                     values = _full_topic_to_values(
                         full, now=now, pdf_url=client.pdf_url(summary.topic_id)
                     )
+                    # On a metadata-only pass (no /details fetched), don't let
+                    # the empty detail columns overwrite content a prior
+                    # detailed ingest already stored for this topic.
+                    skip = _NEVER_UPDATE if fetch_details else _METADATA_ONLY_SKIP
                     stmt = (
                         pg_insert(SBIRTopic)
                         .values(**values)
                         .on_conflict_do_update(
                             index_elements=["source", "topic_number"],
-                            set_={
-                                k: v
-                                for k, v in values.items()
-                                if k not in ("source", "topic_number")
-                            },
+                            set_={k: v for k, v in values.items() if k not in skip},
                         )
                     )
                     await session.execute(stmt)
@@ -396,8 +412,7 @@ async def _persist_enrichment(
                 row.dsip_pdf_url = pdf_url
             if pdf_text:
                 row.dsip_pdf_text = pdf_text
-            # Fill richer content only where DSIP produced a value — the
-            # lighter sbirdashboard values win when DSIP is empty.
+            # Fill richer content only where DSIP produced a value.
             if d is not None:
                 composed = d.composed_description()
                 if composed:

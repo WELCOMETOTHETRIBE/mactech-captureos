@@ -123,11 +123,11 @@ export default async function SBIRTopicsPage({
         title="SBIR/STTR topic finder"
         subtitle={
           <>
-            Open DoD SBIR and STTR topics. sbirdashboard.com gives us the
-            discovery list (auto-refreshed every visit). Clicking{" "}
-            <em>Use this topic</em> pulls the full topic detail + official
-            PDF from DSIP via Apify Playwright (~30–60s, cached 24h), then
-            opens the submitter pre-filled with the canonical source text.
+            Open DoD SBIR and STTR topics, pulled with full content straight
+            from DSIP (dodsbirsttr.mil). Refreshed daily; hit{" "}
+            <em>Refresh feed</em> to pull the latest now. Clicking{" "}
+            <em>Use this topic</em> opens the submitter pre-filled with the
+            canonical objective, description, phases, and official PDF.
           </>
         }
         trailing={<SBIRTopicsRefreshButton />}
@@ -193,8 +193,8 @@ export default async function SBIRTopicsPage({
               filters.component !== "all" ||
               filters.program !== "all" ||
               !!filters.q
-                ? "Try widening the filters above. The sbirdashboard.com feed refreshes automatically on every page load."
-                : "sbirdashboard.com auto-refresh returned no topics, and the Apify-backed sources haven't been crawled yet. Click 'Refresh feed' for the deeper crawl — first run takes 5–10 minutes."
+                ? "Try widening the filters above."
+                : "No DSIP topics loaded yet. Click 'Refresh feed' to pull the current open topics from dodsbirsttr.mil (~30–60s)."
             }
             action={
               <LinkButton href="/sbir/submit" variant="primary">

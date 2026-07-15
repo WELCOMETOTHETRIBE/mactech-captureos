@@ -11,18 +11,18 @@ Endpoints:
   GET  /sbir/submissions/{id}                 single
   GET  /sbir/submissions/{id}/files/{path}    download one artifact file
   GET  /sbir/topics                           topic feed (filter + paginate);
-                                              auto-refreshes sbirdashboard.com
-                                              inline when its rows are stale
+                                              cold-start-seeds from DSIP inline
+                                              when no DSIP rows exist yet
   GET  /sbir/topics/{id}                      one topic
   POST /sbir/topics/refresh                   kick the Apify ingest worker
                                               (covers sbir.gov / AFWERX / etc.)
-  POST /sbir/topics/refresh-fast              inline sbirdashboard.com fetch
-                                              (sub-second; no Celery / Apify)
-  POST /sbir/topics/refresh-dsip              inline DSIP full-content pull —
-                                              every open/pre-release topic with
+  POST /sbir/topics/refresh-dsip              DSIP full-content pull — every
+                                              open/pre-release topic with
                                               objective/description/phases, via
                                               dodsbirsttr.mil's public API
-                                              (no Apify, no LLM)
+                                              (no Apify, no LLM). This is the
+                                              primary topic source; a daily
+                                              Celery Beat job also runs it.
   POST /sbir/topics/{id}/enrich               per-topic full detail + PDF from
                                               DSIP direct (Apify fallback)
 
@@ -56,12 +56,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import desc, select
 
 from mactech_api.auth import RequestContext, get_request_context
-from mactech_api.sbir_topics_sync import (
-    is_stale as sbirdashboard_is_stale,
-)
-from mactech_api.sbir_topics_sync import (
-    refresh_sbirdashboard_topics,
-)
 from mactech_api.sbir_workspace import SBIRWorkspace
 
 log = logging.getLogger(__name__)
@@ -698,13 +692,31 @@ def _serialize_topic_detail(t: SBIRTopic) -> SBIRTopicDetail:
         phase_i_duration_months=t.phase_i_duration_months,
         first_seen_at=t.first_seen_at.isoformat(),
         last_seen_at=t.last_seen_at.isoformat(),
-        dsip_enriched_at=(
-            t.dsip_enriched_at.isoformat() if t.dsip_enriched_at else None
-        ),
+        dsip_enriched_at=(t.dsip_enriched_at.isoformat() if t.dsip_enriched_at else None),
         dsip_tpoc=t.dsip_tpoc,
         dsip_pdf_url=t.dsip_pdf_url,
         dsip_pdf_text=t.dsip_pdf_text,
     )
+
+
+async def _cold_start_seed_dsip(ctx: RequestContext) -> None:
+    """If no DSIP topics exist yet, seed the feed inline with a fast
+    metadata-only DSIP pull (2 requests, sub-second). Steady-state freshness
+    is owned by the daily Beat job + manual refresh, so this fires only once.
+    """
+    exists = (
+        await ctx.session.execute(select(SBIRTopic.id).where(SBIRTopic.source == "dsip").limit(1))
+    ).first()
+    if exists is not None:
+        return
+    try:
+        from mactech_workers.tasks.dsip_ingest import refresh_dsip_topics
+
+        result = await refresh_dsip_topics(fetch_details=False)
+        if result.error:
+            log.info("dsip cold-start seed failed (degrading to cache): %s", result.error)
+    except Exception as exc:
+        log.info("dsip cold-start seed crashed (degrading to cache): %s", exc)
 
 
 @router.get("/sbir/topics", response_model=SBIRTopicListResponse)
@@ -720,17 +732,13 @@ async def list_sbir_topics(
     topics by soonest close date, then everything else by most recently
     seen.
 
-    Auto-refreshes the sbirdashboard.com source inline when its rows are
-    older than 15 minutes. The fetch is sub-second; any failure is
-    swallowed so the cached topic list still renders.
+    DSIP is the topic source, refreshed by the daily `mactech.dsip.ingest_open`
+    Beat job and the manual 'Refresh feed' button. On a cold start (no DSIP
+    rows exist yet), seed the feed inline with a fast metadata-only DSIP pull
+    so the page isn't empty on first load. Any failure is swallowed so the
+    cached list still renders.
     """
-    if await sbirdashboard_is_stale():
-        result = await refresh_sbirdashboard_topics()
-        if result.error:
-            log.info(
-                "sbirdashboard inline refresh failed (degrading to cache): %s",
-                result.error,
-            )
+    await _cold_start_seed_dsip(ctx)
 
     stmt = select(SBIRTopic)
     if status and status != "all":
@@ -791,9 +799,7 @@ class SBIRTopicEnrichResponse(_Out):
 _ENRICH_CACHE_WINDOW_HOURS = 24
 
 
-@router.post(
-    "/sbir/topics/{topic_id}/enrich", response_model=SBIRTopicEnrichResponse
-)
+@router.post("/sbir/topics/{topic_id}/enrich", response_model=SBIRTopicEnrichResponse)
 async def enrich_sbir_topic(
     topic_id: UUID,
     ctx: Annotated[RequestContext, Depends(get_request_context)],
@@ -822,9 +828,7 @@ async def enrich_sbir_topic(
                 cached=True,
                 error=None,
                 pdf_url=row.dsip_pdf_url,
-                pdf_text_chars=(
-                    len(row.dsip_pdf_text) if row.dsip_pdf_text else 0
-                ),
+                pdf_text_chars=(len(row.dsip_pdf_text) if row.dsip_pdf_text else 0),
                 dsip_enriched_at=row.dsip_enriched_at.isoformat(),
             )
 
@@ -860,9 +864,7 @@ async def enrich_sbir_topic(
 
     refreshed = await _reread_topic(ctx, topic_id)
     refreshed_at = (
-        refreshed.dsip_enriched_at.isoformat()
-        if refreshed and refreshed.dsip_enriched_at
-        else None
+        refreshed.dsip_enriched_at.isoformat() if refreshed and refreshed.dsip_enriched_at else None
     )
     return SBIRTopicEnrichResponse(
         topic_id=str(row.id),
@@ -876,9 +878,7 @@ async def enrich_sbir_topic(
     )
 
 
-async def _reread_topic(
-    ctx: RequestContext, topic_id: UUID
-) -> SBIRTopic | None:
+async def _reread_topic(ctx: RequestContext, topic_id: UUID) -> SBIRTopic | None:
     ctx.session.expire_all()
     return (
         await ctx.session.execute(select(SBIRTopic).where(SBIRTopic.id == topic_id))
@@ -904,9 +904,7 @@ async def _enrich_via_apify_fallback(topic_number: str):
 def _finish_enrich(refreshed, row, result) -> SBIRTopicEnrichResponse:
     """Build the response from an Apify-fallback `DSIPLookupResult`."""
     refreshed_at = (
-        refreshed.dsip_enriched_at.isoformat()
-        if refreshed and refreshed.dsip_enriched_at
-        else None
+        refreshed.dsip_enriched_at.isoformat() if refreshed and refreshed.dsip_enriched_at else None
     )
     return SBIRTopicEnrichResponse(
         topic_id=str(row.id),
@@ -926,13 +924,6 @@ class SBIRTopicsRefreshResponse(_Out):
     detail: str | None
 
 
-class SBIRTopicsRefreshFastResponse(_Out):
-    fetched: int
-    upserted: int
-    elapsed_secs: float
-    error: str | None
-
-
 class SBIRTopicsRefreshDsipResponse(_Out):
     fetched: int
     upserted: int
@@ -941,26 +932,7 @@ class SBIRTopicsRefreshDsipResponse(_Out):
     error: str | None
 
 
-@router.post(
-    "/sbir/topics/refresh-fast", response_model=SBIRTopicsRefreshFastResponse
-)
-async def refresh_sbir_topics_fast(
-    ctx: Annotated[RequestContext, Depends(get_request_context)],
-) -> SBIRTopicsRefreshFastResponse:
-    """Inline sbirdashboard.com fetch — no Celery, no Apify, sub-second."""
-    _ = ctx
-    result = await refresh_sbirdashboard_topics()
-    return SBIRTopicsRefreshFastResponse(
-        fetched=result.fetched,
-        upserted=result.upserted,
-        elapsed_secs=result.elapsed_secs,
-        error=result.error,
-    )
-
-
-@router.post(
-    "/sbir/topics/refresh-dsip", response_model=SBIRTopicsRefreshDsipResponse
-)
+@router.post("/sbir/topics/refresh-dsip", response_model=SBIRTopicsRefreshDsipResponse)
 async def refresh_sbir_topics_dsip(
     ctx: Annotated[RequestContext, Depends(get_request_context)],
     details: Annotated[bool, Query()] = True,
@@ -997,9 +969,7 @@ async def refresh_sbir_topics(
             kick_sbir_topics_run_task,
         )
     except ImportError as exc:  # pragma: no cover
-        raise HTTPException(
-            status_code=500, detail=f"workers package unavailable: {exc}"
-        ) from exc
+        raise HTTPException(status_code=500, detail=f"workers package unavailable: {exc}") from exc
     try:
         async_result = kick_sbir_topics_run_task.delay()
     except Exception as exc:

@@ -5,10 +5,10 @@ landing pages with `apify/website-content-crawler` (playwright:adaptive)
 and running Claude Haiku over the rendered markdown to extract structured
 topic metadata into `sbir_topics`.
 
-DSIP (dodsbirsttr.mil) firewalls its public JSON endpoints against
-direct server-side calls; only browser-rendered traffic gets through.
-The crawler runs Playwright server-side so the SPA-loaded topic list
-makes it into the rendered text we feed the extractor.
+DSIP (dodsbirsttr.mil) is now pulled directly via its public JSON API by
+the `dsip_ingest` worker — that is the primary DoD SBIR/STTR source. This
+Apify crawl is a secondary net for the non-DSIP landing pages (sbir.gov,
+AFWERX, DLA, Navy, Army, DARPA, SOFWERX) that don't expose a clean API.
 
 Mirrors `apify_industry_days.py` so the operator surface is identical:
 no webhook config required, just APIFY_API_TOKEN + an on-demand kick
@@ -50,11 +50,9 @@ SBIR_TOPICS_RUN_TIMEOUT_SECS = 540
 # open. The crawler walks depth=2 from each so it follows into individual
 # topic detail pages.
 SBIR_TOPIC_SEED_URLS = [
-    # SBIR Dashboard — community-maintained aggregator with ~40 open DoD
-    # topics on a single page. Highest signal-to-noise of any seed:
-    # every row is a topic_number + title + branch + deadline.
-    "https://www.sbirdashboard.com/",
     # DSIP — canonical, but JS-heavy. playwright:adaptive renders it.
+    # (The primary DSIP feed is now the direct-API dsip_ingest worker; this
+    # Apify crawl remains as a secondary net for the other landing pages.)
     "https://www.dodsbirsttr.mil/topics-app/",
     # SBIR.gov topic + solicitation lists.
     "https://www.sbir.gov/topics",

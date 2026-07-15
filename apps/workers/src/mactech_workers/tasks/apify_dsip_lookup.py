@@ -1,22 +1,19 @@
-"""DSIP per-topic lookup via Apify Playwright scraper.
+"""DSIP per-topic lookup via Apify Playwright scraper — FALLBACK ONLY.
 
-sbirdashboard.com gives us topic_number + title + deadline cheaply
-(direct fetch, sub-second). When the user actually picks a topic to
-submit on, we lazily enrich it with the full DSIP data — Technical
-Point of Contact, full description, technology areas, modernization
-priorities, keywords, ITAR/EAR status, and the official topic PDF.
+The primary enrichment path is now `dsip_ingest.enrich_dsip_topic`, which
+hits DSIP's public JSON API directly (no browser, no Apify, no LLM). DSIP
+does not actually firewall server-side calls — the earlier assumption that
+it did is why this Playwright path existed. It is kept only as a fallback
+for the rare case the direct API path fails (schema change, egress block).
 
-DSIP's public JSON endpoints firewall direct server-side calls; only a
-real browser session works. We use `apify/playwright-scraper`'s
-`pageFunction` to drive Playwright server-side: navigate to the SPA,
-fill the search filter with the topic_number, wait for the matching row
-to render, expand it, capture rendered text + the topic PDF download
-link. Then Claude Haiku extracts structured fields from the rendered
-text and we (best-effort) fetch the PDF binary directly for decoding.
+When invoked, it uses `apify/playwright-scraper`'s `pageFunction` to drive
+Playwright server-side: navigate to the SPA, fill the search filter with
+the topic_number, expand the matching row, capture rendered text + the
+topic PDF link. Claude Haiku then extracts structured fields from the
+rendered text and we best-effort fetch the PDF for decoding.
 
-Cost: ~$0.01/topic (Apify Playwright actor minute). Triggered on-demand
-when the user clicks 'Use this topic' on the topics page — so we only
-pay for topics someone actually pursues.
+Cost: ~$0.01/topic (Apify Playwright actor minute). Only reached when the
+direct path fails, so in practice this rarely runs.
 """
 
 from __future__ import annotations
@@ -199,7 +196,7 @@ async def run_dsip_lookup(topic_number: str) -> DSIPLookupResult:
 
     Returns a populated `DSIPLookupResult` either way; failures land in
     `error` and the caller can decide what to do (typically: proceed with
-    sbirdashboard-only data and show a notice).
+    the topic's existing metadata and show a notice).
     """
     api_token = os.environ.get("APIFY_API_TOKEN", "")
     if not api_token:
@@ -476,10 +473,10 @@ async def _persist_enrichment(
 ) -> None:
     """Update every row that matches this topic_number across sources.
 
-    A topic can have both a `source='sbirdashboard'` and a future
-    `source='dsip'` row; enriching by topic_number keeps both in sync
-    so the submitter sees the same data regardless of which row's id
-    was passed.
+    Enriching by topic_number (rather than a single row id) keeps any rows
+    that share the number — e.g. a direct-DSIP row and an Apify-crawled row
+    — in sync so the submitter sees the same data regardless of which row's
+    id was passed.
     """
     async with unscoped_session() as session:
         rows = (
@@ -504,8 +501,8 @@ async def _persist_enrichment(
             if pdf_text:
                 row.dsip_pdf_text = pdf_text
             if extracted:
-                # Only overwrite fields when the extractor produced a value.
-                # Sbirdashboard's lighter values win when DSIP is empty.
+                # Only overwrite fields when the extractor produced a value,
+                # so an empty extraction never wipes existing content.
                 if extracted.get("description"):
                     row.description = extracted["description"]
                 if extracted.get("title"):
