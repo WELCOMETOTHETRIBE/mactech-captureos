@@ -76,19 +76,53 @@ pick out of the list. Four causes, all fixed.
 - New env var `APP_BASE_URL` (default `https://capture.mactechsolutionsllc.com`)
   for deep links in outbound email. Documented in `.env.example`.
 
+### Also fixed — the digest was never actually sending (found in the same pass)
+Dry-running the digest against prod before sending surfaced a
+**pre-existing bug that had silently killed every founder digest**:
+`config/mactech_tenant_defaults.yml` seeds saved-search filters with YAML
+*integers* (`naics: [541519, …]`), but `opportunities_raw.naics_code` is a
+text column. Postgres rejects the comparison outright
+(`operator does not exist: character varying = integer`), so
+`_load_saved_search_hits` raised for every daily saved search.
+`send_digest_to_all_founders` catches per-founder exceptions to keep the
+fan-out alive — which turned a hard failure into `sent=False` stats that
+nobody read. Fixed by coercing at the query (`in_([str(c) for c in …])`)
+rather than trusting the JSON, since filters are free-form and
+hand-editable and fixing only the seed would leave existing rows broken.
+Scoped to saved searches: `tenant.target_naics` is already seeded as
+strings, so the `forecasts.py` filter sharing this shape is unaffected —
+verified against prod.
+
+### Deployed
+- `bfc6054` (feature) + `5c0a509` (digest fix) are live on all three
+  Railway services. `alembic current` on prod = `0037_bid_invite_seen_watermark`;
+  API `/healthz` ok; API + web logs clean.
+- Prod data confirms the diagnosis: rows carry `received_at=2026-07-15 05:03`
+  (the import batch) against true arrivals spread back through 2026-07-14 —
+  the ~8h skew that scrambled the order. 58 untriaged, matching the report.
+- Digest sent manually to Brian / James / Patrick (per-founder, **not**
+  `send_all` — that would have included John, who wasn't asked for and whose
+  governance pillar routes zero invites). All three accepted by Resend.
+
 ### Blocked / Needs decision
-- **Migration `0037` is not yet applied to prod.** Needs
-  `alembic upgrade head` on Railway. Until then the API will error on the
-  missing `founders.bid_invites_seen_at` column — deploy the migration
-  with (or before) the API.
-- Nothing verified against the real prod dataset yet; the ordering fix was
-  proven against synthetic data reproducing the reported scenario. Worth a
-  look at the live page once `0037` is applied.
+- **The 6am beat still calls `mactech.digest.send_all`**, which fans out to
+  every `digest_enabled` founder — John included. Unchanged from before;
+  flag if the recurring send should be narrowed.
+- The watermark seed (`now() - 24h`) puts the unseen badge at **18**, not the
+  3 that prompted this. All 18 are genuinely untriaged mail from the last
+  24h, and one "Mark all seen" resets it — after which counts are exact. Say
+  if a tighter seed is wanted.
+- `unseen` is tenant-wide, not per-founder-routed: all four founders see the
+  same badge count, because Bid Invites is a shared inbox. Per-founder
+  filtering would be a design change.
 
 ### Next up
 - Consider whether "Mark all seen" should also be reachable from the
   dashboard rail, or whether opening an invite detail should clear just
   that one.
+- The seed YAML's bare-int NAICS is still the origin of the digest bug; the
+  query now tolerates it, but quoting them in
+  `config/mactech_tenant_defaults.yml` would stop new tenants inheriting it.
 
 ---
 
