@@ -3,7 +3,12 @@ import { notFound } from "next/navigation";
 import { BidInviteAction } from "@/components/bid-invite-actions";
 import { apiFetch, type BidInviteDetail } from "@/lib/api";
 import { pursueBidInvite, setBidInviteStatus } from "@/lib/bid-invites";
-import { KIND_LABEL, KIND_TONE, dueMeta } from "@/lib/bid-invite-view";
+import {
+  KIND_LABEL,
+  KIND_TONE,
+  dueMeta,
+  withBlankLinkTarget
+} from "@/lib/bid-invite-view";
 import { BackLink, Badge, PageHeader, fmtDate } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -181,12 +186,23 @@ export default async function BidInviteDetailPage({
           </p>
         </header>
         {invite.html_body ? (
-          // Sandboxed with no permissions: BuildingConnected HTML renders,
-          // but scripts, forms, and top-navigation are all inert.
+          // Untrusted third-party HTML. Scripts, forms, same-origin access
+          // and top-navigation all stay revoked — the email can never run
+          // code or steer the CaptureOS tab.
+          //
+          // Popups are the one capability granted, because without them a
+          // link like "View this RFP" (BuildingConnected sends them with no
+          // target) navigates *this frame* to a JS single-page app that can
+          // never boot with scripts disabled — it just spins forever.
+          // allow-popups lets the click open a tab;
+          // allow-popups-to-escape-sandbox makes that tab a normal one,
+          // without which the SPA would inherit the sandbox and spin there
+          // instead. Scripts stay off, so only a real click can open
+          // anything — the email can't spawn tabs on its own.
           <iframe
             title="Original email"
-            sandbox=""
-            srcDoc={invite.html_body}
+            sandbox="allow-popups allow-popups-to-escape-sandbox"
+            srcDoc={withBlankLinkTarget(invite.html_body)}
             className="h-[70vh] w-full rounded-b-md bg-white"
           />
         ) : (

@@ -153,6 +153,36 @@ export function dueMeta(bidDueOn: string | null): DueMeta | null {
   return { tone: "neutral", label: `due ${pretty}`, daysLeft: days };
 }
 
+/**
+ * Force every link in a rendered email to open in a new tab.
+ *
+ * BuildingConnected links its RFP with a bare `<a href>` and no target,
+ * which inside an iframe means "navigate this iframe": the reader loses
+ * the email and lands on a JS app that can't boot, since the frame's
+ * sandbox revokes scripts. One `<base target="_blank">` retargets the
+ * whole document without rewriting links one by one.
+ *
+ * Placement matters. The tag has to land in <head>, and it must never be
+ * prepended ahead of a doctype — that flips the document into quirks mode
+ * and reflows the table layout every HTML email is built on. So: insert
+ * after <head> when there is one (59 of 60 stored emails), synthesize a
+ * head under <html> if needed, insert after a lone doctype, and only
+ * prepend for a bare fragment, where there's no doctype to displace.
+ *
+ * Browsers imply rel=noopener for target=_blank, and the frame has no
+ * scripts anyway, so the opened tab can't reach back through opener.
+ */
+export function withBlankLinkTarget(html: string): string {
+  const base = '<base target="_blank">';
+  const head = html.match(/<head[^>]*>/i);
+  if (head) return html.replace(head[0], `${head[0]}${base}`);
+  const htmlTag = html.match(/<html[^>]*>/i);
+  if (htmlTag) return html.replace(htmlTag[0], `${htmlTag[0]}<head>${base}</head>`);
+  const doctype = html.match(/^\s*<!doctype[^>]*>/i);
+  if (doctype) return html.replace(doctype[0], `${doctype[0]}${base}`);
+  return base + html;
+}
+
 export const KIND_LABEL: Record<string, string> = {
   invite: "invite",
   reminder: "reminder",
