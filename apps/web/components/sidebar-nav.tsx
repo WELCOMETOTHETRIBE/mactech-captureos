@@ -23,6 +23,12 @@ const NAV = [
     match: (p: string) => p.startsWith("/pipeline")
   },
   {
+    href: "/bid-invites",
+    label: "Bid Invites",
+    sub: "Inbound GC solicitations",
+    match: (p: string) => p.startsWith("/bid-invites")
+  },
+  {
     href: "/library",
     label: "Library",
     sub: "Capability statements",

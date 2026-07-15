@@ -1533,3 +1533,56 @@ export type CapturePackageOut = {
   qa_history: CPQAHistorySection;
   completeness: CPPackageCompleteness;
 };
+
+/* ── /bid-invites ───────────────────────────────────────────────── */
+
+export type BidInviteStatus = "new" | "reviewed" | "archived";
+
+export type BidInviteKind =
+  | "invite"
+  | "reminder"
+  | "due_date_change"
+  | "addendum"
+  | "message"
+  | "reply"
+  | "other";
+
+export type BidInviteAttachment = {
+  name: string | null;
+  content_type: string | null;
+  size: number | null;
+};
+
+export type BidInviteListItem = {
+  id: string;
+  from_email: string | null;
+  from_name: string | null;
+  subject: string;
+  attachments: BidInviteAttachment[] | null;
+  status: BidInviteStatus;
+  sent_at: string | null;
+  received_at: string;
+  kind: BidInviteKind | null;
+  project_name: string | null;
+  bid_package: string | null;
+  gc_company: string | null;
+  lead_name: string | null;
+  lead_email: string | null;
+  lead_phone: string | null;
+  location: string | null;
+  bid_due_on: string | null;
+  rfp_id: string | null;
+  rfp_url: string | null;
+  headline: string | null;
+};
+
+export type BidInviteDetail = BidInviteListItem & {
+  text_body: string | null;
+  html_body: string | null;
+};
+
+export type BidInvitesResponse = {
+  total: number;
+  counts: Record<BidInviteStatus, number>;
+  items: BidInviteListItem[];
+};

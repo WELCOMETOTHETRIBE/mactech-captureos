@@ -52,6 +52,7 @@ from fastapi import APIRouter, Header, HTTPException, Request, status
 from mactech_db import unscoped_session
 from mactech_db.models import ApifyRun, BidInvite, Tenant
 from mactech_integrations.apify import verify_webhook_signature
+from mactech_intelligence.bid_invite_parser import parse_bid_invite
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -503,6 +504,7 @@ async def postmark_inbound_webhook(
             )
             return PostmarkInboundAck(stored=False, reason="no_tenant")
 
+        parsed = parse_bid_invite(subject, body.text_body)
         stmt = (
             pg_insert(BidInvite)
             .values(
@@ -515,6 +517,19 @@ async def postmark_inbound_webhook(
                 html_body=body.html_body,
                 attachments=attachments_meta,
                 sent_at=sent_at,
+                kind=parsed.kind,
+                project_name=parsed.project_name,
+                bid_package=parsed.bid_package,
+                gc_company=parsed.gc_company,
+                lead_name=parsed.lead_name,
+                lead_email=parsed.lead_email,
+                lead_phone=parsed.lead_phone,
+                location=parsed.location,
+                bid_due_on=parsed.bid_due_on,
+                rfp_id=parsed.rfp_id,
+                rfp_url=parsed.rfp_url,
+                headline=parsed.headline,
+                parsed_at=datetime.now(UTC),
             )
             .on_conflict_do_nothing(index_elements=["postmark_message_id"])
             .returning(BidInvite.id)

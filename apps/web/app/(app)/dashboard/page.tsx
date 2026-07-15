@@ -8,12 +8,14 @@ import {
   apiFetch,
   type AgencyEventOut,
   type AgencyEventsResponse,
+  type BidInvitesResponse,
   type DashboardResponse,
   type ForecastOut,
   type ForecastsResponse,
   type MeResponse,
   type TenantEligibilityOut
 } from "@/lib/api";
+import { dueMeta, groupBidInvites, type BidInviteGroup } from "@/lib/bid-invite-view";
 import { dismissHowItWorks, showHowItWorks } from "@/lib/preferences";
 import {
   EmptyState,
@@ -34,7 +36,7 @@ export const dynamic = "force-dynamic";
 const HOW_IT_WORKS_COOKIE = "mactech.dismiss.howitworks";
 
 export default async function DashboardPage() {
-  const [data, me, ck, events, myRecompetes, sdvosbRecompetes, topForecasts, eligibility] = await Promise.all([
+  const [data, me, ck, events, myRecompetes, sdvosbRecompetes, topForecasts, eligibility, bidInvites] = await Promise.all([
     apiFetch<DashboardResponse>("/me/dashboard"),
     apiFetch<MeResponse>("/me"),
     cookies(),
@@ -76,6 +78,14 @@ export default async function DashboardPage() {
     ),
     apiFetch<TenantEligibilityOut>("/tenant/eligibility").catch(
       () => null as TenantEligibilityOut | null
+    ),
+    apiFetch<BidInvitesResponse>("/bid-invites?limit=500").catch(
+      () =>
+        ({
+          total: 0,
+          counts: { new: 0, reviewed: 0, archived: 0 },
+          items: []
+        }) as BidInvitesResponse
     )
   ]);
 
@@ -541,6 +551,7 @@ export default async function DashboardPage() {
             )
             .slice(0, 1),
         ].slice(0, 3)}
+        bidInvites={bidInvites}
       />
 
       {/* Removed in Sprint C: separate full-width sections for events,
@@ -652,14 +663,41 @@ function Step({
 function ComingUpRail({
   forecasts,
   events,
-  recompetes
+  recompetes,
+  bidInvites
 }: {
   forecasts: ForecastOut[];
   events: AgencyEventOut[];
   recompetes: ForecastOut[];
+  bidInvites: BidInvitesResponse;
 }) {
+  // Bid invites collapse to project groups so one solicitation with an
+  // invite + three reminders reads as a single row, deadline soonest
+  // first (groupBidInvites already sorts that way).
+  const inviteGroups = groupBidInvites(
+    bidInvites.items.filter((i) => i.status === "new")
+  ).slice(0, 3);
   return (
-    <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+    <section className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-4">
+      <ComingUpColumn
+        label="Bid invites"
+        sub="Inbound GC solicitations, due soonest"
+        seeAllHref="/bid-invites"
+        count={bidInvites.counts.new}
+      >
+        {inviteGroups.length === 0 ? (
+          <ComingUpEmpty
+            msg="No new bid invites."
+            ctaLabel="Open the invite inbox"
+            ctaHref="/bid-invites"
+          />
+        ) : (
+          inviteGroups.map((g) => (
+            <ComingUpBidInviteRow key={g.key} group={g} />
+          ))
+        )}
+      </ComingUpColumn>
+
       <ComingUpColumn
         label="Coming to SAM"
         sub="Forecasts in your NAICS, 30–180 days out"
@@ -783,6 +821,41 @@ function ComingUpEmpty({
           {ctaLabel} →
         </Link>
       )}
+    </li>
+  );
+}
+
+function ComingUpBidInviteRow({ group }: { group: BidInviteGroup }) {
+  const due = dueMeta(group.bidDueOn);
+  return (
+    <li className="py-2.5">
+      <Link
+        href="/bid-invites"
+        className="block hover:bg-secondary -mx-2 px-2 py-1 rounded"
+      >
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="line-clamp-1 text-sm font-medium text-foreground">
+            {group.projectName}
+          </p>
+          {due && (
+            <span
+              className={`shrink-0 text-[10px] font-medium tabular-nums ${
+                due.tone === "red"
+                  ? "text-destructive"
+                  : due.tone === "amber"
+                  ? "text-warning"
+                  : "text-muted-foreground"
+              }`}
+            >
+              {due.label}
+            </span>
+          )}
+        </div>
+        <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">
+          {group.gcCompany ?? "general contractor"}
+          {group.bidPackage ? ` · ${group.bidPackage}` : ""}
+        </p>
+      </Link>
     </li>
   );
 }
