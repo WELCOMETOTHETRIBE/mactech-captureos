@@ -104,6 +104,33 @@ verified against prod.
   `send_all` — that would have included John, who wasn't asked for and whose
   governance pillar routes zero invites). All three accepted by Resend.
 
+### Also fixed — links in the embedded email hung the frame (`23a5ab0`)
+Clicking "View this RFP" in the original-email iframe spun forever instead
+of opening BuildingConnected. Two causes compounding: BuildingConnected
+links its RFP with a bare `<a href>` and **no target** (verified across the
+stored corpus), so inside an iframe the click navigates *the iframe*; and
+`sandbox=""` revokes scripts, so the BuildingConnected SPA it navigated to
+could never boot. Endless spinner, in-frame, email gone.
+
+Granted popups and only popups: `allow-popups` so the click can open a tab,
+`allow-popups-to-escape-sandbox` so that tab is a normal one — without the
+latter the SPA inherits the sandbox and spins in the *new* tab instead.
+Scripts, forms, same-origin and top-navigation stay revoked, so the email
+still cannot run code, submit, touch our origin, or steer the CaptureOS
+tab; with scripts off only a real click can open anything. Retargeted the
+document with one injected `<base target="_blank">` rather than rewriting
+anchors — placement must be inside `<head>` and never ahead of a doctype,
+which would flip the email's table layout into quirks mode.
+`withBlankLinkTarget` lives in `lib/bid-invite-view.ts` with the other pure
+helpers so it's exercisable outside React.
+
+Verified against all 62 stored emails (base injected in every one, doctype
+displaced in none; 59 carry `<head>`, 1 is a bare fragment) and live in
+prod: served `sandbox="allow-popups allow-popups-to-escape-sandbox"`, base
+inside head and after doctype, click leaves the iframe untouched, and no
+"Blocked opening … allow-popups … not set" console entry — i.e. the popup
+was permitted, not silently blocked.
+
 ### Blocked / Needs decision
 - **The 6am beat still calls `mactech.digest.send_all`**, which fans out to
   every `digest_enabled` founder — John included. Unchanged from before;
