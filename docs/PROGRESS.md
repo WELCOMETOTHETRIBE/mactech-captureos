@@ -66,6 +66,23 @@ Format per entry:
 - Bid invites inbox page in the web app; auto-link an invite to an
   opportunity/pursuit when a solicitation number is detected in the body.
 
+### Update (same day, late evening) — parse + enrich + dashboard UX
+- `mactech_intelligence.bid_invite_parser` — deterministic template
+  parser for BuildingConnected mail (invite/message shapes): kind,
+  project, bid package, GC, lead contact, location, bid-due date
+  (due-date extensions supersede the stale Bid Due block), RFP id/url.
+  Validated against all 59 real messages locally; committed fixtures
+  are synthetic (no contractor PII in the public repo).
+- Migration `0034` adds the parsed columns; webhook parses at ingest;
+  `POST /bid-invites/reparse` + `scripts/reparse_bid_invites.py`
+  backfill (ran in prod via `railway ssh` — 60/60 reparsed).
+- Web: `/bid-invites` triage inbox (status tabs, project-grouped cards
+  with urgency chips, group/row review-archive server actions),
+  `/bid-invites/[id]` detail (parsed facts + original email in a
+  sandboxed iframe), dashboard rail "Bid invites" column, sidebar nav.
+- Deployed to prod (API + web). Visual pass pending Patrick signing
+  into the web app; all data verified at the API/DB layer.
+
 ### Update (same day, evening)
 - Requirement clarified: the Gmail **label** "Bid Invite" is the
   selector, not the subject — webhook now stores everything forwarded
