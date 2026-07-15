@@ -185,7 +185,18 @@ async def _load_saved_search_hits(
             .limit(SAVED_SEARCH_HITS_CAP)
         )
         if naics_codes:
-            stmt = stmt.where(OpportunityRaw.naics_code.in_(naics_codes))
+            # naics_code is text, but the seed config (config/
+            # mactech_tenant_defaults.yml) writes these as YAML integers —
+            # 541519, not "541519" — and Postgres refuses to compare them:
+            # `operator does not exist: character varying = integer`. That
+            # raised inside every daily digest, which
+            # send_digest_to_all_founders swallowed per-founder as
+            # sent=False, so no digest was ever delivered. Coerce here
+            # rather than trusting the JSON: filters are free-form and
+            # hand-editable, so the query must tolerate either type.
+            stmt = stmt.where(
+                OpportunityRaw.naics_code.in_([str(c) for c in naics_codes])
+            )
         if set_asides:
             stmt = stmt.where(OpportunityRaw.set_aside.in_(set_asides))
         # Keyword ILIKE pre-filter is for general saved searches that don't
