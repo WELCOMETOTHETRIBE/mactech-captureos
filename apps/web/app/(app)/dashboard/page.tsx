@@ -83,7 +83,7 @@ export default async function DashboardPage() {
       () =>
         ({
           total: 0,
-          counts: { new: 0, reviewed: 0, archived: 0 },
+          counts: { new: 0, reviewed: 0, archived: 0, unseen: 0 },
           items: []
         }) as BidInvitesResponse
     )
@@ -672,18 +672,25 @@ function ComingUpRail({
   bidInvites: BidInvitesResponse;
 }) {
   // Bid invites collapse to project groups so one solicitation with an
-  // invite + three reminders reads as a single row, deadline soonest
-  // first (groupBidInvites already sorts that way).
+  // invite + three reminders reads as a single row. groupBidInvites
+  // leads with anything unseen, then falls back to deadline order.
   const inviteGroups = groupBidInvites(
     bidInvites.items.filter((i) => i.status === "new")
   ).slice(0, 3);
+  const unseenInvites = bidInvites.counts.unseen;
   return (
     <section className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-4">
       <ComingUpColumn
         label="Bid invites"
-        sub="Inbound GC solicitations, due soonest"
+        // The count is the headline number, so it tracks what's actually
+        // new; the untriaged backlog is the standing state behind it.
+        sub={
+          unseenInvites > 0
+            ? "Arrived since you last looked"
+            : "Inbound GC solicitations, due soonest"
+        }
         seeAllHref="/bid-invites"
-        count={bidInvites.counts.new}
+        count={unseenInvites > 0 ? unseenInvites : bidInvites.counts.new}
       >
         {inviteGroups.length === 0 ? (
           <ComingUpEmpty
@@ -835,6 +842,15 @@ function ComingUpBidInviteRow({ group }: { group: BidInviteGroup }) {
       >
         <div className="flex items-baseline justify-between gap-2">
           <p className="line-clamp-1 text-sm font-medium text-foreground">
+            {group.unseenCount > 0 && (
+              <>
+                <span className="sr-only">Unread — </span>
+                <span
+                  className="mr-1.5 inline-block size-1.5 shrink-0 rounded-full bg-primary align-middle"
+                  aria-hidden
+                />
+              </>
+            )}
             {group.projectName}
           </p>
           {due && (

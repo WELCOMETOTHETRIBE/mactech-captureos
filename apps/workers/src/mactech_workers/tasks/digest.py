@@ -1,9 +1,13 @@
 """Morning digest delivery.
 
 Renders each digest-enabled founder's top-N scored opportunities + the
-Claude-written rationale + 1-line incumbent summary, then sends via
-Resend. Phase 1 success criterion: 6am ET weekdays, founders receive
-the email in their inbox.
+Claude-written rationale + 1-line incumbent summary + the inbound bid
+invites routed to their pillar, then sends via Resend. Phase 1 success
+criterion: 6am ET weekdays, founders receive the email in their inbox.
+
+Bid invites are in here because they were previously reachable *only* by
+opening the app: an invite forwarded in at 2am sat unseen until someone
+happened to look, and GCs bid on days-long fuses.
 
 Domain-verification status is the gating factor for delivery to anyone
 but `patrick@mactechsolutionsllc.com` (Resend's free-tier rule). The
@@ -17,7 +21,7 @@ import asyncio
 import logging
 import os
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 from html import escape
 
@@ -26,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from mactech_db import async_session_factory
 from mactech_db.models import (
+    BidInvite,
     Founder,
     OpportunityEnriched,
     OpportunityRaw,
@@ -34,6 +39,7 @@ from mactech_db.models import (
     Tenant,
 )
 from mactech_integrations.resend import ResendClient, ResendError
+from mactech_intelligence.bid_invite_routing import project_group_key, suggest_founder
 from mactech_workers.celery_app import celery_app
 
 log = logging.getLogger(__name__)
@@ -41,6 +47,15 @@ log = logging.getLogger(__name__)
 DEFAULT_TOP_N = 5
 MIN_SCORE_FOR_DIGEST = 60
 SAVED_SEARCH_HITS_CAP = 5  # per search; bound email length
+
+BID_INVITE_CAP = 5  # projects per digest; bound email length
+# Untriaged invites stay in the digest for this long. Longer than the
+# daily cadence on purpose: the beat runs weekdays only, so a strict
+# "since yesterday" window would drop everything that landed over a
+# weekend. Re-showing an untriaged invite is the safe failure; silently
+# skipping one is not.
+BID_INVITE_LOOKBACK_DAYS = 7
+BID_INVITE_RECENT_HOURS = 24  # flagged "new overnight" in the email
 
 
 @dataclass
@@ -67,6 +82,19 @@ class SavedSearchHits:
 
 
 @dataclass
+class BidInviteDigestRow:
+    project_name: str
+    gc_company: str | None
+    bid_package: str | None
+    lead_name: str | None
+    bid_due_on: date | None
+    arrived_at: datetime
+    is_recent: bool  # arrived within BID_INVITE_RECENT_HOURS
+    email_count: int  # emails in the thread (invite + reminders + …)
+    url: str
+
+
+@dataclass
 class DigestSendStats:
     founder_slug: str
     founder_name: str
@@ -76,6 +104,7 @@ class DigestSendStats:
     sent: bool
     skipped_reason: str | None
     message_id: str | None
+    bid_invite_count: int = 0
 
 
 def _short_agency(full_path: str | None) -> str | None:
@@ -279,6 +308,195 @@ async def _load_top_for_founder(
     return out
 
 
+def _app_base_url() -> str:
+    return os.environ.get(
+        "APP_BASE_URL", "https://capture.mactechsolutionsllc.com"
+    ).rstrip("/")
+
+
+def _due_label(bid_due_on: date | None, today: date) -> str | None:
+    """Mirrors the UI's urgency chip (lib/bid-invite-view.ts dueMeta)."""
+    if bid_due_on is None:
+        return None
+    days = (bid_due_on - today).days
+    if days < 0:
+        return f"closed {bid_due_on:%b %-d}"
+    if days == 0:
+        return "due today"
+    if days == 1:
+        return "due tomorrow"
+    if days <= 7:
+        return f"due in {days}d"
+    return f"due {bid_due_on:%b %-d}"
+
+
+def _first(bucket: list[BidInvite], attr: str):
+    """First non-empty `attr` across a thread, newest email first.
+
+    BuildingConnected reminders and replies parse sparsely, so the newest
+    email often lacks the GC/package/location the original invite
+    carried; fall down the thread until something is populated.
+    """
+    return next((v for v in (getattr(i, attr) for i in bucket) if v), None)
+
+
+async def _load_bid_invites_for_founder(
+    session: AsyncSession, tenant: Tenant, founder: Founder
+) -> list[BidInviteDigestRow]:
+    """Untriaged bid invites whose scope routes to this founder's pillar.
+
+    Ordered by true arrival — coalesce(sent_at, received_at), since
+    received_at is ingest time and the mbox backfill collapsed it onto a
+    single import timestamp.
+
+    Routing is `suggest_founder`, the same keyword→pillar mapping the API
+    and UI use, so the digest agrees with the "Routes to …" line on the
+    card. It's keyword matching over parsed text, not a SQL predicate,
+    hence the Python-side filter.
+    """
+    now = datetime.now(UTC)
+    cutoff = now - timedelta(days=BID_INVITE_LOOKBACK_DAYS)
+    rows = (
+        (
+            await session.execute(
+                select(BidInvite)
+                .where(
+                    BidInvite.tenant_id == tenant.id,
+                    BidInvite.status == "new",
+                    BidInvite.arrived_at >= cutoff,
+                )
+                .order_by(BidInvite.arrived_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    # Collapse each solicitation's thread (invite → reminder → addendum)
+    # to one row; rows arrive newest-first so the first hit per group is
+    # the freshest and carries the group's arrival time.
+    groups: dict[str, list[BidInvite]] = {}
+    for inv in rows:
+        suggestion = suggest_founder(inv.bid_package, inv.project_name, inv.subject)
+        if suggestion is None or suggestion[0] != founder.slug:
+            continue
+        key = inv.group_key or project_group_key(inv.project_name, inv.subject)
+        groups.setdefault(key, []).append(inv)
+
+    today = now.date()
+    recent_cutoff = now - timedelta(hours=BID_INVITE_RECENT_HOURS)
+    out: list[BidInviteDigestRow] = []
+    for bucket in groups.values():
+        newest = bucket[0]
+        out.append(
+            BidInviteDigestRow(
+                project_name=_first(bucket, "project_name") or newest.subject,
+                gc_company=_first(bucket, "gc_company"),
+                bid_package=_first(bucket, "bid_package"),
+                lead_name=_first(bucket, "lead_name"),
+                # Newest email stating a deadline wins, so a "Due Date
+                # Extended" supersedes the original invite.
+                bid_due_on=_first(bucket, "bid_due_on"),
+                arrived_at=newest.arrived_at,
+                is_recent=newest.arrived_at >= recent_cutoff,
+                email_count=len(bucket),
+                url=f"{_app_base_url()}/bid-invites/{newest.id}",
+            )
+        )
+    # Same shape as the page: overnight arrivals lead, then due-soonest,
+    # undated last. Sorted before the cap so a bid closing tomorrow can't
+    # be squeezed out by five fresher-but-distant invites.
+    out.sort(key=lambda r: (not r.is_recent, r.bid_due_on is None, r.bid_due_on or today))
+    if len(out) > BID_INVITE_CAP:
+        log.info(
+            "digest bid invites truncated for founder=%s: %d of %d shown",
+            founder.slug,
+            BID_INVITE_CAP,
+            len(out),
+        )
+    return out[:BID_INVITE_CAP]
+
+
+def _render_bid_invites_html(rows: list[BidInviteDigestRow]) -> str:
+    if not rows:
+        return ""
+    today = datetime.now(UTC).date()
+    items: list[str] = []
+    for r in rows:
+        due = _due_label(r.bid_due_on, today)
+        urgent = due is not None and due.startswith(("due today", "due tomorrow"))
+        due_html = (
+            f'<span style="display:inline-block;background:'
+            f'{"#7f1d1d" if urgent else "#f3f4f6"};color:{"#fff" if urgent else "#444"};'
+            f'font-size:10px;letter-spacing:.06em;text-transform:uppercase;'
+            f'padding:2px 8px;border-radius:3px;margin-left:8px;'
+            f'vertical-align:middle">{escape(due)}</span>'
+            if due
+            else ""
+        )
+        new_html = (
+            '<span style="display:inline-block;background:#207b78;color:#fff;'
+            "font-size:10px;letter-spacing:.08em;text-transform:uppercase;"
+            'padding:2px 8px;border-radius:3px;margin-left:8px;'
+            'vertical-align:middle">New overnight</span>'
+            if r.is_recent
+            else ""
+        )
+        meta = " · ".join(
+            b
+            for b in (
+                r.gc_company or "",
+                r.lead_name or "",
+                r.bid_package or "",
+                f"{r.email_count} emails" if r.email_count > 1 else "",
+            )
+            if b
+        )
+        items.append(
+            f"""
+            <div style="border:1px solid #e5e5e5;border-radius:6px;padding:12px 16px;margin-bottom:8px;background:#fff">
+              <div style="font-size:14px;font-weight:600;color:#111;margin:0 0 4px">
+                {escape(r.project_name)}{new_html}{due_html}
+              </div>
+              <div style="font-size:12px;color:#888">{escape(meta)}</div>
+              <div style="margin-top:8px">
+                <a href="{escape(r.url)}" style="color:#1a3a5c;font-size:13px">Review in CaptureOS</a>
+              </div>
+            </div>
+            """.strip()
+        )
+    return (
+        f'<div style="margin:18px 0 8px"><h2 style="font-size:14px;'
+        f'margin:0 0 8px;color:#1a3a5c">'
+        f"Bid invites in your lane · {len(rows)} awaiting review</h2></div>"
+        + "".join(items)
+    )
+
+
+def _render_bid_invites_text(rows: list[BidInviteDigestRow]) -> list[str]:
+    if not rows:
+        return []
+    today = datetime.now(UTC).date()
+    out = ["", f"-- Bid invites in your lane ({len(rows)} awaiting review) --"]
+    for r in rows:
+        tags = " ".join(
+            t
+            for t in (
+                "[New overnight]" if r.is_recent else "",
+                f"[{_due_label(r.bid_due_on, today)}]" if r.bid_due_on else "",
+            )
+            if t
+        )
+        out.append(f"  {r.project_name}{f'  {tags}' if tags else ''}")
+        meta = " · ".join(
+            b for b in (r.gc_company or "", r.lead_name or "", r.bid_package or "") if b
+        )
+        if meta:
+            out.append(f"    {meta}")
+        out.append(f"    {r.url}")
+    return out
+
+
 def _render_search_block_html(hits: SavedSearchHits) -> str:
     items: list[str] = []
     for r in hits.rows:
@@ -341,6 +559,7 @@ def _render_html(
     founder: Founder,
     rows: list[DigestRow],
     saved_search_blocks: list[SavedSearchHits] | None = None,
+    bid_invites: list[BidInviteDigestRow] | None = None,
 ) -> str:
     today = datetime.now(UTC).strftime("%A, %B %-d, %Y")
     items_html: list[str] = []
@@ -391,6 +610,11 @@ def _render_html(
         '<p style="color:#666">No opportunities scored above the threshold today. '
         "Continuous SAM ingestion runs every 2 hours; check back tomorrow.</p>"
     )
+    # Invites lead: a GC solicitation is a named human waiting on a reply
+    # against a short fuse, which outranks a scored SAM notice.
+    invites_html = _render_bid_invites_html(bid_invites or [])
+    if invites_html:
+        items_block = invites_html + items_block
     saved_search_html = ""
     for hits in saved_search_blocks or []:
         saved_search_html += _render_search_block_html(hits)
@@ -405,7 +629,7 @@ def _render_html(
       <tr><td style="padding:24px 28px;border-bottom:1px solid #e5e5e5">
         <p style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#666;margin:0 0 4px">MacTech CaptureOS</p>
         <h1 style="font-size:20px;margin:0;color:#111">{escape(founder.full_name)} — {today}</h1>
-        <p style="margin:4px 0 0;color:#666;font-size:13px">{escape(founder.pillar.title())} pillar · top {len(rows)} scored opportunities</p>
+        <p style="margin:4px 0 0;color:#666;font-size:13px">{escape(founder.pillar.title())} pillar · top {len(rows)} scored opportunities{f" · {len(bid_invites)} bid invite{'s' if len(bid_invites) != 1 else ''}" if bid_invites else ""}</p>
       </td></tr>
       <tr><td style="padding:20px 28px;background:#fafafa">
         {items_block}
@@ -424,9 +648,12 @@ def _render_text(
     founder: Founder,
     rows: list[DigestRow],
     saved_search_blocks: list[SavedSearchHits] | None = None,
+    bid_invites: list[BidInviteDigestRow] | None = None,
 ) -> str:
     today = datetime.now(UTC).strftime("%A, %B %-d, %Y")
     out = [f"MacTech CaptureOS — {today}", f"{founder.full_name} ({founder.pillar})"]
+    # Invites lead here too, matching the HTML part.
+    out.extend(_render_bid_invites_text(bid_invites or []))
     out.append("")
     if not rows:
         out.append("No opportunities scored above the threshold today.")
@@ -565,6 +792,7 @@ async def send_digest_for_founder(
         saved_hits = await _load_saved_search_hits(
             session, tenant=tenant, founder=founder
         )
+        bid_invites = await _load_bid_invites_for_founder(session, tenant, founder)
 
     saved_total = sum(len(h.rows) for h in saved_hits)
     today = datetime.now(UTC).strftime("%a %b %-d")
@@ -573,12 +801,19 @@ async def send_digest_for_founder(
         if saved_total
         else ""
     )
+    # Invites go in the subject so they're visible without opening the
+    # mail — that's the whole point of putting them in the digest.
+    invite_extra = (
+        f" + {len(bid_invites)} bid invite{'s' if len(bid_invites) != 1 else ''}"
+        if bid_invites
+        else ""
+    )
     subject = (
         f"[MacTech Capture] {len(rows)} {founder.full_name.split()[0]} picks"
-        f"{extra} for {today}"
+        f"{invite_extra}{extra} for {today}"
     )
-    html = _render_html(founder, rows, saved_hits)
-    text = _render_text(founder, rows, saved_hits)
+    html = _render_html(founder, rows, saved_hits, bid_invites)
+    text = _render_text(founder, rows, saved_hits, bid_invites)
 
     async with ResendClient(api_key=api_key) as resend:
         try:
@@ -605,6 +840,7 @@ async def send_digest_for_founder(
                 sent=False,
                 skipped_reason=f"resend error: {exc!s}"[:300],
                 message_id=None,
+                bid_invite_count=len(bid_invites),
             )
 
     # Mark each saved search that contributed hits as delivered. Uses a
@@ -618,11 +854,12 @@ async def send_digest_for_founder(
             await session2.commit()
 
     log.info(
-        "digest sent founder=%s recipient=%s items=%d saved_hits=%d msg=%s",
+        "digest sent founder=%s recipient=%s items=%d saved_hits=%d invites=%d msg=%s",
         founder.slug,
         founder.email,
         len(rows),
         saved_total,
+        len(bid_invites),
         result.message_id,
     )
     return DigestSendStats(
@@ -634,6 +871,7 @@ async def send_digest_for_founder(
         sent=True,
         skipped_reason=None,
         message_id=result.message_id,
+        bid_invite_count=len(bid_invites),
     )
 
 

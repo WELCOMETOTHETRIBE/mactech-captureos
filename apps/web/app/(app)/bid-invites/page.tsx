@@ -7,6 +7,7 @@ import {
   type BidInvitesResponse
 } from "@/lib/api";
 import {
+  markBidInvitesSeen,
   pursueBidInvite,
   setBidInviteGroupStatus,
   setBidInviteStatus
@@ -16,6 +17,7 @@ import {
   KIND_TONE,
   dueMeta,
   groupBidInvites,
+  unseenBandSize,
   type BidInviteGroup
 } from "@/lib/bid-invite-view";
 import { Badge, EmptyState, PageHeader, fmtDate } from "@/components/ui";
@@ -29,7 +31,13 @@ type SP = Promise<{ tab?: string }>;
  * Bid Invites — the inbound solicitation inbox. Gmail forwards every
  * BuildingConnected email to the Postmark webhook; here they arrive
  * grouped by project with the invite → reminder → due-date-change
- * thread collapsed into one card, ordered by how soon the bid is due.
+ * thread collapsed into one card.
+ *
+ * Two ordering concerns, in tension: what's *urgent* (bid due soonest)
+ * and what's *new* (arrived since you last looked). The list leads with
+ * an unseen band so new mail can't hide behind a distant deadline, then
+ * falls back to deadline order. "Unseen" is per-founder and transient;
+ * the status tabs remain the durable triage state.
  */
 export default async function BidInvitesPage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
@@ -43,6 +51,8 @@ export default async function BidInvitesPage({ searchParams }: { searchParams: S
   const visible =
     tab === "all" ? data.items : data.items.filter((i) => i.status === tab);
   const groups = groupBidInvites(visible);
+  const bandSize = unseenBandSize(groups);
+  const unseen = data.counts.unseen;
 
   const tabs: { key: Tab; label: string; count: number }[] = [
     { key: "new", label: "New", count: data.counts.new },
@@ -58,6 +68,30 @@ export default async function BidInvitesPage({ searchParams }: { searchParams: S
         title="Bid Invites"
         subtitle="Solicitations from general contractors, forwarded from the BuildingConnected inbox and parsed automatically."
       />
+
+      {unseen > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary/40 bg-primary/5 px-4 py-3">
+          <p className="text-sm text-foreground">
+            <span className="font-semibold">
+              {unseen} new {unseen === 1 ? "email" : "emails"}
+            </span>{" "}
+            since you last checked
+            {bandSize > 0 && (
+              <>
+                {" "}
+                — across {bandSize} {bandSize === 1 ? "project" : "projects"} at
+                the top of this list
+              </>
+            )}
+            .
+          </p>
+          <BidInviteAction
+            action={markBidInvitesSeen}
+            label="Mark all seen"
+            variant="ghost"
+          />
+        </div>
+      )}
 
       <nav className="flex flex-wrap items-center gap-1 border-b border-border pb-px text-sm">
         {tabs.map((t) => {
@@ -96,8 +130,23 @@ export default async function BidInvitesPage({ searchParams }: { searchParams: S
         />
       ) : (
         <div className="space-y-4">
-          {groups.map((g) => (
-            <ProjectCard key={g.key} group={g} />
+          {groups.map((g, idx) => (
+            <div key={g.key} className="space-y-4">
+              {/* Divider between the unseen band and the standing
+                  deadline-ordered list. Only when both sides exist. */}
+              {idx === bandSize && bandSize > 0 && (
+                <div
+                  className="flex items-center gap-3 pt-2"
+                  aria-hidden
+                >
+                  <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                    Earlier — by bid deadline
+                  </span>
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+              )}
+              <ProjectCard group={g} />
+            </div>
           ))}
         </div>
       )}
@@ -124,8 +173,15 @@ function ProjectCard({ group }: { group: BidInviteGroup }) {
     group.location
   ].filter(Boolean) as string[];
 
+  const hasUnseen = group.unseenCount > 0;
   return (
-    <section className="rounded-md border border-border bg-card">
+    <section
+      className={
+        hasUnseen
+          ? "rounded-md border border-primary/50 bg-card shadow-[inset_3px_0_0_0_hsl(var(--primary))]"
+          : "rounded-md border border-border bg-card"
+      }
+    >
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border p-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -133,10 +189,17 @@ function ProjectCard({ group }: { group: BidInviteGroup }) {
               {group.projectName}
             </h2>
             {due && <Badge tone={due.tone}>{due.label}</Badge>}
-            {group.newCount > 0 && (
+            {/* Unseen (arrived since you looked) is the louder signal and
+                supersedes the untriaged-backlog count — showing both
+                would read as two different numbers for the same card. */}
+            {hasUnseen ? (
               <Badge tone="brand">
-                {group.newCount} new
+                {group.unseenCount} new since you looked
               </Badge>
+            ) : (
+              group.newCount > 0 && (
+                <Badge tone="neutral">{group.newCount} untriaged</Badge>
+              )
             )}
           </div>
           {group.bidPackage && (
@@ -222,14 +285,27 @@ function InviteRow({ item }: { item: BidInviteListItem }) {
     <li
       className={`flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 ${
         item.status === "archived" ? "opacity-60" : ""
-      }`}
+      } ${item.unseen ? "bg-primary/5" : ""}`}
     >
+      {/* Unread-mail convention: the dot plus the bolder subject carry
+          the signal, so it survives without relying on the row tint. */}
+      <span
+        className={
+          item.unseen
+            ? "size-1.5 shrink-0 rounded-full bg-primary"
+            : "size-1.5 shrink-0"
+        }
+        aria-hidden
+      />
       <Badge tone={KIND_TONE[kind]}>{KIND_LABEL[kind]}</Badge>
       <Link
         href={`/bid-invites/${item.id}`}
-        className="min-w-0 flex-1 truncate text-sm text-foreground hover:text-primary"
+        className={`min-w-0 flex-1 truncate text-sm hover:text-primary ${
+          item.unseen ? "font-semibold text-foreground" : "text-foreground"
+        }`}
         title={item.subject}
       >
+        {item.unseen && <span className="sr-only">Unread — </span>}
         {item.headline ?? item.subject}
       </Link>
       {attachmentCount > 0 && (
@@ -237,8 +313,13 @@ function InviteRow({ item }: { item: BidInviteListItem }) {
           {attachmentCount} attachment{attachmentCount === 1 ? "" : "s"}
         </span>
       )}
-      <span className="text-[11px] tabular-nums text-muted-foreground">
-        {fmtDate(item.received_at)}
+      {/* arrived_at, not received_at: the latter is ingest time, so
+          every backfilled row would read as the import date. */}
+      <span
+        className="text-[11px] tabular-nums text-muted-foreground"
+        title={new Date(item.arrived_at).toLocaleString()}
+      >
+        {fmtDate(item.arrived_at)}
       </span>
       {item.status === "new" ? (
         <BidInviteAction

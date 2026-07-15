@@ -134,6 +134,9 @@ export type MeResponse = {
   user_email: string;
   founder: FounderHeader | null;
   tenant: TenantHeader;
+  /** Drives the sidebar's Bid Invites badge. Served from /me because the
+   * app layout already fetches it on every page. */
+  bid_invites_unseen: number;
 };
 
 /* ── /me/dashboard ───────────────────────────────────────────────── */
@@ -1561,7 +1564,13 @@ export type BidInviteListItem = {
   attachments: BidInviteAttachment[] | null;
   status: BidInviteStatus;
   sent_at: string | null;
+  /** Ingest time. Backfilled rows all share the import timestamp —
+   * display and sort on `arrived_at` instead. */
   received_at: string;
+  /** True arrival: coalesce(sent_at, received_at). */
+  arrived_at: string;
+  /** Arrived since you last acknowledged the inbox, and still untriaged. */
+  unseen: boolean;
   kind: BidInviteKind | null;
   project_name: string | null;
   bid_package: string | null;
@@ -1594,6 +1603,13 @@ export type BidInvitePursueResult = {
 
 export type BidInvitesResponse = {
   total: number;
-  counts: Record<BidInviteStatus, number>;
+  /** Per-status counts, plus `unseen` — which overlaps `new` rather than
+   * partitioning it, so it is excluded from `total`. */
+  counts: Record<BidInviteStatus | "unseen", number>;
   items: BidInviteListItem[];
+};
+
+export type BidInviteSeenResult = {
+  seen_at: string;
+  cleared: number;
 };

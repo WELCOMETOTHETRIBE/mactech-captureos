@@ -29,8 +29,13 @@ export type BidInviteGroup = {
   opportunityId: string | null;
   suggestedFounderName: string | null;
   suggestionReason: string | null;
-  latestReceived: string;
+  /** True arrival of the newest email in the thread. */
+  latestArrived: string;
+  /** Untriaged emails in the thread — the durable backlog. */
   newCount: number;
+  /** Emails that arrived since you last acknowledged the inbox. Drives
+   * the unseen band and highlight; a subset of newCount. */
+  unseenCount: number;
   /** Newest first. */
   items: BidInviteListItem[];
 };
@@ -57,7 +62,7 @@ export function groupBidInvites(items: BidInviteListItem[]): BidInviteGroup[] {
 
   const groups: BidInviteGroup[] = [];
   for (const [key, bucket] of byKey) {
-    bucket.sort((a, b) => b.received_at.localeCompare(a.received_at));
+    bucket.sort((a, b) => b.arrived_at.localeCompare(a.arrived_at));
     const first = <T,>(pick: (i: BidInviteListItem) => T | null): T | null => {
       for (const i of bucket) {
         const v = pick(i);
@@ -79,25 +84,41 @@ export function groupBidInvites(items: BidInviteListItem[]): BidInviteGroup[] {
       opportunityId: first((i) => i.opportunity_id),
       suggestedFounderName: first((i) => i.suggested_founder_name),
       suggestionReason: first((i) => i.suggestion_reason),
-      latestReceived: bucket[0].received_at,
+      latestArrived: bucket[0].arrived_at,
       newCount: bucket.filter((i) => i.status === "new").length,
+      unseenCount: bucket.filter((i) => i.unseen).length,
       items: bucket
     });
   }
 
-  // Triage order: live deadlines soonest-first, then undated work
-  // (newest first), then already-closed solicitations at the bottom.
+  // Order: anything that arrived since you last looked pins to the top,
+  // newest first — mail you haven't seen must never hide mid-list behind
+  // a distant deadline. Everything below keeps the deadline triage
+  // order: live deadlines soonest-first, then undated work (newest
+  // first), then already-closed solicitations at the bottom.
   const today = todayISO();
-  const rank = (g: BidInviteGroup) =>
-    g.bidDueOn === null ? 1 : g.bidDueOn >= today ? 0 : 2;
+  const rank = (g: BidInviteGroup) => {
+    if (g.unseenCount > 0) return 0;
+    if (g.bidDueOn === null) return 2;
+    return g.bidDueOn >= today ? 1 : 3;
+  };
   groups.sort((a, b) => {
-    const r = rank(a) - rank(b);
+    const ra = rank(a);
+    const r = ra - rank(b);
     if (r !== 0) return r;
-    if (rank(a) === 0) return a.bidDueOn!.localeCompare(b.bidDueOn!);
-    if (rank(a) === 2) return b.bidDueOn!.localeCompare(a.bidDueOn!);
-    return b.latestReceived.localeCompare(a.latestReceived);
+    if (ra === 0) return b.latestArrived.localeCompare(a.latestArrived);
+    if (ra === 1) return a.bidDueOn!.localeCompare(b.bidDueOn!);
+    if (ra === 3) return b.bidDueOn!.localeCompare(a.bidDueOn!);
+    return b.latestArrived.localeCompare(a.latestArrived);
   });
   return groups;
+}
+
+/** Index of the first group below the unseen band, i.e. the band's size.
+ * The page uses this to draw a divider between "new since you looked"
+ * and the standing triage list. */
+export function unseenBandSize(groups: BidInviteGroup[]): number {
+  return groups.filter((g) => g.unseenCount > 0).length;
 }
 
 function todayISO(): string {

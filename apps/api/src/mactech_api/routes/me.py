@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select, text
 
 from mactech_api.auth import RequestContext, get_request_context
+from mactech_api.routes.bid_invites import unseen_count
 from mactech_db.models import (
     Founder,
     OpportunityBrief,
@@ -63,6 +64,11 @@ class MeResponse(_Out):
     user_email: str
     founder: FounderHeader | None
     tenant: TenantHeader
+    # Untriaged bid invites that arrived since this founder last
+    # acknowledged the inbox. Lives on /me because the app layout
+    # already fetches it on every page — the sidebar badge would
+    # otherwise have to pull the whole invite list to render a number.
+    bid_invites_unseen: int = 0
 
 
 class TopOpportunity(_Out):
@@ -134,6 +140,7 @@ async def me(
     return MeResponse(
         user_id=str(ctx.user.id),
         user_email=ctx.user.email,
+        bid_invites_unseen=await unseen_count(ctx),
         founder=(
             FounderHeader(
                 slug=ctx.founder.slug,

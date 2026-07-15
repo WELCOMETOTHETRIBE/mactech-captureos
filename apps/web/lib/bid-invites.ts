@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import {
   apiFetch,
+  type BidInviteSeenResult,
   type BidInvitePursueResult,
   type BidInviteStatus
 } from "@/lib/api";
@@ -44,6 +45,19 @@ export async function pursueBidInvite(inviteId: string): Promise<void> {
   });
   revalidateInviteSurfaces();
   revalidatePath("/pipeline");
+}
+
+/** Acknowledge the inbox: clear the unseen band and the sidebar badge.
+ * Does not triage anything — the New tab keeps its backlog; this only
+ * resets the "since you last looked" line. An explicit action rather
+ * than a render side effect, so a nav prefetch can't silently clear
+ * mail nobody read. */
+export async function markBidInvitesSeen(): Promise<void> {
+  await apiFetch<BidInviteSeenResult>("/bid-invites/seen", {
+    method: "POST",
+    body: JSON.stringify({})
+  });
+  revalidateInviteSurfaces();
 }
 
 export async function setBidInviteGroupStatus(

@@ -57,6 +57,13 @@ class BidInviteListItem(_Out):
     status: str
     sent_at: str | None
     received_at: str
+    # coalesce(sent_at, received_at) — the true arrival time and the key
+    # every surface sorts and displays on. received_at is ingest time,
+    # which the mbox backfill collapsed onto a single import timestamp.
+    arrived_at: str
+    # Arrived since this founder last acknowledged the inbox, and still
+    # untriaged. Transient signal; `status` is the durable state.
+    unseen: bool
     kind: str | None
     project_name: str | None
     bid_package: str | None
@@ -82,14 +89,34 @@ class BidInviteDetail(BidInviteListItem):
 
 class BidInvitesResponse(_Out):
     total: int
+    # Per-status counts plus "unseen" — arrived since you last looked.
     counts: dict[str, int]
     items: list[BidInviteListItem]
+
+
+def is_unseen(inv: BidInvite, seen_at: datetime | None) -> bool:
+    """Whether `inv` arrived since the founder last acknowledged the inbox.
+
+    Untriaged is a precondition: once you review or archive something it
+    stops being a new arrival regardless of the watermark.
+
+    `seen_at` is None either for a tenant member with no founder profile
+    or for the (server_default=now(), so effectively unreachable) case of
+    a founder who never acknowledged. Both resolve to "not unseen" — the
+    conservative direction. Claiming the opposite would light up the
+    whole untriaged backlog, which is the exact noise this replaces, and
+    it keeps this in lockstep with `unseen_count`.
+    """
+    if inv.status != "new" or seen_at is None:
+        return False
+    return inv.arrived_at > seen_at
 
 
 def _to_item(
     inv: BidInvite,
     cls: type[BidInviteListItem] = BidInviteListItem,
     founder_names: dict[str, str] | None = None,
+    seen_at: datetime | None = None,
 ) -> BidInviteListItem:
     suggestion = suggest_founder(inv.bid_package, inv.project_name, inv.subject)
     suggested_slug, reason = suggestion if suggestion else (None, None)
@@ -102,6 +129,8 @@ def _to_item(
         status=inv.status,
         sent_at=inv.sent_at.isoformat() if inv.sent_at else None,
         received_at=inv.received_at.isoformat(),
+        arrived_at=inv.arrived_at.isoformat(),
+        unseen=is_unseen(inv, seen_at),
         kind=inv.kind,
         project_name=inv.project_name,
         bid_package=inv.bid_package,
@@ -134,7 +163,12 @@ async def list_bid_invites(
     ] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 200,
 ) -> BidInvitesResponse:
-    """List invites, newest first, with per-status counts for the tabs.
+    """List invites by true arrival time (newest first), with tab counts.
+
+    Ordered on coalesce(sent_at, received_at), not received_at: the
+    latter is ingest time, so the mbox backfill stamped every historical
+    message with its import timestamp and sorting on it interleaves
+    weeks-old mail with this morning's.
 
     Bodies are omitted (they can be hundreds of KB of BuildingConnected
     HTML each); GET /bid-invites/{id} returns them.
@@ -153,10 +187,15 @@ async def list_bid_invites(
     counts = {s: 0 for s in BID_INVITE_STATUSES}
     counts.update({row[0]: row[1] for row in counts_rows})
 
+    seen_at = ctx.founder.bid_invites_seen_at if ctx.founder else None
+    # Counted over the whole table, not just the returned page, so the
+    # badge stays true when `limit` truncates.
+    counts["unseen"] = await unseen_count(ctx)
+
     rows = (
         (
             await ctx.session.execute(
-                base.order_by(BidInvite.received_at.desc()).limit(limit)
+                base.order_by(BidInvite.arrived_at.desc()).limit(limit)
             )
         )
         .scalars()
@@ -164,10 +203,35 @@ async def list_bid_invites(
     )
     founder_names = await _founder_names(ctx)
     return BidInvitesResponse(
-        total=sum(counts.values()),
+        # Statuses only — "unseen" overlaps 'new' and would double-count.
+        total=sum(counts[s] for s in BID_INVITE_STATUSES),
         counts=counts,
-        items=[_to_item(r, founder_names=founder_names) for r in rows],
+        items=[
+            _to_item(r, founder_names=founder_names, seen_at=seen_at) for r in rows
+        ],
     )
+
+
+async def unseen_count(ctx: RequestContext) -> int:
+    """How many untriaged invites arrived since this founder last looked.
+
+    Drives the sidebar badge (via /me) and the page's unseen band. A
+    tenant member not linked to a founder profile has no watermark, so
+    they get 0 rather than the entire untriaged backlog.
+    """
+    seen_at = ctx.founder.bid_invites_seen_at if ctx.founder else None
+    if seen_at is None:  # see is_unseen() for why this is 0, not "all"
+        return 0
+    stmt = (
+        select(func.count())
+        .select_from(BidInvite)
+        .where(
+            BidInvite.tenant_id == ctx.tenant.id,
+            BidInvite.status == "new",
+            BidInvite.arrived_at > seen_at,
+        )
+    )
+    return int((await ctx.session.execute(stmt)).scalar_one() or 0)
 
 
 async def _founder_names(ctx: RequestContext) -> dict[str, str]:
@@ -187,7 +251,47 @@ async def get_bid_invite(
     ctx: Annotated[RequestContext, Depends(get_request_context)],
 ) -> BidInviteDetail:
     inv = await _get_owned(invite_id, ctx)
-    return _to_item(inv, BidInviteDetail, founder_names=await _founder_names(ctx))
+    return _to_item(
+        inv,
+        BidInviteDetail,
+        founder_names=await _founder_names(ctx),
+        seen_at=ctx.founder.bid_invites_seen_at if ctx.founder else None,
+    )
+
+
+class SeenResult(_Out):
+    seen_at: str
+    cleared: int
+
+
+@router.post("/bid-invites/seen", response_model=SeenResult)
+async def mark_bid_invites_seen(
+    ctx: Annotated[RequestContext, Depends(get_request_context)],
+) -> SeenResult:
+    """Acknowledge the inbox: everything that has arrived is no longer new.
+
+    Deliberately an explicit POST rather than a side effect of rendering
+    the page — Next.js prefetches nav links, so advancing the watermark
+    during a GET would silently clear the badge for mail the founder
+    never actually saw.
+
+    This does not triage anything; `status` is untouched, so the New tab
+    keeps its backlog. It only resets the "since you last looked" line.
+    """
+    if ctx.founder is None:
+        raise HTTPException(
+            status_code=400,
+            detail="only founders have a bid invite inbox watermark",
+        )
+    cleared = await unseen_count(ctx)
+    now = datetime.now(UTC)
+    ctx.founder.bid_invites_seen_at = now
+    log.info(
+        "bid invites acknowledged by founder=%s, %d cleared",
+        ctx.founder.slug,
+        cleared,
+    )
+    return SeenResult(seen_at=now.isoformat(), cleared=cleared)
 
 
 class BidInviteStatusUpdate(BaseModel):
@@ -207,7 +311,9 @@ async def update_bid_invite_status(
         )
     inv = await _get_owned(invite_id, ctx)
     inv.status = body.status
-    return _to_item(inv)
+    return _to_item(
+        inv, seen_at=ctx.founder.bid_invites_seen_at if ctx.founder else None
+    )
 
 
 class PursueRequest(BaseModel):

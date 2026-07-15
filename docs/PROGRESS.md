@@ -22,6 +22,76 @@ Format per entry:
 
 ---
 
+## 2026-07-15 — Bid invites: true arrival order + unseen signal + notification
+
+Reported symptom: three invites arrived overnight and were impossible to
+pick out of the list. Four causes, all fixed.
+
+### Shipped
+- **Arrival time is now truthful.** `received_at` is `server_default=now()`
+  — *ingest* time — and `scripts/import_bid_invites_mbox.py` replayed the
+  historical mbox through the webhook, so every backfilled row carried the
+  import timestamp while the real Date header sat unused in `sent_at`.
+  That's why the whole inbox read "Jul 15, 2026". Added
+  `BidInvite.arrived_at`, a hybrid property over
+  `coalesce(sent_at, received_at)` (one definition, valid in both Python
+  and SQL). The list query, both page surfaces, and the detail view all
+  sort/display on it. `received_at` is retained but no longer shown.
+- **"Unseen" replaces "new" as the signal.** `status='new'` means "never
+  triaged" — it was 58 of 63 rows, so it could not distinguish this
+  morning's mail from a month of backlog. New per-founder watermark
+  `founders.bid_invites_seen_at` (migration `0037`): unseen = untriaged
+  AND arrived after you last acknowledged the inbox. Status remains the
+  durable triage state; unseen is transient.
+- **Ordering.** Groups previously sorted by bid due date only ("triage
+  order"), so new mail landed wherever its deadline fell. Now unseen
+  projects pin to the top in a band (newest first), with the existing
+  deadline order below the divider, unchanged.
+- **Notification, three surfaces.** Sidebar count badge on Bid Invites
+  (served off `/me`, which the app layout already fetches on every page —
+  avoids pulling 500 invite rows to render a number); dashboard rail leads
+  with the unseen count and dots unseen projects; the 6am founder digest
+  now includes bid invites routed to each pillar via `suggest_founder`,
+  leading the email and named in the subject line.
+- `POST /bid-invites/seen` acknowledges the inbox. Deliberately an
+  explicit action, not a render side effect — Next prefetches nav links,
+  so advancing the watermark during a GET would silently clear the badge
+  for mail nobody read.
+- Index `ix_bid_invites_tenant_arrived` on
+  `(tenant_id, coalesce(sent_at, received_at) desc)` — the old sort column
+  had no index either.
+- Tests: `apps/api/tests/test_bid_invite_unseen.py` (arrival + watermark,
+  incl. the backfill-chronology regression),
+  `apps/workers/tests/test_digest_bid_invites.py` (digest block).
+
+### Notes / decisions
+- The `0037` watermark seeds to `now() - 24h` for existing founders so the
+  last day of mail reads as unseen on first load rather than the entire
+  backfilled corpus lighting up. Column `server_default` is `now()`, so a
+  founder added later starts caught up.
+- Digest lookback is 7 days, not 24h: the beat runs weekdays only, so a
+  strict "since yesterday" window would silently drop weekend arrivals.
+- No founder profile / NULL watermark resolves to "not unseen" (badge 0)
+  rather than "everything unseen" — the conservative direction.
+- New env var `APP_BASE_URL` (default `https://capture.mactechsolutionsllc.com`)
+  for deep links in outbound email. Documented in `.env.example`.
+
+### Blocked / Needs decision
+- **Migration `0037` is not yet applied to prod.** Needs
+  `alembic upgrade head` on Railway. Until then the API will error on the
+  missing `founders.bid_invites_seen_at` column — deploy the migration
+  with (or before) the API.
+- Nothing verified against the real prod dataset yet; the ordering fix was
+  proven against synthetic data reproducing the reported scenario. Worth a
+  look at the live page once `0037` is applied.
+
+### Next up
+- Consider whether "Mark all seen" should also be reachable from the
+  dashboard rail, or whether opening an invite detail should clear just
+  that one.
+
+---
+
 ## 2026-07-14 — Bid invites by email (Postmark inbound webhook)
 
 ### Shipped

@@ -44,6 +44,16 @@ class Founder(Base):
     digest_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true")
     )
+    # Watermark for the Bid Invites inbox: mail arriving after this is
+    # "unseen" for this founder. Distinct from BidInvite.status, which is
+    # the durable triage state — this is only "since you last looked".
+    # Advanced by POST /bid-invites/seen. Defaults to now() so a founder
+    # added later starts caught up rather than inheriting the whole
+    # backlog as "unseen"; NULL (only if set explicitly) means never
+    # acknowledged and treats all untriaged mail as unseen.
+    bid_invites_seen_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True, server_default=func.now()
+    )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

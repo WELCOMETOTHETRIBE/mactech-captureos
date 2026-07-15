@@ -170,9 +170,14 @@ export default async function BidInviteDetailPage({
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Original email
           </p>
-          <p className="text-xs text-muted-foreground">
+          {/* arrived_at, not received_at — the latter is ingest time, so
+              backfilled mail would claim it arrived on import day. */}
+          <p
+            className="text-xs text-muted-foreground"
+            title={new Date(invite.arrived_at).toLocaleString()}
+          >
             {invite.from_name ?? invite.from_email ?? "unknown sender"} ·
-            received {fmtDate(invite.received_at)}
+            received {fmtDate(invite.arrived_at)}
           </p>
         </header>
         {invite.html_body ? (

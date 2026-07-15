@@ -92,12 +92,25 @@ const NAV = [
   }
 ];
 
-export function SidebarNav() {
+/**
+ * @param bidInvitesUnseen Untriaged invites that arrived since this
+ * founder last acknowledged the inbox (from /me, which the app layout
+ * already fetches). Badged here so overnight mail is visible from every
+ * page rather than only on /bid-invites.
+ */
+export function SidebarNav({
+  bidInvitesUnseen = 0
+}: {
+  bidInvitesUnseen?: number;
+}) {
   const pathname = usePathname() ?? "";
+  const badgeFor = (href: string) =>
+    href === "/bid-invites" && bidInvitesUnseen > 0 ? bidInvitesUnseen : 0;
   return (
     <nav className="px-3 py-3 space-y-1" aria-label="Primary">
       {NAV.map((item) => {
         const active = item.match(pathname);
+        const badge = badgeFor(item.href);
         return (
           <Link
             key={item.href}
@@ -109,7 +122,17 @@ export function SidebarNav() {
                 : "block rounded-md border-l-2 border-transparent px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
             }
           >
-            <span className="block font-semibold">{item.label}</span>
+            <span className="flex items-center justify-between gap-2 font-semibold">
+              {item.label}
+              {badge > 0 && (
+                <span
+                  className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-primary-foreground"
+                  aria-label={`${badge} new since you last looked`}
+                >
+                  {badge > 99 ? "99+" : badge}
+                </span>
+              )}
+            </span>
             <span
               className={
                 active

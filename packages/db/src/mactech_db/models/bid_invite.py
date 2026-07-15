@@ -23,6 +23,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mactech_db.base import Base
@@ -40,6 +41,14 @@ class BidInvite(Base):
         Index("ix_bid_invites_tenant_status", "tenant_id", "status"),
         Index("ix_bid_invites_tenant_due", "tenant_id", "bid_due_on"),
         Index("ix_bid_invites_tenant_group", "tenant_id", "group_key"),
+        # Backs the arrival-order sort; see `arrived_at` below. Created
+        # in 0037 via raw DDL because the expression must match the
+        # query's coalesce() exactly.
+        Index(
+            "ix_bid_invites_tenant_arrived",
+            "tenant_id",
+            func.coalesce(text("sent_at"), text("received_at")).desc(),
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -72,6 +81,23 @@ class BidInvite(Base):
     received_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
+
+    @hybrid_property
+    def arrived_at(self) -> datetime:
+        """When the email actually arrived — the only honest sort key.
+
+        `received_at` is ingest time (server_default=now()), so the mbox
+        backfill stamped every historical message with its import
+        timestamp; their real chronology only survives in `sent_at`.
+        Prefer the Date header and fall back to ingest time for the rare
+        message with an unparseable or absent one.
+        """
+        return self.sent_at or self.received_at
+
+    @arrived_at.inplace.expression
+    @classmethod
+    def _arrived_at_expr(cls):
+        return func.coalesce(cls.sent_at, cls.received_at)
 
     # ── Parsed fields (mactech_intelligence.bid_invite_parser) ──
     # Populated at ingest; nullable because parsing is best-effort and

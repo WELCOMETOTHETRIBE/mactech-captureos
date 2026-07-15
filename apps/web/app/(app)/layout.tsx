@@ -38,7 +38,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <CmdKTrigger />
         </div>
 
-        <SidebarNav />
+        <SidebarNav bidInvitesUnseen={me?.bid_invites_unseen ?? 0} />
 
         {/* Keyboard shortcuts hint — discoverable affordance for the
             global ? help modal. Static label, the modal opens via the
