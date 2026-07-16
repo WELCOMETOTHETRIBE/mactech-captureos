@@ -39,11 +39,12 @@ scores; sort-by-score was meaningless. Fixed with `undefer(attachment_text)`
 in both the batch and single-opp queries. **Verified live:** triggered a batch
 post-deploy, scores went 7 → 32 (full fresh batch of 25, today's timestamp).
 
-### Also found — embeddings dead on Voyage 429
-`mactech.embed.batch` fails every run with `VoyageRateLimitError` (429); only
-8 of 1,557 rows ever embedded. Not fixed — key/quota issue (like SAM), needs a
-human. Scoring does not require embeddings (they add a 0–5pt capability-match
-bonus), so this is degraded semantic match, not a blocker. **Open item.**
+### Also found — embeddings dead on Voyage 429 — RESOLVED
+`mactech.embed.batch` failed every run with `VoyageRateLimitError` (429); only
+8 of 1,557 rows embedded. **Not a dead key** (initial guess wrong): a 1-doc and
+a 16-doc batch both embed cleanly. The batch sent ~64 descriptions in one Voyage
+request and blew the account's per-request token budget. Fixed by lowering
+DEFAULT_BATCH_SIZE 64 -> 16 and the beat to every 10 min. Verified climbing live.
 
 ### Shipped
 - **Scoring fix** (above) — `undefer` in `apps/workers/.../tasks/score.py`.
@@ -66,12 +67,19 @@ Two steps: (1) Postmark inbound webhook stores a `bid_invites` row only;
 no SAM text is fetchable for these — the "both sources" idea (cross-link to a
 matching SAM listing) is net-new work, not filed.
 
-### Open items
-- **Voyage 429** — regenerate/upgrade the Voyage key, same as the SAM rotation.
+### Open items — all clear
+- ~~Voyage 429~~ — RESOLVED: not a dead key; batch of 64 blew the per-request
+  token limit. Lowered to 16, beat every 10 min. Verified climbing.
 - ~~CAGE discrepancy~~ — RESOLVED: 186G3 confirmed correct; tenant DB had a
   transposed 183G6, corrected in prod. Repo already used 186G3 everywhere.
-- **cyber_scope scan** showed 0 rows scanned post-rebackfill — not yet
-  investigated; may share the deferred-column pattern. Worth a look.
+- ~~cyber_scope scan~~ — RESOLVED: same deferred-column MissingGreenlet crash
+  as scoring (swallowed per-tenant); fixed with undefer(). Also fixed the batch
+  to select unscanned/non-expired rows so it clears the backlog. Raised to
+  200/15 min (deterministic parser, no LLM). Verified 0 -> 300+ live.
+
+**Whole pipeline now verified end to end:** ingest -> descriptions -> enrich ->
+score -> cyber-scope -> embeddings, all running and backfilling. Remaining
+non-blocking: UEI/CAGE nulls in the *seed config* (the live DB is correct).
 
 ---
 
