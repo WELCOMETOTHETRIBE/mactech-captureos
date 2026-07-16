@@ -7,15 +7,16 @@ saved-search admin UIs ship.
 from __future__ import annotations
 
 import logging
-from datetime import UTC, date as _date, datetime
+from datetime import UTC, datetime
+from datetime import date as _date
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from mactech_db.models import Founder, FounderNaicsMatrix, NaicsCode, SavedSearch, User
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
 from mactech_api.auth import RequestContext, get_request_context
-from mactech_db.models import Founder, FounderNaicsMatrix, NaicsCode, SavedSearch
 
 log = logging.getLogger(__name__)
 
@@ -46,6 +47,11 @@ class NaicsRow(_Out):
     founder_slugs: list[str]
 
 
+class FounderNaics(_Out):
+    code: str
+    title: str
+
+
 class FounderOut(_Out):
     id: str
     slug: str
@@ -54,6 +60,15 @@ class FounderOut(_Out):
     pillar: str
     email: str | None
     digest_enabled: bool
+    bio: str | None = None
+    # This founder's own NAICS, strongest first. The tenant-wide `naics` matrix
+    # below shows the same data by code; this shows it by person, which is what
+    # a "who is this founder" card wants.
+    naics: list[FounderNaics] = []
+    # True when a signed-in Suite user is linked, so title/bio/NAICS arrive from
+    # their GovCon Ops capability profile on sign-in. Drives the card's "Synced
+    # from GovCon Ops" affordance.
+    profile_linked: bool = False
 
 
 class TenantOut(_Out):
@@ -118,6 +133,37 @@ async def get_settings(
             continue
         naics_to_founder_slugs.setdefault(m.naics_code, []).append(slug.slug)
 
+    # Per-founder NAICS, built from the matrix rows already loaded above — no
+    # extra query. Titles come from naics_rows (also already loaded); a matrix
+    # row whose code isn't in the table is skipped rather than shown untitled.
+    # Sorted by affinity desc to lead with the strongest match, matching the
+    # /founders route and how the matrix routes opportunities.
+    naics_title_by_code = {n.code: n.title for n in naics_rows}
+    naics_by_founder_id: dict[Any, list[FounderNaics]] = {}
+    for m in sorted(matrix_rows, key=lambda r: (-(r.affinity or 0), r.naics_code)):
+        title = naics_title_by_code.get(m.naics_code)
+        if title is None:
+            continue
+        naics_by_founder_id.setdefault(m.founder_id, []).append(
+            FounderNaics(code=m.naics_code, title=title)
+        )
+
+    # Which founders a signed-in Suite user is linked to — the condition under
+    # which the sign-in sync pulls their capability profile.
+    linked_founder_ids = set(
+        (
+            await session.execute(
+                select(User.founder_id).where(
+                    User.tenant_id == tenant_id,
+                    User.founder_id.is_not(None),
+                    User.clerk_user_id.is_not(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
     saved = (
         await session.execute(
             select(SavedSearch)
@@ -181,6 +227,9 @@ async def get_settings(
                 pillar=f.pillar,
                 email=f.email,
                 digest_enabled=f.digest_enabled,
+                bio=f.bio,
+                naics=naics_by_founder_id.get(f.id, []),
+                profile_linked=f.id in linked_founder_ids,
             )
             for f in founders
         ],

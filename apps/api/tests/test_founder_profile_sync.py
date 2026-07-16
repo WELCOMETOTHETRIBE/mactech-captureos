@@ -15,6 +15,7 @@ destructive; fix the sync, not the test.
 
 from __future__ import annotations
 
+from mactech_api.auth import _profile_sync_last_fire, _should_sync_profile
 from mactech_api.mactech_profile_client import MemberProfile
 from mactech_api.services.founder_profile_sync import plan_founder_sync
 
@@ -131,3 +132,14 @@ def test_a_changed_headline_updates_the_title() -> None:
     )
     assert plan.title == "Cyber Systems Engineering Manager"
     assert plan.changes_anything
+
+
+def test_profile_sync_throttle_fires_once_per_window() -> None:
+    # The trigger runs inside a dependency that executes on every authenticated
+    # request. Without the throttle, every API call would hit the Hub — the
+    # whole point of mirroring the audit-session dedup is to make "on sign-in"
+    # mean roughly that, not "on every request".
+    _profile_sync_last_fire.pop("user_throttle_probe", None)
+    assert _should_sync_profile("user_throttle_probe") is True
+    assert _should_sync_profile("user_throttle_probe") is False  # within the window
+    _profile_sync_last_fire.pop("user_throttle_probe", None)
