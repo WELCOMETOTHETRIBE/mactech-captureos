@@ -71,9 +71,12 @@ celery_app.conf.update(
         },
         "sam-fetch-descriptions": {
             "task": "mactech.sam.fetch_descriptions",
-            "schedule": crontab(minute="*/30"),
-            "options": {"expires": 25 * 60},
-            "kwargs": {"batch_size": 50},
+            "schedule": crontab(minute="*/15"),
+            "options": {"expires": 12 * 60},
+            # Descriptions are cheap SAM API GETs (no LLM). 200 every 15 min
+            # clears a post-rebackfill backlog of ~1,300 in ~1.5 h instead of
+            # ~13 h at the old 50-per-30-min rate.
+            "kwargs": {"batch_size": 200},
         },
         # Founder morning digest. America/New_York timezone is set at the top
         # of celery_app.conf.update so 6am means 6am ET.

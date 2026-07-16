@@ -67,9 +67,10 @@ from mactech_intelligence import (
 )
 from mactech_intelligence.extract_brief import PROMPT_VERSION as BRIEF_PROMPT_VERSION
 from mactech_intelligence.why_it_matters import WhyItMattersInput
-from sqlalchemy import select, text, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import undefer
 
 from mactech_workers.celery_app import celery_app
 
@@ -516,6 +517,12 @@ async def score_unscored_batch(
         opps = (
             await session.execute(
                 select(OpportunityRaw)
+                # attachment_text is a deferred column; the high-moat clause
+                # scan reads it below. Without undefer() the plain attribute
+                # access emits a lazy load outside the async greenlet and
+                # raises MissingGreenlet, which the caller swallows as
+                # scored=0 — the silent scoring outage from 2026-05-22.
+                .options(undefer(OpportunityRaw.attachment_text))
                 .outerjoin(
                     OpportunityScore,
                     (OpportunityScore.opportunity_id == OpportunityRaw.id)
@@ -523,6 +530,13 @@ async def score_unscored_batch(
                 )
                 .where(OpportunityScore.id.is_(None))
                 .where(OpportunityRaw.naics_code.is_not(None))
+                # Don't spend an LLM rationale scoring a notice that can no
+                # longer be bid. Null deadlines are kept (unknown != closed),
+                # matching the list view's expiry filter.
+                .where(
+                    (OpportunityRaw.response_deadline.is_(None))
+                    | (OpportunityRaw.response_deadline >= func.now())
+                )
                 .order_by(OpportunityRaw.posted_at.desc().nulls_last())
                 .limit(batch_size)
             )
@@ -707,7 +721,9 @@ async def score_one_opportunity(opportunity_id: UUID | str) -> dict[str, Any]:
         }
         opp = (
             await session.execute(
-                select(OpportunityRaw).where(OpportunityRaw.id == opp_uuid)
+                select(OpportunityRaw)
+                .options(undefer(OpportunityRaw.attachment_text))
+                .where(OpportunityRaw.id == opp_uuid)
             )
         ).scalar_one()
         enr = (
