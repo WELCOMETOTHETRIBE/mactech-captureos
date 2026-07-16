@@ -27,7 +27,9 @@ from mactech_workers.celery_app import celery_app
 
 log = logging.getLogger(__name__)
 
-DEFAULT_BATCH_SIZE = 64
+# 16, not 64: a 64-doc batch exceeds the Voyage account's per-request token
+# limit and 429s the whole batch. 16 stays under it (verified live).
+DEFAULT_BATCH_SIZE = 16
 
 
 @dataclass

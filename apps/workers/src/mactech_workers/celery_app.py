@@ -59,9 +59,13 @@ celery_app.conf.update(
         },
         "embed-unembedded-batch": {
             "task": "mactech.embed.batch",
-            "schedule": crontab(minute="*/15"),
-            "options": {"expires": 12 * 60},
-            "kwargs": {"batch_size": 64},
+            # batch_size 64 sent ~64 descriptions in one Voyage request and
+            # blew the account's per-request token limit -> 429 every run, so
+            # only 8 rows ever embedded. 16 stays under the limit (verified
+            # live). Beat runs every 10 min to work through the backlog.
+            "schedule": crontab(minute="*/10"),
+            "options": {"expires": 8 * 60},
+            "kwargs": {"batch_size": 16},
         },
         "score-unscored-batch": {
             "task": "mactech.score.batch",
