@@ -68,9 +68,8 @@ matching SAM listing) is net-new work, not filed.
 
 ### Open items
 - **Voyage 429** — regenerate/upgrade the Voyage key, same as the SAM rotation.
-- **CAGE discrepancy** (from PCTE thread) — Navy-submitted docs show 186G3,
-  tenant DB shows 183G6. Confirm against SAM.gov; the DB may be stamping a bad
-  CAGE on auto-generated deliverables.
+- ~~CAGE discrepancy~~ — RESOLVED: 186G3 confirmed correct; tenant DB had a
+  transposed 183G6, corrected in prod. Repo already used 186G3 everywhere.
 - **cyber_scope scan** showed 0 rows scanned post-rebackfill — not yet
   investigated; may share the deferred-column pattern. Worth a look.
 
