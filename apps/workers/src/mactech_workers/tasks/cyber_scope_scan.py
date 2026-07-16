@@ -22,8 +22,9 @@ from mactech_db.models import (
 )
 from mactech_intelligence.cyber_scope import analyze_cyber_scope
 from mactech_intelligence.cyber_scope.sources import CyberScopeTextSource
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import undefer
 
 from mactech_workers.celery_app import celery_app
 
@@ -88,7 +89,12 @@ async def scan_opportunity_for_tenant(
     async with session_factory() as session, session.begin():
         opp = (
             await session.execute(
-                select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id)
+                select(OpportunityRaw)
+                # attachment_text is deferred; accessed below. Without undefer()
+                # the lazy load fires outside the async greenlet and raises
+                # MissingGreenlet — the same bug that silently killed scoring.
+                .options(undefer(OpportunityRaw.attachment_text))
+                .where(OpportunityRaw.id == opportunity_id)
             )
         ).scalar_one_or_none()
         if opp is None:
@@ -248,10 +254,26 @@ def scan_batch_task(batch_size: int = 50) -> dict[str, Any]:
         session_factory = async_session_factory()
         scanned = 0
         async with session_factory() as session:
+            # Only opps that (a) have text to scan, (b) aren't expired, and
+            # (c) haven't been scanned yet. Without the "not yet scanned"
+            # guard the batch re-scanned the newest 50 every tick and never
+            # reached the backlog. analyze_cyber_scope is a deterministic
+            # parser (no LLM), so a full backfill is cheap.
             rows = (
                 await session.execute(
                     select(OpportunityRaw.id)
                     .where(OpportunityRaw.description_text.isnot(None))
+                    .where(
+                        (OpportunityRaw.response_deadline.is_(None))
+                        | (OpportunityRaw.response_deadline >= func.now())
+                    )
+                    .where(
+                        ~select(CyberScopeAnalysis.id)
+                        .where(
+                            CyberScopeAnalysis.opportunity_id == OpportunityRaw.id
+                        )
+                        .exists()
+                    )
                     .order_by(OpportunityRaw.posted_at.desc().nullslast())
                     .limit(batch_size)
                 )
