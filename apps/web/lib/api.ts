@@ -345,6 +345,7 @@ export type DescriptionBlock = {
   text: string | null;
   source_url: string | null;
   fetch_status: "fetched" | "pending" | "unavailable" | string;
+  source: string;
 };
 
 export type OpportunityHeader = {

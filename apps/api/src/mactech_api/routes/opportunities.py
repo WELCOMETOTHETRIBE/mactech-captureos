@@ -131,6 +131,10 @@ class DescriptionBlock(_Out):
     text: str | None
     source_url: str | None
     fetch_status: str  # 'fetched' | 'pending' | 'unavailable'
+    # Provenance of the raw text, so the UI can label it honestly: SAM notices
+    # show "Original SAM text", a promoted BuildingConnected invite shows the
+    # invitation email, etc. Mirrors opportunities_raw.source.
+    source: str
 
 
 class CapabilityMatch(_Out):
@@ -786,15 +790,19 @@ async def get_opportunity_detail(
             text=opp.description_text,
             source_url=opp.description_url,
             fetch_status="fetched",
+            source=opp.source,
         )
     elif opp.description_url:
         desc = DescriptionBlock(
             text=None,
             source_url=opp.description_url,
             fetch_status="pending",
+            source=opp.source,
         )
     else:
-        desc = DescriptionBlock(text=None, source_url=None, fetch_status="unavailable")
+        desc = DescriptionBlock(
+            text=None, source_url=None, fetch_status="unavailable", source=opp.source
+        )
 
     return OpportunityDetail(
         opportunity=_opp_header(opp),

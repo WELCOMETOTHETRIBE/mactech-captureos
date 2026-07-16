@@ -1052,6 +1052,12 @@ function BriefAndDescriptionPanel({
   // null. Honors the explicit search-param override.
   const activeView: "brief" | "raw" = view ?? (brief ? "brief" : "raw");
 
+  // Label the raw tab by provenance. A BuildingConnected invite promoted into
+  // an opportunity stores the invitation email as its description, so calling
+  // it "SAM text" is wrong. Keyed on description.source, not notice_type.
+  const isSam = description.source === "sam_gov";
+  const rawLabel = isSam ? "Original SAM text" : "Original invitation";
+
   // Real tab pills (search-param-driven, server-component-friendly). The
   // active tab matches the score-bucket pill visual on the list page;
   // inactive uses a border-only treatment. Per brief §7.3.
@@ -1086,7 +1092,7 @@ function BriefAndDescriptionPanel({
             role="tab"
             className={rawTabClass}
           >
-            Original SAM text
+            {rawLabel}
           </Link>
         </div>
         {/* Regenerate-brief affordance moved to the brief-panel footer
@@ -1112,11 +1118,11 @@ function BriefAndDescriptionPanel({
       ) : (
         <section
           role="tabpanel"
-          aria-label="Original SAM description"
+          aria-label={isSam ? "Original SAM description" : "Original invitation"}
           className="pt-4"
         >
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Original SAM text
+            {isSam ? "Original SAM text" : "Original invitation email"}
           </p>
           {description.fetch_status === "fetched" && description.text ? (
             <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-secondary p-3 font-sans text-xs leading-relaxed text-foreground">
@@ -1124,8 +1130,9 @@ function BriefAndDescriptionPanel({
             </pre>
           ) : description.fetch_status === "pending" ? (
             <p className="mt-3 text-sm text-muted-foreground">
-              Description text is queued for fetch from SAM.gov. The worker pulls
-              it on the next 30-minute tick.
+              {isSam
+                ? "Description text is queued for fetch from SAM.gov. The worker pulls it on the next 30-minute tick."
+                : "No invitation text captured for this bid invite."}
             </p>
           ) : (
             <p className="mt-3 text-sm text-muted-foreground">
