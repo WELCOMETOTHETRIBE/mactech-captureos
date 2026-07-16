@@ -22,6 +22,60 @@ Format per entry:
 
 ---
 
+## 2026-07-15 — Found a 2-month silent scoring outage; fixed it; honest description labels
+
+Started from a UI observation: an opportunity's "Original SAM text" tab was
+showing a BuildingConnected bid-invite email. Pulling that thread surfaced a
+much bigger problem.
+
+### Root cause — scoring silently dead since 2026-05-22
+`mactech.score.batch` read `opp.attachment_text` — a **deferred** column —
+inside the scoring loop. In the async session, that plain attribute access
+emits a lazy load outside the greenlet and raises `sqlalchemy.MissingGreenlet`.
+`score_unscored_batch_all_tenants` caught it, logged "score fan-out failed",
+and returned `scored=0`. So the beat "succeeded" every 20 min while scoring
+nothing — invisible for ~2 months. The Opportunities board had almost no live
+scores; sort-by-score was meaningless. Fixed with `undefer(attachment_text)`
+in both the batch and single-opp queries. **Verified live:** triggered a batch
+post-deploy, scores went 7 → 32 (full fresh batch of 25, today's timestamp).
+
+### Also found — embeddings dead on Voyage 429
+`mactech.embed.batch` fails every run with `VoyageRateLimitError` (429); only
+8 of 1,557 rows ever embedded. Not fixed — key/quota issue (like SAM), needs a
+human. Scoring does not require embeddings (they add a 0–5pt capability-match
+bonus), so this is degraded semantic match, not a blocker. **Open item.**
+
+### Shipped
+- **Scoring fix** (above) — `undefer` in `apps/workers/.../tasks/score.py`.
+- **Skip expired when scoring.** No LLM rationale spent on notices that can no
+  longer be bid; null deadlines kept. Ingest already scopes to MacTech NAICS,
+  so the "only score relevant NAICS" gate was already upstream — this was the
+  one real gating win left. Answers the compute-cost question: we weren't
+  overspending on scoring, we weren't scoring at all.
+- **Honest description label.** Added `source` to `DescriptionBlock`; detail
+  tab now reads "Original SAM text" for sam_gov, "Original invitation" for a
+  promoted BuildingConnected bid invite (whose email body is its description).
+- **Faster SAM descriptions.** 50/30min → 200/15min (cheap API GETs, no LLM).
+  Backlog cleared 257 → 507 within minutes of deploy.
+
+### How a bid invite becomes an opportunity (documented for reference)
+Two steps: (1) Postmark inbound webhook stores a `bid_invites` row only;
+(2) a human clicking "Pursue" (`POST /bid-invites/{id}/pursue`) creates the
+`opportunities_raw` row with `source='buildingconnected'`, notice_type
+'Bid Invite', and the email body as `description_text`. No SAM notice ID, so
+no SAM text is fetchable for these — the "both sources" idea (cross-link to a
+matching SAM listing) is net-new work, not filed.
+
+### Open items
+- **Voyage 429** — regenerate/upgrade the Voyage key, same as the SAM rotation.
+- **CAGE discrepancy** (from PCTE thread) — Navy-submitted docs show 186G3,
+  tenant DB shows 183G6. Confirm against SAM.gov; the DB may be stamping a bad
+  CAGE on auto-generated deliverables.
+- **cyber_scope scan** showed 0 rows scanned post-rebackfill — not yet
+  investigated; may share the deferred-column pattern. Worth a look.
+
+---
+
 ## 2026-07-15 — Opportunity feed: found a 19-day SAM.gov outage; hid expired; added feed health
 
 Reported symptom: "most opportunities are old, I can't tell if new ones are
