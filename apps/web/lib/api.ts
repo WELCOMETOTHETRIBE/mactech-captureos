@@ -247,6 +247,25 @@ export type OpportunityListResponse = {
   };
 };
 
+export type IngestFeed = {
+  source: string;
+  key: string;
+  last_run_at: string | null;
+  last_success_at: string | null;
+  last_status: string | null;
+  last_error: string | null;
+};
+
+export type IngestStatus = {
+  status: "ok" | "degraded" | "stale" | "failing" | "unknown";
+  last_success_at: string | null;
+  last_run_at: string | null;
+  sources_ok: number;
+  sources_error: number;
+  first_error: string | null;
+  feeds: IngestFeed[];
+};
+
 /* ── /opportunities/{id} (detail) ───────────────────────────────── */
 
 export type CapabilityMatch = {

@@ -22,6 +22,97 @@ Format per entry:
 
 ---
 
+## 2026-07-15 — Opportunity feed: found a 19-day SAM.gov outage; hid expired; added feed health
+
+Reported symptom: "most opportunities are old, I can't tell if new ones are
+coming in — wipe them all and start fresh." The wipe was authorized but
+**deliberately not executed**: investigation showed the feed is dead, so a
+wipe would have emptied the board with no way to refill it.
+
+### Root cause (the actual finding)
+**The SAM.gov API key is invalid. Ingestion has been failing since
+2026-06-26 — 19 days.** All 20 NAICS feeds return `401 API_KEY_INVALID`
+on every 2-hourly run. `ingestion_state` shows `last_status='error'` for
+all 20 with `last_success_at = 2026-06-26`. Prod data confirms it: every
+`sam_gov` row is frozen at `posted_at <= 2026-06-25`. The board isn't
+stale-because-old, it's a three-week-old snapshot aging out in place —
+which is exactly why 3,840 of 4,893 rows (78%) are past due.
+
+The key is present in Railway (`SAM_API_KEY` on mactech-workers), so this
+is expiry/revocation, not missing config. SAM.gov keys require periodic
+regeneration.
+
+### Shipped
+- **Expired opportunities are hidden by default.** `list_opportunities`
+  had no `WHERE` on `response_deadline` at all — it could sort by deadline
+  but never filtered. Added `include_expired` (default `false`); the
+  default view drops `response_deadline < now()`. Null deadlines are
+  **kept**: unknown ≠ closed, and some sources omit the field. A
+  "Show expired" pill toggles them back — nothing is deleted.
+- **Sidebar facet counts honour the same filter.** They previously
+  aggregated over all of `opportunities_raw` unscoped, so a facet reading
+  "SDVOSB (412)" would have filtered down to ~9 live notices.
+- **Feed health on the board.** New `GET /opportunities/ingest-status` +
+  `IngestStatusBanner`. Keyed on **`last_success_at`, never
+  `last_run_at`** — a 401 still stamps `last_run_at`, so a "last ingest"
+  built on it reads healthy through a total outage. That is precisely how
+  this went unnoticed for 19 days. Auth failures render a specific
+  remediation ("regenerate at sam.gov → Account Details → API Key").
+  Verdict logic extracted to pure `classify_ingest()`; 6 tests in
+  `apps/api/tests/test_ingest_status.py` cover the real outage shape.
+- **Fixed the boot check that should have caught this.** The worker probed
+  `SAM_GOV_API_KEY` — a name nothing sets — so every healthy boot logged
+  `✗ MISSING SAM_GOV_API_KEY`. A check that cries wolf on every deploy is
+  worse than none. Now probes `SAM_API_KEY`, the name ingest reads.
+
+### Key rotated + feed restored (same session)
+Patrick regenerated the SAM.gov key. First redeploy hit `mactech-api`
+only — **ingest runs on `mactech-workers`**, whose env still held the old
+key, so the 02:00 UTC run still 401'd. After redeploying workers, a probe
+ingest of NAICS 541519 flipped `ok` and pulled **173 opportunities posted
+during the outage**. The window logic self-healed the whole 19-day gap
+unprompted, because `last_success_at` was still parked at 2026-06-26.
+
+### Wipe: executed, but scoped down from "everything"
+Pre-flight counting found only **8 of 5,066** opportunities carried any
+human work — and one was a live pursuit: **NUWC B162 Consolidated Secure
+Facility, stage `qualify`, response deadline 2026-07-16 (that day)**. The
+originally-authorized full `TRUNCATE CASCADE` would have destroyed it for
+no gain, since scores/briefs regenerate on re-ingest anyway. Rescoped to
+delete only opportunities with no pursuit / draft / brief / bid-invite.
+
+Executed in one transaction (dry-run first, rolled back, diffed, then
+committed): **5,058 deleted, 8 kept, 20 `ingestion_state` rows cleared**
+to force a 30-day rebackfill. All 4 pursuits, 2 drafts, 5 briefs, and the
+5 bid-invite links survived.
+
+`mactech.sam.ingest_all` then rebuilt the board — all 20 feeds `ok`:
+
+| metric | before | after |
+|---|---|---|
+| total | 4,893 | 1,558 |
+| open / biddable | 228 | **671** |
+| past due (now hidden) | 3,840 (78%) | 577 (37%) |
+| newest posted | 2026-06-25 | **2026-07-15** |
+
+### Blocked / Needs decision
+- **The code changes above are not yet committed or deployed.** Until the
+  API + web deploy, prod still renders expired notices and has no health
+  banner — the data is fresh, the filtering isn't live.
+- Open question deferred: whether ingest should pass `rdlfrom` to SAM.gov
+  so already-expired notices never land. 577 of the 1,558 rebackfilled
+  rows were already expired on arrival. Cuts DB growth; riskier change.
+  The UI filter solves the visible symptom without it.
+
+### Next up
+- Deploy API + web so auto-hide and the health banner go live.
+- Alert on `ingest-status` rather than relying on someone noticing the
+  banner — this outage ran 19 days precisely because nothing paged.
+- Consider a real per-run ingest history table (`apify_runs` is the
+  in-repo pattern); `ingestion_state` is a watermark and keeps no history.
+
+---
+
 ## 2026-07-15 — Bid invites: true arrival order + unseen signal + notification
 
 Reported symptom: three invites arrived overnight and were impossible to

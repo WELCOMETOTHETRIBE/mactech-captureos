@@ -202,7 +202,11 @@ def _log_integration_token_presence() -> None:
     checks = (
         ("APIFY_API_TOKEN", "Apify forecast + industry-day scrapers"),
         ("ANTHROPIC_API_KEY", "Claude — used by every LLM extractor + brief"),
-        ("SAM_GOV_API_KEY", "SAM.gov ingest + tenant verification"),
+        # SAM_API_KEY, not SAM_GOV_API_KEY: tasks/sam_ingest.py reads this
+        # name and raises without it. The check previously probed a name
+        # nothing sets, so every healthy boot logged a false MISSING — which
+        # is why the June 2026 key outage drew no attention here.
+        ("SAM_API_KEY", "SAM.gov ingest + tenant verification"),
         ("CODEX_API_TOKEN", "Codex SPRS posture sync (optional, anonymous works)"),
         ("RESEND_API_KEY", "Morning digest email delivery"),
     )

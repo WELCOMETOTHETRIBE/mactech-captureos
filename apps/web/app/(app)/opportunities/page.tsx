@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   apiFetch,
+  type IngestStatus,
   type MeResponse,
   type OpportunityListResponse,
   type SavedSearchOut,
@@ -19,6 +20,7 @@ import {
   fmtRelativeDays
 } from "@/components/ui";
 import { KeyboardList } from "@/components/keyboard-list";
+import { IngestStatusBanner } from "@/components/ingest-status-banner";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +39,7 @@ type SP = Promise<{
   high_moat_min?: string;
   cyber_scope_min?: string;
   saved_search?: string;
+  include_expired?: string;
 }>;
 
 const SORT_LABELS: Record<string, string> = {
@@ -168,10 +171,14 @@ export default async function OpportunitiesListPage({
   if (sp.notice_type) params.set("notice_type", sp.notice_type);
   if (sp.agency) params.set("agency", sp.agency);
   if (assignedFounder) params.set("assigned_founder", assignedFounder);
+  const includeExpired = sp.include_expired === "true";
+  if (includeExpired) params.set("include_expired", "true");
 
-  const data = await apiFetch<OpportunityListResponse>(
-    `/opportunities?${params.toString()}`
-  );
+  const [data, ingest] = await Promise.all([
+    apiFetch<OpportunityListResponse>(`/opportunities?${params.toString()}`),
+    // Feed health is advisory — a failure here must not blank the board.
+    apiFetch<IngestStatus>("/opportunities/ingest-status").catch(() => null)
+  ]);
 
   const start = data.items.length === 0 ? 0 : (data.page - 1) * data.limit + 1;
   const end = Math.min(start + data.items.length - 1, data.total);
@@ -186,6 +193,7 @@ export default async function OpportunitiesListPage({
     activeFilters.push(`score ${score_min}–${score_max}`);
   if (sweetSpotOnly) activeFilters.push("sweet spots only");
   if (cyberScopeMin) activeFilters.push(`cyber scope ≥${cyberScopeMin}`);
+  if (includeExpired) activeFilters.push("including expired");
 
   // Subtitle: when a perspective is active, lead with the perspective
   // name so a logged-in user sees "where am I" at a glance.
@@ -210,6 +218,8 @@ export default async function OpportunitiesListPage({
           ) : null
         }
       />
+
+      <IngestStatusBanner status={ingest} />
 
       {/* Quick filter bar — score buckets + sweet-spot toggle as a
           horizontal segmented control. The sweet-spot pill is the
@@ -307,6 +317,29 @@ export default async function OpportunitiesListPage({
                   }`}
                 >
                   Cyber scope
+                </Link>
+              );
+            })()}
+            {/* Expired notices are hidden by default — a closed response date
+                means it can't be bid. This brings them back for lookback
+                without changing any other active filter. */}
+            {(() => {
+              const qs = new URLSearchParams(params);
+              if (includeExpired) qs.delete("include_expired");
+              else qs.set("include_expired", "true");
+              qs.delete("page");
+              return (
+                <Link
+                  href={`/opportunities?${qs.toString()}`}
+                  aria-pressed={includeExpired}
+                  title="Show notices whose response deadline has already passed. Hidden by default."
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    includeExpired
+                      ? "bg-neutral-700 text-white"
+                      : "border border-neutral-300 text-neutral-700 hover:border-neutral-500"
+                  }`}
+                >
+                  {includeExpired ? "Hide expired" : "Show expired"}
                 </Link>
               );
             })()}

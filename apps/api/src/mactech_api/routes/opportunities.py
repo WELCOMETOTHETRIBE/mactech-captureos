@@ -38,6 +38,13 @@ from mactech_db.models import (
 
 router = APIRouter(tags=["opportunities"])
 
+# Shared by the list query, its count, and the sidebar facets so that a facet
+# count never promises more rows than the list will actually show.
+_NOT_EXPIRED_SQL = "(o.response_deadline is null or o.response_deadline >= now())"
+
+# The SAM beat runs every 2h; tolerate a few missed ticks before crying stale.
+_INGEST_STALE_AFTER = timedelta(hours=12)
+
 EXCLUSION_TTL = timedelta(hours=24)
 
 
@@ -236,6 +243,52 @@ class OpportunityListResponse(_Out):
     facets: dict[str, dict[str, int]]
 
 
+class IngestFeed(_Out):
+    source: str
+    key: str
+    last_run_at: datetime | None = None
+    last_success_at: datetime | None = None
+    last_status: str | None = None
+    last_error: str | None = None
+
+
+class IngestStatus(_Out):
+    # 'ok' | 'degraded' | 'stale' | 'failing' | 'unknown'
+    status: str
+    last_success_at: datetime | None = None
+    last_run_at: datetime | None = None
+    sources_ok: int = 0
+    sources_error: int = 0
+    first_error: str | None = None
+    feeds: list[IngestFeed] = []
+
+
+def classify_ingest(
+    ok: int,
+    errored: int,
+    newest_success: datetime | None,
+    now: datetime,
+) -> str:
+    """Roll per-source ingest state up into one feed verdict.
+
+    Ordering matters: 'failing' outranks 'stale' because every-source-down is
+    the actionable diagnosis, while staleness is only its symptom. A feed that
+    has never once succeeded is 'unknown', not 'stale' — there is no baseline
+    to be stale against.
+    """
+    if errored and not ok:
+        return "failing"
+    if newest_success is None:
+        return "unknown"
+    # Generous relative to the 2-hourly beat: a couple of missed ticks is
+    # noise, half a day without a single success is a real outage.
+    if now - newest_success > _INGEST_STALE_AFTER:
+        return "stale"
+    if errored:
+        return "degraded"
+    return "ok"
+
+
 def _short_agency_path(p: str | None) -> str | None:
     if not p:
         return None
@@ -266,6 +319,7 @@ async def list_opportunities(
     cyber_scope_min: int | None = None,
     cyber_scope_likelihood: str | None = None,
     sweet_spot_only: bool = False,
+    include_expired: bool = False,
     sort: str = "score_desc",  # 'score_desc' | 'high_moat_desc' | 'cyber_scope_desc' | 'posted_desc' | 'deadline_asc'
 ) -> OpportunityListResponse:
     if limit < 1 or limit > 100:
@@ -288,6 +342,12 @@ async def list_opportunities(
     # in one round-trip with full filtering.
     where_parts: list[str] = []
     params: dict[str, Any] = {"tenant_id": str(tenant_id)}
+
+    # A notice whose response deadline has passed can't be bid, so it stays out
+    # of the default view. Null deadlines are kept: unknown is not the same as
+    # closed, and sources (e.g. buildingconnected) often omit the field.
+    if not include_expired:
+        where_parts.append(_NOT_EXPIRED_SQL)
 
     if q:
         where_parts.append("o.title ilike '%' || :q || '%'")
@@ -425,6 +485,10 @@ async def list_opportunities(
 
     # Facets — counts of values within the unfiltered tenant view, useful for
     # the sidebar filters. Cheap: aggregations on already-indexed columns.
+    # They honour include_expired for the same reason the list does: a sidebar
+    # reading "Set-aside: SDVOSB (412)" that filters down to 9 live notices is
+    # worse than no count at all.
+    facet_where = "true" if include_expired else _NOT_EXPIRED_SQL
     facets: dict[str, dict[str, int]] = {
         "set_asides": {},
         "notice_types": {},
@@ -434,8 +498,9 @@ async def list_opportunities(
     set_aside_counts = (
         await session.execute(
             text(
-                "select coalesce(set_aside, 'NONE'), count(*) "
-                "from opportunities_raw group by 1 order by 2 desc limit 20"
+                "select coalesce(o.set_aside, 'NONE'), count(*) "
+                f"from opportunities_raw o where {facet_where} "
+                "group by 1 order by 2 desc limit 20"
             )
         )
     ).all()
@@ -444,8 +509,9 @@ async def list_opportunities(
     notice_type_counts = (
         await session.execute(
             text(
-                "select coalesce(notice_type, 'unknown'), count(*) "
-                "from opportunities_raw group by 1 order by 2 desc"
+                "select coalesce(o.notice_type, 'unknown'), count(*) "
+                f"from opportunities_raw o where {facet_where} "
+                "group by 1 order by 2 desc"
             )
         )
     ).all()
@@ -454,8 +520,9 @@ async def list_opportunities(
     naics_counts = (
         await session.execute(
             text(
-                "select naics_code, count(*) from opportunities_raw "
-                "where naics_code is not null group by 1 order by 2 desc limit 25"
+                "select o.naics_code, count(*) from opportunities_raw o "
+                f"where o.naics_code is not null and {facet_where} "
+                "group by 1 order by 2 desc limit 25"
             )
         )
     ).all()
@@ -464,11 +531,12 @@ async def list_opportunities(
     founder_counts = (
         await session.execute(
             text(
-                """
+                f"""
                 select f.slug, count(*)
                 from opportunity_scores s
                 join founders f on f.id = s.assigned_founder_id
-                where s.tenant_id = :t and s.score >= 60
+                join opportunities_raw o on o.id = s.opportunity_id
+                where s.tenant_id = :t and s.score >= 60 and {facet_where}
                 group by f.slug order by 2 desc
                 """
             ),
@@ -484,6 +552,67 @@ async def list_opportunities(
         has_next=offset + limit < int(total),
         items=items,
         facets=facets,
+    )
+
+
+# Registered before /opportunities/{opportunity_id} so the literal path wins
+# the match — otherwise FastAPI tries to parse "ingest-status" as a UUID.
+@router.get("/opportunities/ingest-status", response_model=IngestStatus)
+async def get_ingest_status(
+    ctx: Annotated[RequestContext, Depends(get_request_context)],
+) -> IngestStatus:
+    """Health of the opportunity feed, keyed on last *success*.
+
+    Deliberately reports last_success_at rather than last_run_at: a run that
+    401s still stamps last_run_at, so a "last ingest" built on last_run_at
+    reads healthy while the feed is dead. That is precisely how a 19-day
+    SAM.gov outage went unnoticed in June 2026.
+    """
+    rows = (
+        await ctx.session.execute(
+            text(
+                """
+                select source, key, last_run_at, last_success_at,
+                       last_status, last_error
+                from ingestion_state
+                """
+            )
+        )
+    ).all()
+
+    if not rows:
+        return IngestStatus(
+            status="unknown", sources_ok=0, sources_error=0, feeds=[]
+        )
+
+    now = datetime.now(timezone.utc)
+    feeds: list[IngestFeed] = []
+    for r in rows:
+        feeds.append(
+            IngestFeed(
+                source=r[0],
+                key=r[1],
+                last_run_at=r[2],
+                last_success_at=r[3],
+                last_status=r[4],
+                last_error=(r[5][:200] if r[5] else None),
+            )
+        )
+
+    ok = sum(1 for f in feeds if f.last_status == "ok")
+    errored = sum(1 for f in feeds if f.last_status == "error")
+    successes = [f.last_success_at for f in feeds if f.last_success_at]
+    newest_success = max(successes) if successes else None
+    status = classify_ingest(ok, errored, newest_success, now)
+
+    return IngestStatus(
+        status=status,
+        last_success_at=newest_success,
+        last_run_at=max((f.last_run_at for f in feeds if f.last_run_at), default=None),
+        sources_ok=ok,
+        sources_error=errored,
+        first_error=next((f.last_error for f in feeds if f.last_error), None),
+        feeds=sorted(feeds, key=lambda f: (f.source, f.key)),
     )
 
 
