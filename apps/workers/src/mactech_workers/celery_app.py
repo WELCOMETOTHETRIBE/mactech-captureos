@@ -156,9 +156,12 @@ celery_app.conf.update(
         },
         "cyber-scope-scan-batch": {
             "task": "mactech.cyber_scope.scan_batch",
-            "schedule": crontab(minute="*/45"),
-            "options": {"expires": 40 * 60},
-            "kwargs": {"batch_size": 40},
+            # analyze_cyber_scope is a deterministic parser (no LLM), so this
+            # is cheap. 200 every 15 min clears a full-rebackfill backlog in
+            # ~2 h instead of ~23 h at the old 40-per-45-min rate.
+            "schedule": crontab(minute="*/15"),
+            "options": {"expires": 12 * 60},
+            "kwargs": {"batch_size": 200},
         },
         "cyber-scope-summarize-batch": {
             "task": "mactech.cyber_scope.summarize_batch",
