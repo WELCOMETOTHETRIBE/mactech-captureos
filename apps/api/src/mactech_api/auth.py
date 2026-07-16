@@ -24,11 +24,12 @@ from dataclasses import dataclass
 from typing import Annotated, Any
 from uuid import UUID
 
-import httpx
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import PyJWKClient
+from mactech_db import scoped_session
+from mactech_db.models import Founder, Tenant, User
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,8 +38,7 @@ from mactech_api.mactech_identity_client import (
     check_identity_access,
     find_active_access_for_app,
 )
-from mactech_db import scoped_session
-from mactech_db.models import Founder, Tenant, User
+from mactech_api.services.founder_profile_sync import sync_one_user_in_background
 
 CAPTURE_APP_KEY = "capture"
 
@@ -73,6 +73,36 @@ def _should_fire_audit_session(clerk_user_id: str) -> bool:
         return False
     _audit_session_last_fire[clerk_user_id] = now
     return True
+
+
+# Same shape as the audit throttle, separate window and dict. A capability
+# profile changes rarely — a member re-uploads a resume now and then — so
+# pulling it once per user per process per hour keeps founder cards fresh
+# without turning every request into a Hub round trip. Per-process, so each
+# replica syncs independently; the sync is idempotent, so overlap is harmless.
+_PROFILE_SYNC_DEDUP_S = 60 * 60
+_profile_sync_last_fire: dict[str, float] = {}
+
+
+def _should_sync_profile(clerk_user_id: str) -> bool:
+    now = time.time()
+    last = _profile_sync_last_fire.get(clerk_user_id)
+    if last and now - last < _PROFILE_SYNC_DEDUP_S:
+        return False
+    _profile_sync_last_fire[clerk_user_id] = now
+    return True
+
+
+# asyncio only holds a weak reference to a bare task, so a fire-and-forget
+# coroutine can be garbage-collected mid-flight (RUF006). Hold a strong
+# reference until it finishes, then drop it.
+_background_tasks: set[asyncio.Task[Any]] = set()
+
+
+def _fire_and_forget(coro: Any) -> None:
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
 # Clerk publishes the JWKS at <frontend-api>/.well-known/jwks.json. Frontend API
 # host comes from CLERK_FRONTEND_API or, on dev, can be inferred from the
@@ -322,7 +352,7 @@ async def get_request_context(
         # Throttled to once per Clerk user per process per hour. Errors are
         # swallowed inside send_audit_log so a hub outage cannot break auth.
         if _should_fire_audit_session(claims.sub):
-            asyncio.create_task(
+            _fire_and_forget(
                 send_audit_log(
                     {
                         "appKey": "capture",
@@ -336,6 +366,15 @@ async def get_request_context(
                     }
                 )
             )
+
+        # Pull this founder's Suite capability profile and project it onto their
+        # founder card — title, bio, NAICS. Same fire-and-forget shape as the
+        # audit event above and throttled the same way, but only for a user who
+        # is actually a founder: a non-founder user has no card to update. The
+        # task owns its own session (see sync_one_user_in_background) because
+        # this request's session closes the moment the response is sent.
+        if founder_id is not None and _should_sync_profile(claims.sub):
+            _fire_and_forget(sync_one_user_in_background(str(tenant_id), str(user_id)))
 
         yield RequestContext(
             user=user_attached,

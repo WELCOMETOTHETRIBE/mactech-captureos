@@ -73,6 +73,17 @@ export default async function SettingsPage() {
                 </div>
                 <Pillar pillar={f.pillar} />
               </div>
+              {f.profile_linked ? (
+                <p
+                  className="mt-2 inline-flex items-center gap-1 rounded-sm bg-primary/10 px-1.5 py-px text-[10px] font-medium text-primary"
+                  title="Linked to a MacTech Suite user. Title, bio, and NAICS are pulled from their GovCon Ops capability profile when they sign in."
+                >
+                  Synced from GovCon Ops
+                </p>
+              ) : null}
+              {f.bio ? (
+                <p className="mt-2 line-clamp-3 text-xs text-neutral-600">{f.bio}</p>
+              ) : null}
               <dl className="mt-3 grid grid-cols-1 gap-y-2 text-xs">
                 <Row label="Email">
                   {f.email ?? (
@@ -90,6 +101,27 @@ export default async function SettingsPage() {
                   )}
                 </Row>
               </dl>
+              {f.naics.length > 0 ? (
+                <div className="mt-3">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    NAICS ({f.naics.length})
+                  </p>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {f.naics.map((n) => (
+                      <span
+                        key={n.code}
+                        title={n.title}
+                        className="inline-flex items-center gap-1 rounded-sm border border-border bg-muted/40 px-1.5 py-px text-[10px]"
+                      >
+                        <span className="font-mono text-neutral-700">{n.code}</span>
+                        <span className="max-w-[10rem] truncate text-muted-foreground">
+                          {n.title}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               <div className="mt-3 flex items-center justify-between border-t border-border pt-2 text-[11px]">
                 <span className="text-muted-foreground">@{f.slug}</span>
                 <div className="flex items-center gap-3">

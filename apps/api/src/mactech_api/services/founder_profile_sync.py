@@ -305,3 +305,49 @@ async def sync_tenant_founders(
     for user, founder in rows:
         results.append(await sync_founder_from_profile(session, user, founder, dry_run=dry_run))
     return results
+
+
+async def sync_one_user_in_background(tenant_id: str, user_id: str) -> None:
+    """Sync a single signed-in user's founder, in its own session. Never raises.
+
+    This is the entry point auth.py fires as a background task after a session
+    opens, so it must own its whole lifecycle: the request's session is
+    committed and closed on response, and a task that outlived it would write
+    into a dead session. It opens a fresh scoped session, commits its own work,
+    and swallows everything — a Hub outage or a sync bug must not surface on a
+    request the member did not make to trigger it.
+
+    Skips silently when the user has no founder link (nothing to project onto)
+    or no profile exists yet (the client returns None, meaning "change nothing").
+    """
+    # Imported here, not at module top: this service is otherwise pure of the
+    # session factory, and the pure planner (plan_founder_sync) is imported by
+    # tests that must not drag a DB connection in.
+    from mactech_db import scoped_session
+
+    try:
+        async with scoped_session(tenant_id) as session:
+            row = (
+                await session.execute(
+                    select(User, Founder)
+                    .join(Founder, Founder.id == User.founder_id)
+                    .where(User.id == user_id, User.clerk_user_id.is_not(None))
+                )
+            ).first()
+            if row is None:
+                return  # not linked to a founder, or never signed in — nothing to do
+            user, founder = row
+            result = await sync_founder_from_profile(session, user, founder)
+            if result.changed:
+                await session.commit()
+                logger.info(
+                    "[mactech-profile-sync] founder=%s title=%s bio=%s naics+%d",
+                    founder.id,
+                    result.title_updated,
+                    result.bio_updated,
+                    len(result.naics_added),
+                )
+    except Exception:
+        logger.warning(
+            "[mactech-profile-sync] background sync failed for user=%s", user_id, exc_info=True
+        )

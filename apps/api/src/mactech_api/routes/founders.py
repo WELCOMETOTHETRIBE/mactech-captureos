@@ -18,12 +18,15 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from mactech_db.models import Founder
+from mactech_db.models.founder import FounderNaicsMatrix
+from mactech_db.models.naics import NaicsCode
+from mactech_db.models.user import User
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from mactech_api.auth import RequestContext, get_request_context
-from mactech_db.models import Founder
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["founders"])
@@ -33,6 +36,11 @@ VALID_PILLARS = {"security", "infrastructure", "quality", "governance", "other"}
 
 class _Out(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+
+
+class FounderNaics(_Out):
+    code: str
+    title: str
 
 
 class FounderOut(_Out):
@@ -45,6 +53,16 @@ class FounderOut(_Out):
     email: str | None
     digest_enabled: bool
     created_at: str
+    # NAICS the founder is matched to, most relevant first. Includes both
+    # hand-curated codes and codes projected from the person's GovCon Ops
+    # capability profile — the card doesn't distinguish them because the
+    # affinity/tier live in the matrix, not here.
+    naics: list[FounderNaics] = []
+    # True when a signed-in Suite user is linked to this founder, i.e. their
+    # capability profile flows in on sign-in. Drives the "Synced from GovCon
+    # Ops" affordance so a viewer knows title/bio/NAICS may be managed
+    # elsewhere, not just typed here.
+    profile_linked: bool = False
 
 
 class FoundersList(_Out):
@@ -91,7 +109,12 @@ def _validate_pillar(p: str) -> str:
     return p
 
 
-def _to_out(f: Founder) -> FounderOut:
+def _to_out(
+    f: Founder,
+    *,
+    naics: list[FounderNaics] | None = None,
+    profile_linked: bool = False,
+) -> FounderOut:
     return FounderOut(
         id=str(f.id),
         slug=f.slug,
@@ -102,7 +125,54 @@ def _to_out(f: Founder) -> FounderOut:
         email=f.email,
         digest_enabled=f.digest_enabled,
         created_at=f.created_at.isoformat(),
+        naics=naics or [],
+        profile_linked=profile_linked,
     )
+
+
+async def _naics_by_founder(session, founder_ids: list[UUID]) -> dict[UUID, list[FounderNaics]]:
+    """One query for the whole page's NAICS, joined to titles. Avoids N+1.
+
+    Ordered by affinity desc so the strongest matches lead — the same ordering
+    the matrix routes opportunities on.
+    """
+    if not founder_ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(
+                FounderNaicsMatrix.founder_id,
+                FounderNaicsMatrix.naics_code,
+                NaicsCode.title,
+            )
+            .join(NaicsCode, NaicsCode.code == FounderNaicsMatrix.naics_code)
+            .where(FounderNaicsMatrix.founder_id.in_(founder_ids))
+            .order_by(FounderNaicsMatrix.affinity.desc(), FounderNaicsMatrix.naics_code)
+        )
+    ).all()
+    out: dict[UUID, list[FounderNaics]] = {}
+    for founder_id, code, title in rows:
+        out.setdefault(founder_id, []).append(FounderNaics(code=code, title=title))
+    return out
+
+
+async def _linked_founder_ids(session, founder_ids: list[UUID]) -> set[UUID]:
+    """Which of these founders a signed-in Suite user points at.
+
+    A founder is 'profile-linked' when a User with a clerk_user_id has
+    founder_id == it — that is exactly the condition under which the sign-in
+    sync pulls their capability profile. One query for the page.
+    """
+    if not founder_ids:
+        return set()
+    rows = (
+        await session.execute(
+            select(User.founder_id)
+            .where(User.founder_id.in_(founder_ids), User.clerk_user_id.is_not(None))
+            .distinct()
+        )
+    ).scalars().all()
+    return set(rows)
 
 
 @router.get("/founders", response_model=FoundersList)
@@ -116,7 +186,15 @@ async def list_founders(
             .order_by(Founder.full_name)
         )
     ).scalars().all()
-    return FoundersList(total=len(rows), items=[_to_out(r) for r in rows])
+    ids = [r.id for r in rows]
+    naics = await _naics_by_founder(ctx.session, ids)
+    linked = await _linked_founder_ids(ctx.session, ids)
+    return FoundersList(
+        total=len(rows),
+        items=[
+            _to_out(r, naics=naics.get(r.id), profile_linked=r.id in linked) for r in rows
+        ],
+    )
 
 
 @router.get("/founders/{founder_id}", response_model=FounderOut)
@@ -134,7 +212,9 @@ async def get_founder(
     ).scalar_one_or_none()
     if f is None:
         raise HTTPException(status_code=404, detail="founder not found")
-    return _to_out(f)
+    naics = await _naics_by_founder(ctx.session, [f.id])
+    linked = await _linked_founder_ids(ctx.session, [f.id])
+    return _to_out(f, naics=naics.get(f.id), profile_linked=f.id in linked)
 
 
 async def _unique_slug(

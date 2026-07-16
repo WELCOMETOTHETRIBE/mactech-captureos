@@ -77,6 +77,11 @@ export type TenantHeader = {
 
 /* ── /founders ───────────────────────────────────────────────────── */
 
+export type FounderNaics = {
+  code: string;
+  title: string;
+};
+
 export type FounderRecord = {
   id: string;
   slug: string;
@@ -87,6 +92,11 @@ export type FounderRecord = {
   email: string | null;
   digest_enabled: boolean;
   created_at: string;
+  /** NAICS the founder is matched to, strongest first. */
+  naics: FounderNaics[];
+  /** True when a Suite user is linked, so title/bio/NAICS flow in from their
+   * GovCon Ops capability profile on sign-in. */
+  profile_linked: boolean;
 };
 
 export type FoundersListResponse = {
@@ -427,6 +437,12 @@ export type FounderOut = {
   pillar: string;
   email: string | null;
   digest_enabled: boolean;
+  bio: string | null;
+  /** This founder's NAICS, strongest first. */
+  naics: FounderNaics[];
+  /** True when a Suite user is linked — title/bio/NAICS flow from their GovCon
+   * Ops capability profile on sign-in. */
+  profile_linked: boolean;
 };
 
 export type NaicsRow = {
