@@ -183,9 +183,7 @@ async def sync_founder_from_profile(
         # A user row without a Clerk id has never signed in. Ordinary.
         return empty
 
-    resolved = (
-        profile if profile is not None else await fetch_member_profile(user.clerk_user_id)
-    )
+    resolved = profile if profile is not None else await fetch_member_profile(user.clerk_user_id)
     if resolved is None:
         # No profile yet, or the Hub is unreachable. Both mean: leave the
         # founder exactly as it is. The client deliberately does not let us

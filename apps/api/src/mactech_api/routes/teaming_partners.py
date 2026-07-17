@@ -17,12 +17,12 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from mactech_db.models import TeamingPartner
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from mactech_api.auth import RequestContext, get_request_context
-from mactech_db.models import TeamingPartner
 
 router = APIRouter(tags=["teaming-partners"])
 
@@ -114,16 +114,20 @@ async def list_teaming_partners(
     ctx: Annotated[RequestContext, Depends(get_request_context)],
 ) -> TeamingPartnerList:
     rows = (
-        await ctx.session.execute(
-            select(TeamingPartner)
-            .where(TeamingPartner.tenant_id == ctx.tenant.id)
-            .order_by(
-                # active first
-                TeamingPartner.status,
-                TeamingPartner.name,
+        (
+            await ctx.session.execute(
+                select(TeamingPartner)
+                .where(TeamingPartner.tenant_id == ctx.tenant.id)
+                .order_by(
+                    # active first
+                    TeamingPartner.status,
+                    TeamingPartner.name,
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     active_count = sum(1 for r in rows if r.status == "active")
     return TeamingPartnerList(
         total=len(rows),
@@ -238,9 +242,7 @@ async def update_teaming_partner(
     return _to_out(p)
 
 
-@router.delete(
-    "/teaming-partners/{partner_id}", status_code=status.HTTP_204_NO_CONTENT
-)
+@router.delete("/teaming-partners/{partner_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_teaming_partner(
     partner_id: UUID,
     ctx: Annotated[RequestContext, Depends(get_request_context)],

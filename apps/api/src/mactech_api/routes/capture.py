@@ -105,7 +105,9 @@ async def capture_queues(
         # Needs Review is scoped to ACTIONABLE opps that need a human look
         # (low confidence / incomplete package / conflicting evidence) — not the
         # whole NO_BID tail, which is universally metadata-only.
-        actionable = dv.pursuit_lane in _PRIME or dv.pursuit_lane in _SUB or dv.pursuit_lane == "SHAPE_EARLY"
+        actionable = (
+            dv.pursuit_lane in _PRIME or dv.pursuit_lane in _SUB or dv.pursuit_lane == "SHAPE_EARLY"
+        )
         if dv.needs_human_review and actionable and len(review) < limit:
             review.append(item)
         if dv.pursuit_lane in _PRIME and len(prime) < limit:

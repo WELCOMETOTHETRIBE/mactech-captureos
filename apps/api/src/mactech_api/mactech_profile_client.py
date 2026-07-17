@@ -100,7 +100,7 @@ async def fetch_member_profile(
     # parameter to mirror send_audit_log exactly: these two are the app's Hub
     # clients and callers should not have to remember which one takes a timeout
     # differently. Revisit both together, not this one alone.
-    timeout: float = 5.0,  # noqa: ASYNC109
+    timeout: float = 5.0,
     client: httpx.AsyncClient | None = None,
 ) -> MemberProfile | None:
     """Fetch one member's capability profile by their Clerk user id.

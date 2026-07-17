@@ -20,10 +20,6 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select
-
-from mactech_api.auth import RequestContext, get_request_context
 from mactech_db.models import OpportunityBrief, OpportunityRaw
 from mactech_intelligence import (
     AnthropicLLMClient,
@@ -32,6 +28,10 @@ from mactech_intelligence import (
     extract_structured_brief,
 )
 from mactech_intelligence.extract_brief import PROMPT_VERSION
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import select
+
+from mactech_api.auth import RequestContext, get_request_context
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["brief"])
@@ -112,9 +112,7 @@ async def generate_brief(
         )
 
     opp = (
-        await ctx.session.execute(
-            select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id)
-        )
+        await ctx.session.execute(select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id))
     ).scalar_one_or_none()
     if opp is None:
         raise HTTPException(status_code=404, detail="opportunity not found")

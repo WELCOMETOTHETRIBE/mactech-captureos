@@ -21,11 +21,11 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mactech_db.base import Base
-
 
 LIBRARY_IMPORT_KINDS = ("past_performance", "capability_statement")
 LIBRARY_IMPORT_STATUSES = ("queued", "running", "done", "failed")
@@ -42,9 +42,7 @@ class LibraryImportJob(Base):
             "status in ('queued','running','done','failed')",
             name="ck_library_import_jobs_status",
         ),
-        Index(
-            "ix_library_import_jobs_tenant_status", "tenant_id", "status"
-        ),
+        Index("ix_library_import_jobs_tenant_status", "tenant_id", "status"),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -64,18 +62,14 @@ class LibraryImportJob(Base):
     )
 
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
-    status: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="queued"
-    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued")
 
     filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
     file_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     file_blob: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
 
     text_chars: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    result_id: Mapped[UUID | None] = mapped_column(
-        PgUUID(as_uuid=True), nullable=True
-    )
+    result_id: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
     notes: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -88,6 +82,4 @@ class LibraryImportJob(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
-    completed_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
+    completed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)

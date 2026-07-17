@@ -66,9 +66,7 @@ def _analysis_to_row(
         "score": analysis.score,
         "detected_categories_json": cats.model_dump(),
         "top_signals_json": [s.model_dump() for s in analysis.top_signals],
-        "hidden_scope_indicators_json": [
-            s.model_dump() for s in analysis.hidden_scope_indicators
-        ],
+        "hidden_scope_indicators_json": [s.model_dump() for s in analysis.hidden_scope_indicators],
         "missing_requirements_json": analysis.missing_but_likely_requirements,
         "suggested_actions_json": [a.model_dump() for a in analysis.suggested_actions],
         "evidence_snippets_json": [s.model_dump() for s in analysis.evidence_snippets],
@@ -235,14 +233,10 @@ async def scan_opportunity_all_tenants(
 
 
 @celery_app.task(name="mactech.cyber_scope.scan_one")
-def scan_one_task(
-    opportunity_id: str, scan_pass: str | None = None
-) -> list[dict[str, Any]]:
+def scan_one_task(opportunity_id: str, scan_pass: str | None = None) -> list[dict[str, Any]]:
     return [
         asdict(r)
-        for r in asyncio.run(
-            scan_opportunity_all_tenants(opportunity_id, scan_pass=scan_pass)
-        )
+        for r in asyncio.run(scan_opportunity_all_tenants(opportunity_id, scan_pass=scan_pass))
     ]
 
 
@@ -260,24 +254,26 @@ def scan_batch_task(batch_size: int = 50) -> dict[str, Any]:
             # reached the backlog. analyze_cyber_scope is a deterministic
             # parser (no LLM), so a full backfill is cheap.
             rows = (
-                await session.execute(
-                    select(OpportunityRaw.id)
-                    .where(OpportunityRaw.description_text.isnot(None))
-                    .where(
-                        (OpportunityRaw.response_deadline.is_(None))
-                        | (OpportunityRaw.response_deadline >= func.now())
-                    )
-                    .where(
-                        ~select(CyberScopeAnalysis.id)
+                (
+                    await session.execute(
+                        select(OpportunityRaw.id)
+                        .where(OpportunityRaw.description_text.isnot(None))
                         .where(
-                            CyberScopeAnalysis.opportunity_id == OpportunityRaw.id
+                            (OpportunityRaw.response_deadline.is_(None))
+                            | (OpportunityRaw.response_deadline >= func.now())
                         )
-                        .exists()
+                        .where(
+                            ~select(CyberScopeAnalysis.id)
+                            .where(CyberScopeAnalysis.opportunity_id == OpportunityRaw.id)
+                            .exists()
+                        )
+                        .order_by(OpportunityRaw.posted_at.desc().nullslast())
+                        .limit(batch_size)
                     )
-                    .order_by(OpportunityRaw.posted_at.desc().nullslast())
-                    .limit(batch_size)
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
         for opp_id in rows:
             await scan_opportunity_all_tenants(opp_id)

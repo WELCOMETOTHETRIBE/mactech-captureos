@@ -32,9 +32,7 @@ PAYLOAD = {
     "TextBody": "You are invited to bid...",
     "HtmlBody": "<p>You are invited to bid...</p>",
     "Date": "Mon, 13 Jul 2026 09:00:00 -0400",
-    "Attachments": [
-        {"Name": "specs.pdf", "ContentType": "application/pdf", "ContentLength": 4096}
-    ],
+    "Attachments": [{"Name": "specs.pdf", "ContentType": "application/pdf", "ContentLength": 4096}],
 }
 
 
@@ -49,9 +47,7 @@ def test_router_mounted() -> None:
 
 def test_pursue_requires_auth() -> None:
     client = TestClient(app)
-    res = client.post(
-        "/bid-invites/00000000-0000-0000-0000-000000000000/pursue", json={}
-    )
+    res = client.post("/bid-invites/00000000-0000-0000-0000-000000000000/pursue", json={})
     assert res.status_code == 401
 
 

@@ -10,15 +10,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select, text
-
-from mactech_api.auth import RequestContext, get_request_context
-from mactech_api.routes.cyber_scope import (
-    CyberScopeFeedItemOut,
-    _row_to_feed_item,
-)
-from mactech_intelligence.cyber_scope.db_adapter import schema_from_persisted
 from mactech_db.audit import record_event
 from mactech_db.models import (
     EVENT_CYBER_SCOPE_CLARIFICATION_EMAIL,
@@ -29,10 +20,7 @@ from mactech_db.models import (
     OpportunityRaw,
     SavedSearch,
 )
-from mactech_intelligence.cyber_scope.sam_search import (
-    build_sam_cyber_jobs,
-    is_cyber_scope_saved_search,
-)
+from mactech_intelligence.cyber_scope.db_adapter import schema_from_persisted
 from mactech_intelligence.cyber_scope.export_formats import (
     analysis_to_pdf_bytes,
     feed_rows_to_csv,
@@ -51,7 +39,19 @@ from mactech_intelligence.cyber_scope.llm_exports import (
     generate_cyber_scope_summary,
     generate_prime_outreach_email,
 )
+from mactech_intelligence.cyber_scope.sam_search import (
+    build_sam_cyber_jobs,
+    is_cyber_scope_saved_search,
+)
 from mactech_intelligence.llm import AnthropicLLMClient
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import select, text
+
+from mactech_api.auth import RequestContext, get_request_context
+from mactech_api.routes.cyber_scope import (
+    CyberScopeFeedItemOut,
+    _row_to_feed_item,
+)
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["cyber-scope"])
@@ -151,14 +151,10 @@ def _opp_context(opp: OpportunityRaw | None, row: CyberScopeAnalysis) -> CyberSc
     return CyberScopeOppContext(
         title=(opp.title if opp else None) or meta.get("title") or "Opportunity",
         agency=opp.agency if opp else meta.get("agency"),
-        solicitation_number=(
-            opp.solicitation_number if opp else meta.get("solicitation_number")
-        ),
+        solicitation_number=(opp.solicitation_number if opp else meta.get("solicitation_number")),
         notice_type=opp.notice_type if opp else None,
         response_deadline=(
-            opp.response_deadline.isoformat()
-            if opp and opp.response_deadline
-            else None
+            opp.response_deadline.isoformat() if opp and opp.response_deadline else None
         ),
     )
 
@@ -295,8 +291,7 @@ async def clarification_email(
     generated_by = "template"
     model: str | None = None
     if client and (
-        schema.hidden_scope_indicators
-        or schema.overall_cyber_likelihood in ("HIGH", "CRITICAL")
+        schema.hidden_scope_indicators or schema.overall_cyber_likelihood in ("HIGH", "CRITICAL")
     ):
         try:
             email, resp = await generate_clarification_email(client, schema, opp_ctx)
@@ -439,10 +434,14 @@ async def sam_search_status(
 ) -> list[SamSearchStatusOut]:
     """Last run state for cyber-scope SAM search jobs (ingestion_state)."""
     searches = (
-        await ctx.session.execute(
-            select(SavedSearch).where(SavedSearch.tenant_id == ctx.tenant.id)
+        (
+            await ctx.session.execute(
+                select(SavedSearch).where(SavedSearch.tenant_id == ctx.tenant.id)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     out: list[SamSearchStatusOut] = []
     for search in searches:
         filters = dict(search.filters or {})
@@ -550,10 +549,14 @@ async def export_analysis_pdf(
     analysis_id: UUID,
     ctx: Annotated[RequestContext, Depends(get_request_context)],
 ) -> Response:
-    row, schema, opp = await _load_analysis_pair(ctx, analysis_id)
+    row, _schema, opp = await _load_analysis_pair(ctx, analysis_id)
     opp_ctx = _opp_context(opp, row)
     meta = row.metadata_json or {}
-    clar = meta.get("clarification_email") if isinstance(meta.get("clarification_email"), dict) else None
+    clar = (
+        meta.get("clarification_email")
+        if isinstance(meta.get("clarification_email"), dict)
+        else None
+    )
     pdf = analysis_to_pdf_bytes(
         title=opp_ctx.title,
         agency=opp_ctx.agency,

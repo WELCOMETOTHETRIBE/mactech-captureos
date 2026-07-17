@@ -28,10 +28,6 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import delete, select
-
-from mactech_api.auth import RequestContext, get_request_context
 from mactech_db.audit import record_event
 from mactech_db.models import (
     EVENT_PURSUIT_KEY_PERSONNEL_REPLACED,
@@ -47,6 +43,10 @@ from mactech_db.models import (
     TeamingPartner,
     User,
 )
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import delete, select
+
+from mactech_api.auth import RequestContext, get_request_context
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["pursuits"])
@@ -136,14 +136,10 @@ def _to_iso(dt: datetime | None) -> str | None:
     return dt.isoformat() if dt else None
 
 
-async def _load_pursuit_or_404(
-    ctx: RequestContext, pursuit_id: UUID
-) -> Pursuit:
+async def _load_pursuit_or_404(ctx: RequestContext, pursuit_id: UUID) -> Pursuit:
     pursuit = (
         await ctx.session.execute(
-            select(Pursuit).where(
-                Pursuit.id == pursuit_id, Pursuit.tenant_id == ctx.tenant.id
-            )
+            select(Pursuit).where(Pursuit.id == pursuit_id, Pursuit.tenant_id == ctx.tenant.id)
         )
     ).scalar_one_or_none()
     if pursuit is None:
@@ -169,9 +165,7 @@ async def get_pursuit_detail(
     owner = None
     if pursuit.owner_founder_id is not None:
         owner = (
-            await session.execute(
-                select(Founder).where(Founder.id == pursuit.owner_founder_id)
-            )
+            await session.execute(select(Founder).where(Founder.id == pursuit.owner_founder_id))
         ).scalar_one_or_none()
 
     bid_decider_email: str | None = None
@@ -223,20 +217,24 @@ async def get_pursuit_detail(
 
     # Library counts — used by the UI to surface "X available, N selected".
     pp_lib_count = (
-        await session.execute(
-            select(PastPerformance).where(PastPerformance.tenant_id == tenant_id)
+        (
+            await session.execute(
+                select(PastPerformance).where(PastPerformance.tenant_id == tenant_id)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     kp_lib_count = (
-        await session.execute(
-            select(Founder).where(Founder.tenant_id == tenant_id)
-        )
-    ).scalars().all()
+        (await session.execute(select(Founder).where(Founder.tenant_id == tenant_id)))
+        .scalars()
+        .all()
+    )
     tp_lib_count = (
-        await session.execute(
-            select(TeamingPartner).where(TeamingPartner.tenant_id == tenant_id)
-        )
-    ).scalars().all()
+        (await session.execute(select(TeamingPartner).where(TeamingPartner.tenant_id == tenant_id)))
+        .scalars()
+        .all()
+    )
 
     return PursuitDetailOut(
         id=str(pursuit.id),
@@ -308,18 +306,18 @@ async def get_pursuit_detail(
     )
 
 
-async def _validate_tenant_owned(
-    ctx: RequestContext, model: type, ids: list[UUID]
-) -> None:
+async def _validate_tenant_owned(ctx: RequestContext, model: type, ids: list[UUID]) -> None:
     if not ids:
         return
     rows = (
-        await ctx.session.execute(
-            select(model.id).where(
-                model.id.in_(ids), model.tenant_id == ctx.tenant.id
+        (
+            await ctx.session.execute(
+                select(model.id).where(model.id.in_(ids), model.tenant_id == ctx.tenant.id)
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     found = {row for row in rows}
     missing = [i for i in ids if i not in found]
     if missing:
@@ -344,9 +342,7 @@ async def replace_past_performance(
     await _validate_tenant_owned(ctx, PastPerformance, ids)
 
     await ctx.session.execute(
-        delete(PursuitPastPerformance).where(
-            PursuitPastPerformance.pursuit_id == pursuit_id
-        )
+        delete(PursuitPastPerformance).where(PursuitPastPerformance.pursuit_id == pursuit_id)
     )
     for idx, pp_id in enumerate(ids):
         ctx.session.add(
@@ -387,9 +383,7 @@ async def replace_key_personnel(
     await _validate_tenant_owned(ctx, Founder, ids)
 
     await ctx.session.execute(
-        delete(PursuitKeyPersonnel).where(
-            PursuitKeyPersonnel.pursuit_id == pursuit_id
-        )
+        delete(PursuitKeyPersonnel).where(PursuitKeyPersonnel.pursuit_id == pursuit_id)
     )
     for idx, founder_id in enumerate(ids):
         ctx.session.add(
@@ -430,9 +424,7 @@ async def replace_teaming_partners(
     await _validate_tenant_owned(ctx, TeamingPartner, ids)
 
     await ctx.session.execute(
-        delete(PursuitTeamingPartner).where(
-            PursuitTeamingPartner.pursuit_id == pursuit_id
-        )
+        delete(PursuitTeamingPartner).where(PursuitTeamingPartner.pursuit_id == pursuit_id)
     )
     for idx, tp_id in enumerate(ids):
         ctx.session.add(

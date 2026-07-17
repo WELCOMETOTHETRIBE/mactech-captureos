@@ -39,9 +39,7 @@ class OpportunityDecisionVector(Base):
 
     __tablename__ = "opportunity_decision_vectors"
     __table_args__ = (
-        UniqueConstraint(
-            "tenant_id", "opportunity_id", name="uq_decision_vectors_tenant_opp"
-        ),
+        UniqueConstraint("tenant_id", "opportunity_id", name="uq_decision_vectors_tenant_opp"),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -67,9 +65,7 @@ class OpportunityDecisionVector(Base):
     evidence_completeness_score: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="0"
     )
-    overall_priority_score: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="0"
-    )
+    overall_priority_score: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
     pursuit_lane: Mapped[str] = mapped_column(String(40), nullable=False)
     reason_codes: Mapped[list[Any]] = mapped_column(
@@ -81,9 +77,7 @@ class OpportunityDecisionVector(Base):
     lane_weight_profile: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default=text("'prime'")
     )
-    needs_human_review: Mapped[bool] = mapped_column(
-        nullable=False, server_default=text("false")
-    )
+    needs_human_review: Mapped[bool] = mapped_column(nullable=False, server_default=text("false"))
 
     # Versioning + reproducibility.
     formula_version: Mapped[str | None] = mapped_column(String(16), nullable=True)

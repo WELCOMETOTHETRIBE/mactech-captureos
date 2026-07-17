@@ -25,13 +25,13 @@ import os
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
+from mactech_db.models import TermExplanation
+from mactech_intelligence import AnthropicLLMClient, explain_term
+from mactech_intelligence.explain_term import PROMPT_VERSION, parse_slug
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 
 from mactech_api.auth import RequestContext, get_request_context
-from mactech_db.models import TermExplanation
-from mactech_intelligence import AnthropicLLMClient, explain_term
-from mactech_intelligence.explain_term import PROMPT_VERSION, parse_slug
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["explain"])
@@ -160,7 +160,7 @@ async def get_explanation(
             )
         ).scalar_one_or_none()
         if row is None:
-            raise HTTPException(
+            raise HTTPException(  # noqa: B904
                 status_code=500, detail="explanation persistence race"
             )
 

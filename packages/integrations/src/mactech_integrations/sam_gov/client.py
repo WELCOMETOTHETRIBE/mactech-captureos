@@ -141,9 +141,7 @@ class SamGovOpportunitiesClient:
                     log.warning("sam.gov %s — retrying", resp.status_code)
                     raise SamGovRateLimitError(f"server error {resp.status_code}")
                 if resp.status_code >= 400:
-                    raise SamGovError(
-                        f"sam.gov error {resp.status_code}: {resp.text[:200]}"
-                    )
+                    raise SamGovError(f"sam.gov error {resp.status_code}: {resp.text[:200]}")
                 return OpportunitySearchResponse.model_validate(resp.json())
         raise SamGovError("unreachable")  # pragma: no cover
 

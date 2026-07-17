@@ -208,9 +208,7 @@ def _format_past_performance(pp: list[PastPerformanceContext]) -> str:
         if p.naics_code:
             out.append(f"NAICS: {p.naics_code}")
         if p.period_start or p.period_end:
-            out.append(
-                f"Period: {_format_date(p.period_start)} – {_format_date(p.period_end)}"
-            )
+            out.append(f"Period: {_format_date(p.period_start)} – {_format_date(p.period_end)}")
         if p.contract_value is not None:
             out.append(f"Value: {_format_money(p.contract_value)}")
         out.append("")
@@ -239,9 +237,7 @@ def _format_teaming(partners: list[TeamingPartnerContext]) -> str:
         if p.naics_codes:
             out.append(f"NAICS: {_format_list(p.naics_codes)}")
         if p.set_aside_certifications:
-            out.append(
-                f"Set-aside certs: {_format_list(p.set_aside_certifications)}"
-            )
+            out.append(f"Set-aside certs: {_format_list(p.set_aside_certifications)}")
         if p.notes:
             out.append(f"Notes: {p.notes}")
         out.append("")
@@ -286,9 +282,7 @@ def context_hash(inp: SourcesSoughtInput) -> str:
         "custom_instructions": (inp.custom_instructions or "").strip(),
         "version": PROMPT_VERSION,
     }
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, default=str).encode()
-    ).hexdigest()
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
 
 
 async def generate_sources_sought_draft(

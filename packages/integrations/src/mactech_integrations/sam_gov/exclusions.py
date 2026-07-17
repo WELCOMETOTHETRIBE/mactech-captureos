@@ -83,9 +83,7 @@ class SamExclusionsClient:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(5),
             wait=wait_random_exponential(multiplier=1, max=60),
-            retry=retry_if_exception_type(
-                (httpx.TransportError, SamExclusionsRateLimitError)
-            ),
+            retry=retry_if_exception_type((httpx.TransportError, SamExclusionsRateLimitError)),
             reraise=True,
         ):
             with attempt:
@@ -110,10 +108,7 @@ class SamExclusionsClient:
                         records = val
                         break
                 total = payload.get("totalRecords")
-                if isinstance(total, int):
-                    record_count = total
-                else:
-                    record_count = len(records)
+                record_count = total if isinstance(total, int) else len(records)
                 return ExclusionResult(
                     uei=uei,
                     is_excluded=record_count > 0,

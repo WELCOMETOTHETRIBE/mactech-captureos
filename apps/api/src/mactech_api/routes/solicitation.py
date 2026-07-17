@@ -34,10 +34,6 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import delete, select
-
-from mactech_api.auth import RequestContext, get_request_context
 from mactech_db.models import (
     ComplianceMatrixItem,
     EvaluationPassFailItem,
@@ -53,6 +49,10 @@ from mactech_intelligence import (
     extract_solicitation,
 )
 from mactech_intelligence.extract_solicitation import PROMPT_VERSION
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import delete, select
+
+from mactech_api.auth import RequestContext, get_request_context
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["solicitation"])
@@ -198,9 +198,7 @@ async def generate_extraction(
         )
 
     opp = (
-        await ctx.session.execute(
-            select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id)
-        )
+        await ctx.session.execute(select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id))
     ).scalar_one_or_none()
     if opp is None:
         raise HTTPException(status_code=404, detail="opportunity not found")
@@ -253,8 +251,8 @@ async def generate_extraction(
         )
     ).scalar_one_or_none()
 
-    evaluation_total = (
-        len(result.evaluation_pass_fail_items) + len(result.evaluation_scored_factors)
+    evaluation_total = len(result.evaluation_pass_fail_items) + len(
+        result.evaluation_scored_factors
     )
 
     if existing is None:
@@ -279,14 +277,10 @@ async def generate_extraction(
         # Wipe prior items; cascade on extraction_id is fine but explicit
         # deletes keep the SQL audit trail readable in the logs.
         await ctx.session.execute(
-            delete(ComplianceMatrixItem).where(
-                ComplianceMatrixItem.extraction_id == existing.id
-            )
+            delete(ComplianceMatrixItem).where(ComplianceMatrixItem.extraction_id == existing.id)
         )
         await ctx.session.execute(
-            delete(RequirementMatrixItem).where(
-                RequirementMatrixItem.extraction_id == existing.id
-            )
+            delete(RequirementMatrixItem).where(RequirementMatrixItem.extraction_id == existing.id)
         )
         await ctx.session.execute(
             delete(EvaluationPassFailItem).where(

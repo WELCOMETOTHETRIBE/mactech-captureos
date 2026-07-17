@@ -212,9 +212,7 @@ async def run_dsip_lookup(topic_number: str) -> DSIPLookupResult:
         )
 
     run_input = {
-        "startUrls": [
-            {"url": DSIP_URL, "userData": {"topicNumber": topic_number}}
-        ],
+        "startUrls": [{"url": DSIP_URL, "userData": {"topicNumber": topic_number}}],
         "pageFunction": _PAGE_FUNCTION,
         "headless": True,
         "useChrome": True,
@@ -271,9 +269,7 @@ async def run_dsip_lookup(topic_number: str) -> DSIPLookupResult:
         )
 
         try:
-            page = await client.dataset_items(
-                run.default_dataset_id, limit=10, clean=True
-            )
+            page = await client.dataset_items(run.default_dataset_id, limit=10, clean=True)
             items = [p.payload for p in page]
         except ApifyError as exc:
             return DSIPLookupResult(
@@ -480,10 +476,10 @@ async def _persist_enrichment(
     """
     async with unscoped_session() as session:
         rows = (
-            await session.execute(
-                select(SBIRTopic).where(SBIRTopic.topic_number == topic_number)
-            )
-        ).scalars().all()
+            (await session.execute(select(SBIRTopic).where(SBIRTopic.topic_number == topic_number)))
+            .scalars()
+            .all()
+        )
 
         if not rows:
             log.info(
@@ -529,8 +525,6 @@ async def _persist_enrichment(
                         row.phase_i_ceiling = int(extracted["phase_i_ceiling"])
                 if extracted.get("phase_i_duration_months") is not None:
                     with contextlib.suppress(TypeError, ValueError):
-                        row.phase_i_duration_months = int(
-                            extracted["phase_i_duration_months"]
-                        )
+                        row.phase_i_duration_months = int(extracted["phase_i_duration_months"])
                 if extracted.get("tpoc"):
                     row.dsip_tpoc = str(extracted["tpoc"])[:512]

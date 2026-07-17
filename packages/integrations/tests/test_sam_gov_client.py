@@ -12,7 +12,6 @@ import os
 from datetime import date, timedelta
 
 import pytest
-
 from mactech_integrations.sam_gov import SamGovOpportunitiesClient
 
 pytestmark = pytest.mark.skipif(

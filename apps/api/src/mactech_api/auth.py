@@ -57,6 +57,7 @@ def _map_icc_role_to_capture_role(icc_role: str, is_internal: bool) -> str:
         return "admin"
     return "member"
 
+
 log = logging.getLogger(__name__)
 
 # In-memory dedup so we fire at most one capture.session.opened event per
@@ -104,6 +105,7 @@ def _fire_and_forget(coro: Any) -> None:
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
 
+
 # Clerk publishes the JWKS at <frontend-api>/.well-known/jwks.json. Frontend API
 # host comes from CLERK_FRONTEND_API or, on dev, can be inferred from the
 # publishable key. We require the env var to be set explicitly in production.
@@ -119,11 +121,7 @@ def _get_jwks_client() -> PyJWKClient:
             "or your custom Clerk domain."
         )
     if frontend_api not in _JWKS_CLIENTS:
-        url = (
-            frontend_api
-            if frontend_api.startswith("http")
-            else f"https://{frontend_api}"
-        )
+        url = frontend_api if frontend_api.startswith("http") else f"https://{frontend_api}"
         if not url.endswith("/.well-known/jwks.json"):
             url = url.rstrip("/") + "/.well-known/jwks.json"
         _JWKS_CLIENTS[frontend_api] = PyJWKClient(url, cache_keys=True)
@@ -187,9 +185,7 @@ async def _resolve_tenant_and_user(
             detail="token missing tenant_org_id claim — verify Clerk JWT template",
         )
     tenant = (
-        await session.execute(
-            select(Tenant).where(Tenant.clerk_org_id == claims.tenant_org_id)
-        )
+        await session.execute(select(Tenant).where(Tenant.clerk_org_id == claims.tenant_org_id))
     ).scalar_one_or_none()
 
     # If no local tenant exists for this Clerk org, ask the central
@@ -219,12 +215,9 @@ async def _resolve_tenant_and_user(
         icc_org_role = icc_org.role
         icc_is_internal = access[0].is_internal_mactech_user
 
-        slug = (
-            (icc_org.clerk_org_id or "")
-            .lower()
-            .replace("_", "-")[:50]
-            or f"tenant-{claims.tenant_org_id[-12:].lower()}"
-        )
+        slug = (icc_org.clerk_org_id or "").lower().replace("_", "-")[
+            :50
+        ] or f"tenant-{claims.tenant_org_id[-12:].lower()}"
         tenant = Tenant(
             slug=slug,
             name=icc_org.org_name,
@@ -234,9 +227,7 @@ async def _resolve_tenant_and_user(
         await session.flush()
 
     user = (
-        await session.execute(
-            select(User).where(User.clerk_user_id == claims.sub)
-        )
+        await session.execute(select(User).where(User.clerk_user_id == claims.sub))
     ).scalar_one_or_none()
     if user is None:
         # Just-in-time user provisioning. Email goes in `users.email`; founder
@@ -267,9 +258,7 @@ async def _resolve_tenant_and_user(
             if user_access is not None:
                 icc_org_role = user_access[1].role
                 icc_is_internal = user_access[0].is_internal_mactech_user
-        role = _map_icc_role_to_capture_role(
-            icc_org_role or "member", icc_is_internal
-        )
+        role = _map_icc_role_to_capture_role(icc_org_role or "member", icc_is_internal)
 
         user = User(
             tenant_id=tenant.id,
@@ -285,9 +274,7 @@ async def _resolve_tenant_and_user(
     founder: Founder | None = None
     if user.founder_id:
         founder = (
-            await session.execute(
-                select(Founder).where(Founder.id == user.founder_id)
-            )
+            await session.execute(select(Founder).where(Founder.id == user.founder_id))
         ).scalar_one_or_none()
     elif claims.founder_slug:
         founder = (
@@ -315,9 +302,7 @@ async def get_request_context(
     happens automatically on exception.
     """
     if credentials is None or not credentials.credentials:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="missing bearer token"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing bearer token")
 
     claims = await _verify_clerk_jwt(credentials.credentials)
 
@@ -338,9 +323,7 @@ async def get_request_context(
         tenant_attached = (
             await session.execute(select(Tenant).where(Tenant.id == tenant_id))
         ).scalar_one()
-        user_attached = (
-            await session.execute(select(User).where(User.id == user_id))
-        ).scalar_one()
+        user_attached = (await session.execute(select(User).where(User.id == user_id))).scalar_one()
         founder_attached: Founder | None = None
         if founder_id:
             founder_attached = (

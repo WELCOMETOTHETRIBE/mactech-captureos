@@ -11,21 +11,16 @@ Endpoints:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+from collections.abc import AsyncIterator
 from datetime import date, datetime, timezone
 from typing import Annotated, Any
 from uuid import UUID
 
-import json
-from collections.abc import AsyncIterator
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import desc, select
-
-from mactech_api.auth import RequestContext, get_request_context
 from mactech_db.models import (
     CapabilityStatement,
     Founder,
@@ -45,6 +40,10 @@ from mactech_intelligence import (
     stream_ask_about_opportunity,
 )
 from mactech_intelligence.ask_about_opportunity import PROMPT_VERSION
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import desc, select
+
+from mactech_api.auth import RequestContext, get_request_context
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["ask"])
@@ -91,9 +90,7 @@ def _q_out(q: OpportunityQuestion, asker: Founder | None) -> QuestionOut:
         question=q.question,
         answer=q.answer,
         starter_kind=q.starter_kind,
-        asked_by=(
-            AskerRef(slug=asker.slug, full_name=asker.full_name) if asker else None
-        ),
+        asked_by=(AskerRef(slug=asker.slug, full_name=asker.full_name) if asker else None),
         model=q.model,
         input_tokens=q.input_tokens,
         output_tokens=q.output_tokens,
@@ -119,34 +116,46 @@ async def _build_ask_input(
     tenant = ctx.tenant
 
     caps = (
-        await session.execute(
-            select(CapabilityStatement).where(
-                CapabilityStatement.tenant_id == tenant.id
+        (
+            await session.execute(
+                select(CapabilityStatement).where(CapabilityStatement.tenant_id == tenant.id)
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     pp = (
-        await session.execute(
-            select(PastPerformance)
-            .where(PastPerformance.tenant_id == tenant.id)
-            .order_by(PastPerformance.period_end.desc().nulls_last())
-        )
-    ).scalars().all()
-    partners = (
-        await session.execute(
-            select(TeamingPartner).where(
-                TeamingPartner.tenant_id == tenant.id,
-                TeamingPartner.status == "active",
+        (
+            await session.execute(
+                select(PastPerformance)
+                .where(PastPerformance.tenant_id == tenant.id)
+                .order_by(PastPerformance.period_end.desc().nulls_last())
             )
         )
-    ).scalars().all()
-    founders = (
-        await session.execute(
-            select(Founder)
-            .where(Founder.tenant_id == tenant.id)
-            .order_by(Founder.full_name)
+        .scalars()
+        .all()
+    )
+    partners = (
+        (
+            await session.execute(
+                select(TeamingPartner).where(
+                    TeamingPartner.tenant_id == tenant.id,
+                    TeamingPartner.status == "active",
+                )
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
+    founders = (
+        (
+            await session.execute(
+                select(Founder).where(Founder.tenant_id == tenant.id).order_by(Founder.full_name)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     return AskInput(
         question=_resolve_question(starter_kind, raw_question),
@@ -170,9 +179,7 @@ async def _build_ask_input(
                 else None
             ),
             incumbent_end_date=(
-                enr.incumbent_end_date.isoformat()
-                if enr and enr.incumbent_end_date
-                else None
+                enr.incumbent_end_date.isoformat() if enr and enr.incumbent_end_date else None
             ),
         ),
         firm=AskFirmContext(
@@ -182,16 +189,9 @@ async def _build_ask_input(
             plan=tenant.plan,
             set_aside_certifications=[],
             capability_titles_and_summaries=[(c.title, c.summary) for c in caps],
-            past_performance_summaries=[
-                _summarize_pp(p) for p in pp[:8]
-            ],
-            teaming_partner_summaries=[
-                _summarize_partner(p) for p in partners[:8]
-            ],
-            founder_summaries=[
-                f"{f.full_name}, {f.title} ({f.pillar} pillar)"
-                for f in founders
-            ],
+            past_performance_summaries=[_summarize_pp(p) for p in pp[:8]],
+            teaming_partner_summaries=[_summarize_partner(p) for p in partners[:8]],
+            founder_summaries=[f"{f.full_name}, {f.title} ({f.pillar} pillar)" for f in founders],
         ),
     )
 
@@ -226,9 +226,7 @@ async def list_questions(
     rows = (
         await ctx.session.execute(
             select(OpportunityQuestion, Founder)
-            .outerjoin(
-                Founder, Founder.id == OpportunityQuestion.asked_by_founder_id
-            )
+            .outerjoin(Founder, Founder.id == OpportunityQuestion.asked_by_founder_id)
             .where(
                 OpportunityQuestion.tenant_id == ctx.tenant.id,
                 OpportunityQuestion.opportunity_id == opportunity_id,
@@ -238,9 +236,7 @@ async def list_questions(
         )
     ).all()
     items = [_q_out(q, asker) for q, asker in rows]
-    return QuestionListResponse(
-        total=len(items), items=items, starters=dict(ASK_STARTERS)
-    )
+    return QuestionListResponse(total=len(items), items=items, starters=dict(ASK_STARTERS))
 
 
 @router.delete(
@@ -297,18 +293,14 @@ async def ask_question_stream(
         )
 
     opp = (
-        await ctx.session.execute(
-            select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id)
-        )
+        await ctx.session.execute(select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id))
     ).scalar_one_or_none()
     if opp is None:
         raise HTTPException(status_code=404, detail="opportunity not found")
 
     enr = (
         await ctx.session.execute(
-            select(OpportunityEnriched).where(
-                OpportunityEnriched.opportunity_id == opportunity_id
-            )
+            select(OpportunityEnriched).where(OpportunityEnriched.opportunity_id == opportunity_id)
         )
     ).scalar_one_or_none()
     score = (
@@ -320,13 +312,9 @@ async def ask_question_stream(
         )
     ).scalar_one_or_none()
 
-    inp = await _build_ask_input(
-        ctx, opp, enr, score, body.question, body.starter_kind
-    )
+    inp = await _build_ask_input(ctx, opp, enr, score, body.question, body.starter_kind)
     persisted_question = inp.question
-    starter_kind = (
-        body.starter_kind if body.starter_kind in ASK_STARTERS else None
-    )
+    starter_kind = body.starter_kind if body.starter_kind in ASK_STARTERS else None
     asked_by_id = ctx.founder.id if ctx.founder else None
     tenant_id = ctx.tenant.id
     # Capture session-bound state by value before entering the streaming
@@ -360,9 +348,7 @@ async def ask_question_stream(
 
         answer_text = "".join(accumulated).strip()
         if not answer_text:
-            yield (
-                b'data: {"type":"error","message":"empty model response"}\n\n'
-            )
+            yield (b'data: {"type":"error","message":"empty model response"}\n\n')
             return
 
         # Persist on stream completion. Use a fresh session because the
@@ -386,7 +372,7 @@ async def ask_question_stream(
                 persist_session.add(q)
                 await persist_session.flush()
                 question_id = str(q.id)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.exception("ask persistence failed: %s", exc)
             payload = {
                 "type": "error",

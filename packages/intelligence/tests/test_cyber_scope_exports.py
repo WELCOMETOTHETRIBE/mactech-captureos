@@ -1,12 +1,12 @@
 """Tests for cyber scope export helpers."""
 
+from mactech_intelligence.cyber_scope.analyze import analyze_cyber_scope
 from mactech_intelligence.cyber_scope.export_formats import feed_rows_to_csv
 from mactech_intelligence.cyber_scope.llm_exports import (
+    CyberScopeOppContext,
     deterministic_clarification_email,
     deterministic_summary,
 )
-from mactech_intelligence.cyber_scope.analyze import analyze_cyber_scope
-from mactech_intelligence.cyber_scope.llm_exports import CyberScopeOppContext
 from mactech_intelligence.cyber_scope.sources import CyberScopeTextSource
 
 

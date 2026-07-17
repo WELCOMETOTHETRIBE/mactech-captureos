@@ -17,9 +17,7 @@ def _title_looks_non_cyber(title: str | None) -> bool:
     if not title:
         return True
     lower = title.lower()
-    if "cyber" in lower or "security" in lower or "rmf" in lower:
-        return False
-    return True
+    return not ("cyber" in lower or "security" in lower or "rmf" in lower)
 
 
 def detect_hidden_scope(

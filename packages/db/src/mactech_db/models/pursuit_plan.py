@@ -105,9 +105,7 @@ class PursuitAction(Base):
     purpose: Mapped[str | None] = mapped_column(Text, nullable=True)
     completion_criteria: Mapped[str | None] = mapped_column(Text, nullable=True)
     dependency: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    status: Mapped[str] = mapped_column(
-        String(16), nullable=False, server_default=text("'open'")
-    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default=text("'open'"))
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

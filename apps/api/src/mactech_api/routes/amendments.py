@@ -21,10 +21,6 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import or_, select
-
-from mactech_api.auth import RequestContext, get_request_context
 from mactech_db.models import (
     AuditEvent,
     Founder,
@@ -33,6 +29,10 @@ from mactech_db.models import (
     Pursuit,
     User,
 )
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import or_, select
+
+from mactech_api.auth import RequestContext, get_request_context
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["amendments", "audit"])
@@ -104,12 +104,16 @@ async def list_amendments(
         raise HTTPException(status_code=404, detail="opportunity not found")
 
     rows = (
-        await ctx.session.execute(
-            select(OpportunityAmendment)
-            .where(OpportunityAmendment.opportunity_id == opportunity_id)
-            .order_by(OpportunityAmendment.detected_at.desc())
+        (
+            await ctx.session.execute(
+                select(OpportunityAmendment)
+                .where(OpportunityAmendment.opportunity_id == opportunity_id)
+                .order_by(OpportunityAmendment.detected_at.desc())
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     return AmendmentListOut(
         opportunity_id=str(opportunity_id),
@@ -125,15 +129,11 @@ async def list_amendments(
                     else None
                 ),
                 new_response_deadline=(
-                    a.new_response_deadline.isoformat()
-                    if a.new_response_deadline
-                    else None
+                    a.new_response_deadline.isoformat() if a.new_response_deadline else None
                 ),
                 previous_title=a.previous_title,
                 new_title=a.new_title,
-                diff_summary=[
-                    AmendmentDiffEntry(**entry) for entry in (a.diff_summary or [])
-                ],
+                diff_summary=[AmendmentDiffEntry(**entry) for entry in (a.diff_summary or [])],
                 detected_at=a.detected_at.isoformat(),
             )
             for a in rows
@@ -152,9 +152,7 @@ async def list_pursuit_audit(
 ) -> AuditTrailOut:
     pursuit = (
         await ctx.session.execute(
-            select(Pursuit).where(
-                Pursuit.id == pursuit_id, Pursuit.tenant_id == ctx.tenant.id
-            )
+            select(Pursuit).where(Pursuit.id == pursuit_id, Pursuit.tenant_id == ctx.tenant.id)
         )
     ).scalar_one_or_none()
     if pursuit is None:
@@ -164,34 +162,34 @@ async def list_pursuit_audit(
     # this pursuit's parent opportunity. Tenant filter still applies
     # because amendment events are written per-tenant.
     events = (
-        await ctx.session.execute(
-            select(AuditEvent)
-            .where(
-                AuditEvent.tenant_id == ctx.tenant.id,
-                or_(
-                    (AuditEvent.entity_type == "pursuit")
-                    & (AuditEvent.entity_id == pursuit_id),
-                    (AuditEvent.entity_type == "opportunity")
-                    & (AuditEvent.entity_id == pursuit.opportunity_id),
-                ),
+        (
+            await ctx.session.execute(
+                select(AuditEvent)
+                .where(
+                    AuditEvent.tenant_id == ctx.tenant.id,
+                    or_(
+                        (AuditEvent.entity_type == "pursuit")
+                        & (AuditEvent.entity_id == pursuit_id),
+                        (AuditEvent.entity_type == "opportunity")
+                        & (AuditEvent.entity_id == pursuit.opportunity_id),
+                    ),
+                )
+                .order_by(AuditEvent.created_at.desc())
+                .limit(min(max(limit, 1), 500))
             )
-            .order_by(AuditEvent.created_at.desc())
-            .limit(min(max(limit, 1), 500))
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     # Resolve actor labels in a single batch each.
     user_ids = {e.actor_user_id for e in events if e.actor_user_id is not None}
-    founder_ids = {
-        e.actor_founder_id for e in events if e.actor_founder_id is not None
-    }
+    founder_ids = {e.actor_founder_id for e in events if e.actor_founder_id is not None}
     user_map: dict[UUID, str] = {}
     founder_map: dict[UUID, tuple[str, str]] = {}
     if user_ids:
         user_rows = (
-            await ctx.session.execute(
-                select(User.id, User.email).where(User.id.in_(user_ids))
-            )
+            await ctx.session.execute(select(User.id, User.email).where(User.id.in_(user_ids)))
         ).all()
         user_map = {row[0]: row[1] for row in user_rows}
     if founder_ids:

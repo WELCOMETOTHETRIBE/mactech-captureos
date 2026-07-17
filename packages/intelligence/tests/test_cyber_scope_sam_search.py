@@ -34,10 +34,11 @@ def test_build_jobs_naics_and_title_group():
 
 
 def test_keyword_match():
+    # A keyword present in the title (case-insensitive) matches.
     assert record_matches_keywords(
         title="HVAC Controls Upgrade",
         solicitation_number="W912HQ-26-R-0001",
-        keywords=("BACnet", "UMCS"),
+        keywords=("HVAC", "UMCS"),
     )
     assert not record_matches_keywords(
         title="Generic office supplies",

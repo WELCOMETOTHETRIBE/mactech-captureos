@@ -168,9 +168,7 @@ class SamEntityClient:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(5),
             wait=wait_random_exponential(multiplier=1, max=60),
-            retry=retry_if_exception_type(
-                (httpx.TransportError, SamEntityRateLimitError)
-            ),
+            retry=retry_if_exception_type((httpx.TransportError, SamEntityRateLimitError)),
             reraise=True,
         ):
             with attempt:
@@ -179,17 +177,13 @@ class SamEntityClient:
                     log.warning("sam entity 429 — backing off")
                     raise SamEntityRateLimitError("rate limited")
                 if 500 <= resp.status_code < 600:
-                    raise SamEntityRateLimitError(
-                        f"server error {resp.status_code}"
-                    )
+                    raise SamEntityRateLimitError(f"server error {resp.status_code}")
                 if resp.status_code >= 400:
-                    raise SamEntityError(
-                        f"sam entity error {resp.status_code}: {resp.text[:200]}"
-                    )
+                    raise SamEntityError(f"sam entity error {resp.status_code}: {resp.text[:200]}")
 
                 data = resp.json()
 
-                entity_data = (data.get("entityData") or [])
+                entity_data = data.get("entityData") or []
                 if not entity_data:
                     raise SamEntityNotFoundError(
                         f"no SAM entity found for UEI {uei}. "
@@ -220,16 +214,11 @@ class SamEntityClient:
                 code_s = str(code).strip()
                 if code_s and code_s not in naics_codes:
                     naics_codes.append(code_s)
-                if (
-                    n.get("primaryNAICS") in ("Y", True, "true", "True")
-                    and primary_naics is None
-                ):
+                if n.get("primaryNAICS") in ("Y", True, "true", "True") and primary_naics is None:
                     primary_naics = code_s
 
         business_types = (
-            (assertions.get("businessTypes") or {}).get(
-                "businessTypeList"
-            )
+            (assertions.get("businessTypes") or {}).get("businessTypeList")
             or core.get("businessTypes")
             or []
         )
@@ -239,31 +228,20 @@ class SamEntityClient:
                 d = (
                     bt.get("businessTypeDesc")
                     or bt.get("description")
-                    or _BUSINESS_TYPE_CODE_MAP.get(
-                        str(bt.get("businessTypeCode") or "").strip()
-                    )
+                    or _BUSINESS_TYPE_CODE_MAP.get(str(bt.get("businessTypeCode") or "").strip())
                 )
                 if d:
                     biz_descs.append(str(d))
 
         # POC — the API exposes "pointsOfContact"; pull primary government POC.
         poc = entity.get("pointsOfContact") or {}
-        primary = (
-            poc.get("governmentBusinessPOC")
-            or poc.get("electronicBusinessPOC")
-            or {}
-        )
+        primary = poc.get("governmentBusinessPOC") or poc.get("electronicBusinessPOC") or {}
 
         return EntityProfile(
             uei=uei,
-            cage_code=(
-                identification.get("cageCode")
-                or core.get("cageCode")
-                or None
-            ),
+            cage_code=(identification.get("cageCode") or core.get("cageCode") or None),
             legal_business_name=(
-                identification.get("legalBusinessName")
-                or core.get("legalBusinessName")
+                identification.get("legalBusinessName") or core.get("legalBusinessName")
             ),
             dba_name=identification.get("dbaName") or core.get("dbaName"),
             registration_status=registration.get("registrationStatus"),
@@ -271,13 +249,8 @@ class SamEntityClient:
             or registration.get("activationDate"),
             expiration_date=registration.get("expirationDate"),
             physical_address_city=physical.get("city"),
-            physical_address_state=(
-                physical.get("stateOrProvinceCode")
-                or physical.get("state")
-            ),
-            physical_address_country=(
-                physical.get("countryCode") or physical.get("country")
-            ),
+            physical_address_state=(physical.get("stateOrProvinceCode") or physical.get("state")),
+            physical_address_country=(physical.get("countryCode") or physical.get("country")),
             primary_naics=primary_naics,
             naics_codes=naics_codes,
             business_types_raw=biz_descs,
@@ -285,12 +258,8 @@ class SamEntityClient:
                 business_types if isinstance(business_types, list) else []
             ),
             pop_email=primary.get("email") if isinstance(primary, dict) else None,
-            pop_first_name=(
-                primary.get("firstName") if isinstance(primary, dict) else None
-            ),
-            pop_last_name=(
-                primary.get("lastName") if isinstance(primary, dict) else None
-            ),
+            pop_first_name=(primary.get("firstName") if isinstance(primary, dict) else None),
+            pop_last_name=(primary.get("lastName") if isinstance(primary, dict) else None),
             pop_title=primary.get("title") if isinstance(primary, dict) else None,
             raw=entity,
         )

@@ -44,16 +44,12 @@ from mactech_workers.celery_app import celery_app
 
 log = logging.getLogger(__name__)
 
-_CONSTRUCTION_NAICS = frozenset(
-    {"236220", "237130", "237310", "237990", "238210", "562910"}
-)
+_CONSTRUCTION_NAICS = frozenset({"236220", "237130", "237310", "237990", "238210", "562910"})
 _TENANT_SET_ASIDES = frozenset(SDVOSB_CODES | SMALL_BIZ_CODES)
 
 
 def _combined_text(opp: OpportunityRaw, attachment_text: str | None) -> str:
-    return "\n\n".join(
-        p for p in (opp.title, opp.description_text, attachment_text) if p
-    )
+    return "\n\n".join(p for p in (opp.title, opp.description_text, attachment_text) if p)
 
 
 def _completeness(opp: OpportunityRaw, attachment_text: str | None) -> str:
@@ -144,9 +140,7 @@ async def _persist(
     await session.execute(
         pg_insert(OpportunityDecisionVector)
         .values(**values)
-        .on_conflict_do_update(
-            constraint="uq_decision_vectors_tenant_opp", set_=update_cols
-        )
+        .on_conflict_do_update(constraint="uq_decision_vectors_tenant_opp", set_=update_cols)
     )
 
     # Replace gate rows for this (tenant, opp): upsert each detected gate.
@@ -202,9 +196,7 @@ async def compute_one(tenant_slug: str, opportunity_id: str) -> dict[str, Any]:
             return {"status": "error", "reason": "tenant_not_found"}
 
         opp = (
-            await session.execute(
-                select(OpportunityRaw).where(OpportunityRaw.id == opp_uuid)
-            )
+            await session.execute(select(OpportunityRaw).where(OpportunityRaw.id == opp_uuid))
         ).scalar_one_or_none()
         if opp is None:
             return {"status": "error", "reason": "opportunity_not_found"}
@@ -218,9 +210,7 @@ async def compute_one(tenant_slug: str, opportunity_id: str) -> dict[str, Any]:
 
         enr = (
             await session.execute(
-                select(OpportunityEnriched).where(
-                    OpportunityEnriched.opportunity_id == opp_uuid
-                )
+                select(OpportunityEnriched).where(OpportunityEnriched.opportunity_id == opp_uuid)
             )
         ).scalar_one_or_none()
         incumbent_excluded = None
@@ -243,9 +233,7 @@ async def compute_one(tenant_slug: str, opportunity_id: str) -> dict[str, Any]:
             )
         ).scalar_one()
 
-        inputs = _build_inputs(
-            opp, enr, incumbent_excluded, attachment_text, prime_targets_count
-        )
+        inputs = _build_inputs(opp, enr, incumbent_excluded, attachment_text, prime_targets_count)
         result = decide(inputs)
         snapshot = {
             "has_direct_cyber": inputs.has_direct_cyber,
@@ -279,20 +267,27 @@ async def compute_batch(tenant_slug: str, limit: int = 50) -> dict[str, Any]:
         if tenant is None:
             return {"status": "error", "reason": "tenant_not_found"}
         rows = (
-            await session.execute(
-                select(OpportunityScore.opportunity_id)
-                .outerjoin(
-                    OpportunityDecisionVector,
-                    (OpportunityDecisionVector.opportunity_id == OpportunityScore.opportunity_id)
-                    & (OpportunityDecisionVector.tenant_id == tenant.id),
+            (
+                await session.execute(
+                    select(OpportunityScore.opportunity_id)
+                    .outerjoin(
+                        OpportunityDecisionVector,
+                        (
+                            OpportunityDecisionVector.opportunity_id
+                            == OpportunityScore.opportunity_id
+                        )
+                        & (OpportunityDecisionVector.tenant_id == tenant.id),
+                    )
+                    .where(
+                        OpportunityScore.tenant_id == tenant.id,
+                        OpportunityDecisionVector.id.is_(None),
+                    )
+                    .limit(limit)
                 )
-                .where(
-                    OpportunityScore.tenant_id == tenant.id,
-                    OpportunityDecisionVector.id.is_(None),
-                )
-                .limit(limit)
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
     computed = 0
     for opp_id in rows:

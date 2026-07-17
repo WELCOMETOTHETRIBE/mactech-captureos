@@ -126,14 +126,14 @@ def _high_moat_config() -> HighMoatConfig | None:
     return HighMoatConfig(
         weights=dict(raw.get("weights") or {}),
         priority_agencies=list(raw.get("priority_agencies") or []),
-        traditional_construction_naics=set(
-            raw.get("traditional_construction_naics") or []
-        ),
+        traditional_construction_naics=set(raw.get("traditional_construction_naics") or []),
         sweet_spot_min_score=int(raw.get("sweet_spot_min_score") or 80),
     )
 
 
-def _high_moat_patterns() -> tuple[dict[str, list[str]], dict[str, list[str]], dict[str, list[str]]]:
+def _high_moat_patterns() -> tuple[
+    dict[str, list[str]], dict[str, list[str]], dict[str, list[str]]
+]:
     raw = _load_high_moat_config_raw() or {}
     return (
         {k: list(v) for k, v in (raw.get("clause_patterns") or {}).items()},
@@ -166,22 +166,30 @@ async def _build_context(session: AsyncSession, tenant: Tenant) -> ScoringContex
         secondary_rows: list[str] = []
     else:
         primary_rows = (
-            await session.execute(
-                select(NaicsCode.code).where(NaicsCode.mactech_tier == "primary")
+            (
+                await session.execute(
+                    select(NaicsCode.code).where(NaicsCode.mactech_tier == "primary")
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         secondary_rows = (
-            await session.execute(
-                select(NaicsCode.code).where(NaicsCode.mactech_tier == "secondary")
+            (
+                await session.execute(
+                    select(NaicsCode.code).where(NaicsCode.mactech_tier == "secondary")
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
     # Keywords + sweet-spot from saved_searches.filters
     searches = (
-        await session.execute(
-            select(SavedSearch).where(SavedSearch.tenant_id == tenant.id)
-        )
-    ).scalars().all()
+        (await session.execute(select(SavedSearch).where(SavedSearch.tenant_id == tenant.id)))
+        .scalars()
+        .all()
+    )
     keywords: list[str] = []
     seen: set[str] = set()
     for s in searches:
@@ -322,9 +330,7 @@ def _build_high_moat_facts(
     )
 
 
-def _high_moat_flags_payload(
-    findings: ClauseFindings, result: HighMoatResult
-) -> dict[str, Any]:
+def _high_moat_flags_payload(findings: ClauseFindings, result: HighMoatResult) -> dict[str, Any]:
     return {
         "clause_hits": list(findings.clause_hits),
         "clearance_hits": list(findings.clearance_hits),
@@ -373,9 +379,7 @@ async def _lookup_incumbent_excluded(
     if not uei:
         return None
     row = (
-        await session.execute(
-            select(ExclusionsCache).where(ExclusionsCache.uei == uei)
-        )
+        await session.execute(select(ExclusionsCache).where(ExclusionsCache.uei == uei))
     ).scalar_one_or_none()
     return None if row is None else bool(row.is_excluded)
 
@@ -411,7 +415,7 @@ async def _capability_similarity_score(
     top_sim = float(rows[0][1])
     # Cosine similarity ranges roughly 0..1 for our text. Map 0.55 -> 5,
     # 0.40 -> 0 with linear interpolation in between.
-    points = max(0, min(5, int(round(((top_sim - 0.40) / 0.15) * 5))))
+    points = max(0, min(5, round(((top_sim - 0.40) / 0.15) * 5)))
     return points, [r[0] for r in rows]
 
 
@@ -522,48 +526,48 @@ async def score_unscored_batch(
 
     async with session_factory() as session, session.begin():
         tenant = (
-            await session.execute(
-                select(Tenant).where(Tenant.slug == tenant_slug)
-            )
+            await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))
         ).scalar_one()
         ctx = await _build_context(session, tenant)
         founders_by_slug = {
             f.slug: f
-            for f in (
-                await session.execute(
-                    select(Founder).where(Founder.tenant_id == tenant.id)
-                )
-            ).scalars().all()
+            for f in (await session.execute(select(Founder).where(Founder.tenant_id == tenant.id)))
+            .scalars()
+            .all()
         }
 
         # Find unscored opps (no row in opportunity_scores).
         opps = (
-            await session.execute(
-                select(OpportunityRaw)
-                # attachment_text is a deferred column; the high-moat clause
-                # scan reads it below. Without undefer() the plain attribute
-                # access emits a lazy load outside the async greenlet and
-                # raises MissingGreenlet, which the caller swallows as
-                # scored=0 — the silent scoring outage from 2026-05-22.
-                .options(undefer(OpportunityRaw.attachment_text))
-                .outerjoin(
-                    OpportunityScore,
-                    (OpportunityScore.opportunity_id == OpportunityRaw.id)
-                    & (OpportunityScore.tenant_id == tenant.id),
+            (
+                await session.execute(
+                    select(OpportunityRaw)
+                    # attachment_text is a deferred column; the high-moat clause
+                    # scan reads it below. Without undefer() the plain attribute
+                    # access emits a lazy load outside the async greenlet and
+                    # raises MissingGreenlet, which the caller swallows as
+                    # scored=0 — the silent scoring outage from 2026-05-22.
+                    .options(undefer(OpportunityRaw.attachment_text))
+                    .outerjoin(
+                        OpportunityScore,
+                        (OpportunityScore.opportunity_id == OpportunityRaw.id)
+                        & (OpportunityScore.tenant_id == tenant.id),
+                    )
+                    .where(OpportunityScore.id.is_(None))
+                    .where(OpportunityRaw.naics_code.is_not(None))
+                    # Don't spend an LLM rationale scoring a notice that can no
+                    # longer be bid. Null deadlines are kept (unknown != closed),
+                    # matching the list view's expiry filter.
+                    .where(
+                        (OpportunityRaw.response_deadline.is_(None))
+                        | (OpportunityRaw.response_deadline >= func.now())
+                    )
+                    .order_by(OpportunityRaw.posted_at.desc().nulls_last())
+                    .limit(batch_size)
                 )
-                .where(OpportunityScore.id.is_(None))
-                .where(OpportunityRaw.naics_code.is_not(None))
-                # Don't spend an LLM rationale scoring a notice that can no
-                # longer be bid. Null deadlines are kept (unknown != closed),
-                # matching the list view's expiry filter.
-                .where(
-                    (OpportunityRaw.response_deadline.is_(None))
-                    | (OpportunityRaw.response_deadline >= func.now())
-                )
-                .order_by(OpportunityRaw.posted_at.desc().nulls_last())
-                .limit(batch_size)
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         llm: AnthropicLLMClient | None = None
         if generate_rationale and anthropic_key:
@@ -579,20 +583,14 @@ async def score_unscored_batch(
                 continue
             enr = (
                 await session.execute(
-                    select(OpportunityEnriched).where(
-                        OpportunityEnriched.opportunity_id == opp.id
-                    )
+                    select(OpportunityEnriched).where(OpportunityEnriched.opportunity_id == opp.id)
                 )
             ).scalar_one_or_none()
 
             incumbent_excluded = await _lookup_incumbent_excluded(session, enr)
             facts = _make_facts(opp, enr, incumbent_excluded=incumbent_excluded)
-            cap_pts, cap_titles = await _capability_similarity_score(
-                session, tenant.id, opp.id
-            )
-            facts = OpportunityFacts(
-                **{**asdict(facts), "has_capability_match_score": cap_pts}
-            )
+            cap_pts, cap_titles = await _capability_similarity_score(session, tenant.id, opp.id)
+            facts = OpportunityFacts(**{**asdict(facts), "has_capability_match_score": cap_pts})
             result = score_opportunity(facts, ctx)
 
             hm_score: int | None = None
@@ -658,8 +656,7 @@ async def score_unscored_batch(
 
             assigned_id = (
                 founders_by_slug[result.assigned_founder_slug].id
-                if result.assigned_founder_slug
-                and result.assigned_founder_slug in founders_by_slug
+                if result.assigned_founder_slug and result.assigned_founder_slug in founders_by_slug
                 else None
             )
             stmt = (
@@ -730,18 +727,14 @@ async def score_one_opportunity(opportunity_id: UUID | str) -> dict[str, Any]:
 
     async with session_factory() as session, session.begin():
         tenant = (
-            await session.execute(
-                select(Tenant).where(Tenant.slug == tenant_slug)
-            )
+            await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))
         ).scalar_one()
         ctx = await _build_context(session, tenant)
         founders_by_slug = {
             f.slug: f
-            for f in (
-                await session.execute(
-                    select(Founder).where(Founder.tenant_id == tenant.id)
-                )
-            ).scalars().all()
+            for f in (await session.execute(select(Founder).where(Founder.tenant_id == tenant.id)))
+            .scalars()
+            .all()
         }
         opp = (
             await session.execute(
@@ -752,19 +745,13 @@ async def score_one_opportunity(opportunity_id: UUID | str) -> dict[str, Any]:
         ).scalar_one()
         enr = (
             await session.execute(
-                select(OpportunityEnriched).where(
-                    OpportunityEnriched.opportunity_id == opp_uuid
-                )
+                select(OpportunityEnriched).where(OpportunityEnriched.opportunity_id == opp_uuid)
             )
         ).scalar_one_or_none()
         incumbent_excluded = await _lookup_incumbent_excluded(session, enr)
         facts = _make_facts(opp, enr, incumbent_excluded=incumbent_excluded)
-        cap_pts, cap_titles = await _capability_similarity_score(
-            session, tenant.id, opp.id
-        )
-        facts = OpportunityFacts(
-            **{**asdict(facts), "has_capability_match_score": cap_pts}
-        )
+        cap_pts, cap_titles = await _capability_similarity_score(session, tenant.id, opp.id)
+        facts = OpportunityFacts(**{**asdict(facts), "has_capability_match_score": cap_pts})
         result = score_opportunity(facts, ctx)
 
         tenant_certs = _tenant_set_aside_certs(tenant)
@@ -830,8 +817,7 @@ async def score_one_opportunity(opportunity_id: UUID | str) -> dict[str, Any]:
 
         assigned_id = (
             founders_by_slug[result.assigned_founder_slug].id
-            if result.assigned_founder_slug
-            and result.assigned_founder_slug in founders_by_slug
+            if result.assigned_founder_slug and result.assigned_founder_slug in founders_by_slug
             else None
         )
         stmt = (
@@ -911,21 +897,12 @@ async def score_unscored_batch_all_tenants(
     Per-tenant errors don't tank the loop — they're logged and the run
     continues so a misconfigured tenant can't starve everyone else.
     """
-    pin = (
-        only_tenant_slug
-        or os.environ.get("MACTECH_PIN_TENANT_SLUG")
-        or None
-    )
+    pin = only_tenant_slug or os.environ.get("MACTECH_PIN_TENANT_SLUG") or None
     session_factory = async_session_factory()
     async with session_factory() as session:
         stmt = select(Tenant)
-        if pin:
-            stmt = stmt.where(Tenant.slug == pin)
-        else:
-            stmt = stmt.order_by(Tenant.slug)
-        tenant_slugs = [
-            t.slug for t in (await session.execute(stmt)).scalars().all()
-        ]
+        stmt = stmt.where(Tenant.slug == pin) if pin else stmt.order_by(Tenant.slug)
+        tenant_slugs = [t.slug for t in (await session.execute(stmt)).scalars().all()]
 
     results: list[ScoreStats] = []
     for slug in tenant_slugs:
@@ -951,12 +928,7 @@ async def score_unscored_batch_all_tenants(
 
 @celery_app.task(name="mactech.score.batch")
 def score_batch_task(batch_size: int = DEFAULT_BATCH_SIZE) -> list[dict[str, Any]]:
-    return [
-        asdict(s)
-        for s in asyncio.run(
-            score_unscored_batch_all_tenants(batch_size=batch_size)
-        )
-    ]
+    return [asdict(s) for s in asyncio.run(score_unscored_batch_all_tenants(batch_size=batch_size))]
 
 
 @celery_app.task(name="mactech.score.one")
@@ -964,9 +936,7 @@ def score_one_task(opportunity_id: str) -> dict[str, Any]:
     return asyncio.run(score_one_opportunity(opportunity_id))
 
 
-async def first_feed_score_for_tenant(
-    tenant_slug: str, *, batch_size: int = 200
-) -> dict[str, Any]:
+async def first_feed_score_for_tenant(tenant_slug: str, *, batch_size: int = 200) -> dict[str, Any]:
     """Run an immediate scoring sweep for a freshly-onboarded tenant.
 
     Larger batch_size than the cron beat (which runs every 20 min on
@@ -984,6 +954,4 @@ async def first_feed_score_for_tenant(
 @celery_app.task(name="mactech.onboarding.first_score")
 def first_score_task(tenant_slug: str, batch_size: int = 200) -> dict[str, Any]:
     """Celery task fired from the API on onboarding completion."""
-    return asyncio.run(
-        first_feed_score_for_tenant(tenant_slug, batch_size=batch_size)
-    )
+    return asyncio.run(first_feed_score_for_tenant(tenant_slug, batch_size=batch_size))

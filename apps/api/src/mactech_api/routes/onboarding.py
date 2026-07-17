@@ -16,14 +16,10 @@ on completion — users can browse the app while the banner persists.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field
-
-from mactech_api.auth import RequestContext, get_request_context
-from mactech_api.settings import settings
 from mactech_integrations.sam_gov import (
     EntityProfile,
     SamEntityClient,
@@ -31,6 +27,10 @@ from mactech_integrations.sam_gov import (
     SamEntityNotFoundError,
     SamEntityRateLimitError,
 )
+from pydantic import BaseModel, ConfigDict, Field
+
+from mactech_api.auth import RequestContext, get_request_context
+from mactech_api.settings import settings
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["onboarding"])
@@ -117,9 +117,7 @@ def _tenant_to_out(t) -> TenantHeaderOut:
         set_aside_certifications=list(t.set_aside_certifications or []),
         target_naics=list(t.target_naics or []),
         onboarding_completed_at=(
-            t.onboarding_completed_at.isoformat()
-            if t.onboarding_completed_at
-            else None
+            t.onboarding_completed_at.isoformat() if t.onboarding_completed_at else None
         ),
     )
 
@@ -221,7 +219,7 @@ async def complete_onboarding(
     ctx: Annotated[RequestContext, Depends(get_request_context)],
 ) -> TenantHeaderOut:
     tenant = ctx.tenant
-    tenant.onboarding_completed_at = datetime.now(timezone.utc)
+    tenant.onboarding_completed_at = datetime.now(UTC)
     await ctx.session.flush()
 
     # First-feed preview: fire SAM ingest (Sprint 16) + scoring (Sprint 15)
@@ -258,7 +256,7 @@ async def complete_onboarding(
                 "scoring against existing corpus)",
                 tenant.slug,
             )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning(
             "failed to fire first-feed task for tenant %s: %s",
             tenant.slug,

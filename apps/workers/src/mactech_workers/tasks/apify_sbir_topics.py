@@ -179,8 +179,7 @@ async def _kick_and_ingest() -> dict[str, Any]:
         "saveHtml": False,
         "saveMarkdown": True,
         "removeElementsCssSelector": (
-            "nav, footer, header, .ads, .menu, .skip-link, .breadcrumbs, "
-            "form, aside, .sidebar"
+            "nav, footer, header, .ads, .menu, .skip-link, .breadcrumbs, form, aside, .sidebar"
         ),
         "keepUrlFragments": False,
     }
@@ -316,15 +315,11 @@ async def _record_synthetic_audit(
 
 
 @celery_app.task(name="mactech.apify.ingest_sbir_topics")
-def ingest_sbir_topics_task(
-    audit_id: str, dataset_id: str, apify_run_id: str
-) -> dict[str, Any]:
+def ingest_sbir_topics_task(audit_id: str, dataset_id: str, apify_run_id: str) -> dict[str, Any]:
     return asdict(asyncio.run(_ingest(audit_id, dataset_id, apify_run_id)))
 
 
-async def _ingest(
-    audit_id: str, dataset_id: str, apify_run_id: str
-) -> SBIRTopicsIngestStats:
+async def _ingest(audit_id: str, dataset_id: str, apify_run_id: str) -> SBIRTopicsIngestStats:
     api_token = os.environ.get("APIFY_API_TOKEN", "")
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
 
@@ -343,9 +338,7 @@ async def _ingest(
         try:
             offset = 0
             while True:
-                page = await client.dataset_items(
-                    dataset_id, limit=200, offset=offset, clean=True
-                )
+                page = await client.dataset_items(dataset_id, limit=200, offset=offset, clean=True)
                 if not page:
                     break
                 items.extend(p.payload for p in page)
@@ -353,9 +346,7 @@ async def _ingest(
                     break
                 offset += 200
         except ApifyError as exc:
-            log.warning(
-                "apify dataset_items failed for run=%s: %s", apify_run_id, exc
-            )
+            log.warning("apify dataset_items failed for run=%s: %s", apify_run_id, exc)
             await _mark_audit_processed(audit_id, error=str(exc)[:1000])
             return SBIRTopicsIngestStats(
                 audit_id=audit_id,
@@ -368,8 +359,7 @@ async def _ingest(
 
     if not anthropic_key:
         log.warning(
-            "ANTHROPIC_API_KEY not set; skipping LLM extraction "
-            "for run=%s (saw %d crawl items)",
+            "ANTHROPIC_API_KEY not set; skipping LLM extraction for run=%s (saw %d crawl items)",
             apify_run_id,
             len(items),
         )
@@ -423,15 +413,11 @@ async def _ingest(
                     "description": _str_or_none(t.get("description")),
                     "url": _str_or_none(t.get("url")) or url,
                     "technology_areas": _string_list(t.get("technology_areas")),
-                    "modernization_priorities": _string_list(
-                        t.get("modernization_priorities")
-                    ),
+                    "modernization_priorities": _string_list(t.get("modernization_priorities")),
                     "keywords": _string_list(t.get("keywords")),
                     "itar_export_status": _str_or_none(t.get("itar_export_status")),
                     "phase_i_ceiling": _int_or_none(t.get("phase_i_ceiling")),
-                    "phase_i_duration_months": _int_or_none(
-                        t.get("phase_i_duration_months")
-                    ),
+                    "phase_i_duration_months": _int_or_none(t.get("phase_i_duration_months")),
                     "raw": t,
                     "apify_run_id": apify_run_id,
                     "last_seen_at": datetime.now(UTC),
@@ -442,9 +428,7 @@ async def _ingest(
                     .on_conflict_do_update(
                         index_elements=["source", "topic_number"],
                         set_={
-                            k: v
-                            for k, v in values.items()
-                            if k not in ("source", "topic_number")
+                            k: v for k, v in values.items() if k not in ("source", "topic_number")
                         },
                     )
                 )
@@ -471,9 +455,7 @@ async def _ingest(
     )
 
 
-async def _extract_topics(
-    llm: AnthropicLLMClient, url: str, text: str
-) -> list[dict[str, Any]]:
+async def _extract_topics(llm: AnthropicLLMClient, url: str, text: str) -> list[dict[str, Any]]:
     excerpt = text[:16_000]
     today = datetime.now(UTC).date().isoformat()
     user_prompt = (
@@ -502,9 +484,7 @@ async def _extract_topics(
     return [t for t in topics if isinstance(t, dict)]
 
 
-async def _mark_audit_processed(
-    audit_id: str, *, error: str | None = None
-) -> None:
+async def _mark_audit_processed(audit_id: str, *, error: str | None = None) -> None:
     async with unscoped_session() as session:
         row = (
             await session.execute(select(ApifyRun).where(ApifyRun.id == audit_id))
@@ -517,12 +497,28 @@ async def _mark_audit_processed(
 
 
 _TOPIC_URL_HINTS = (
-    "topic", "sbir", "sttr", "solicitation", "afwerx", "navalx",
-    "sofwerx", "darpa", "dla", "afventures", "armysbir",
+    "topic",
+    "sbir",
+    "sttr",
+    "solicitation",
+    "afwerx",
+    "navalx",
+    "sofwerx",
+    "darpa",
+    "dla",
+    "afventures",
+    "armysbir",
 )
 _TOPIC_TEXT_HINTS = (
-    "topic number", "sbir", "sttr", "solicitation", "phase i",
-    "phase ii", "topic title", "open topics", "pre-release",
+    "topic number",
+    "sbir",
+    "sttr",
+    "solicitation",
+    "phase i",
+    "phase ii",
+    "topic title",
+    "open topics",
+    "pre-release",
 )
 
 

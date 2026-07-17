@@ -265,9 +265,7 @@ def _opp_header(opp: OpportunityRaw) -> OpportunityHeader:
         agency=opp.agency,
         solicitation_number=opp.solicitation_number,
         posted_at=opp.posted_at.isoformat() if opp.posted_at else None,
-        response_deadline=(
-            opp.response_deadline.isoformat() if opp.response_deadline else None
-        ),
+        response_deadline=(opp.response_deadline.isoformat() if opp.response_deadline else None),
         days_until_deadline=days,
         sam_link=raw.get("uiLink"),
         additional_info_link=raw.get("additionalInfoLink"),
@@ -448,18 +446,14 @@ async def list_opportunities(
             "(select f.slug from founders f where f.id = s.assigned_founder_id) = :af"
         )
         params["af"] = assigned_founder
-    where_parts.append(
-        "(s.score is null or (s.score >= :smin and s.score <= :smax))"
-    )
+    where_parts.append("(s.score is null or (s.score >= :smin and s.score <= :smax))")
     params["smin"] = score_min
     params["smax"] = score_max
     if high_moat_min is not None:
         where_parts.append("s.high_moat_score >= :hm_min")
         params["hm_min"] = high_moat_min
     if sweet_spot_only:
-        where_parts.append(
-            "(s.high_moat_flags->>'is_high_probability_easy_win')::bool = true"
-        )
+        where_parts.append("(s.high_moat_flags->>'is_high_probability_easy_win')::bool = true")
     if cyber_scope_min is not None:
         where_parts.append("s.cyber_scope_score >= :cs_min")
         params["cs_min"] = cyber_scope_min
@@ -522,9 +516,7 @@ async def list_opportunities(
         """
     )
 
-    items_rows = (
-        await session.execute(rows_q, {**params, "limit": limit, "offset": offset})
-    ).all()
+    items_rows = (await session.execute(rows_q, {**params, "limit": limit, "offset": offset})).all()
     total = (await session.execute(count_q, params)).scalar_one()
 
     items: list[OpportunityListItem] = []
@@ -660,9 +652,7 @@ async def get_ingest_status(
     ).all()
 
     if not rows:
-        return IngestStatus(
-            status="unknown", sources_ok=0, sources_error=0, feeds=[]
-        )
+        return IngestStatus(status="unknown", sources_ok=0, sources_error=0, feeds=[])
 
     now = datetime.now(UTC)
     feeds: list[IngestFeed] = []
@@ -704,18 +694,14 @@ async def get_opportunity_detail(
     tenant_id = ctx.tenant.id
 
     opp = (
-        await session.execute(
-            select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id)
-        )
+        await session.execute(select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id))
     ).scalar_one_or_none()
     if opp is None:
         raise HTTPException(status_code=404, detail="opportunity not found")
 
     enr = (
         await session.execute(
-            select(OpportunityEnriched).where(
-                OpportunityEnriched.opportunity_id == opportunity_id
-            )
+            select(OpportunityEnriched).where(OpportunityEnriched.opportunity_id == opportunity_id)
         )
     ).scalar_one_or_none()
 
@@ -772,9 +758,7 @@ async def get_opportunity_detail(
             hm_block = HighMoatBlock(
                 score=score_row.high_moat_score,
                 breakdown=score_row.high_moat_breakdown or {},
-                is_high_probability_easy_win=bool(
-                    flags.get("is_high_probability_easy_win")
-                ),
+                is_high_probability_easy_win=bool(flags.get("is_high_probability_easy_win")),
                 clause_hits=list(flags.get("clause_hits") or []),
                 clearance_hits=list(flags.get("clearance_hits") or []),
                 role_hits=list(flags.get("role_hits") or []),
@@ -792,9 +776,7 @@ async def get_opportunity_detail(
                 )
             ).scalar_one_or_none()
             flags = score_row.cyber_scope_flags or {}
-            top_signals = (
-                (csa_row.top_signals_json or [])[:5] if csa_row is not None else []
-            )
+            top_signals = (csa_row.top_signals_json or [])[:5] if csa_row is not None else []
             attachments_pending = bool(
                 csa_row is not None
                 and csa_row.scan_pass == "description_only"
@@ -812,11 +794,7 @@ async def get_opportunity_detail(
                 scan_pass=csa_row.scan_pass if csa_row else "description_only",
                 attachments_pending=attachments_pending,
                 analysis_id=analysis_id,
-                analysis_url=(
-                    f"/tools/cyber-scope-parser/{analysis_id}"
-                    if analysis_id
-                    else None
-                ),
+                analysis_url=(f"/tools/cyber-scope-parser/{analysis_id}" if analysis_id else None),
             )
         score_block = ScoreBlock(
             score=score_row.score,
@@ -891,15 +869,19 @@ async def get_opportunity_detail(
     ).scalar_one_or_none()
     if dv is not None:
         gate_rows = (
-            await session.execute(
-                select(OpportunityGate)
-                .where(
-                    OpportunityGate.tenant_id == tenant_id,
-                    OpportunityGate.opportunity_id == opportunity_id,
+            (
+                await session.execute(
+                    select(OpportunityGate)
+                    .where(
+                        OpportunityGate.tenant_id == tenant_id,
+                        OpportunityGate.opportunity_id == opportunity_id,
+                    )
+                    .order_by(OpportunityGate.severity, OpportunityGate.gate_code)
                 )
-                .order_by(OpportunityGate.severity, OpportunityGate.gate_code)
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         decision_block = DecisionBlock(
             pursuit_lane=dv.manual_lane_override or dv.pursuit_lane,
             reason_codes=list(dv.reason_codes or []),
@@ -952,7 +934,9 @@ async def get_opportunity_detail(
             confidence=link.confidence,
             why_target=link.why_target,
             recommended_contact_role=link.recommended_contact_role,
-            outreach_deadline=link.outreach_deadline.isoformat() if link.outreach_deadline else None,
+            outreach_deadline=link.outreach_deadline.isoformat()
+            if link.outreach_deadline
+            else None,
             rank=link.rank,
         )
         for link, pt in pt_rows
@@ -970,12 +954,16 @@ async def get_opportunity_detail(
     ).scalar_one_or_none()
     if rec is not None:
         action_rows = (
-            await session.execute(
-                select(PursuitAction)
-                .where(PursuitAction.recommendation_id == rec.id)
-                .order_by(PursuitAction.sequence)
+            (
+                await session.execute(
+                    select(PursuitAction)
+                    .where(PursuitAction.recommendation_id == rec.id)
+                    .order_by(PursuitAction.sequence)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         pursuit_plan_block = PursuitPlanBlock(
             pursuit_lane=rec.pursuit_lane,
             executive_decision=rec.executive_decision,

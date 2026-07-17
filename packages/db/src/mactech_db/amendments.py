@@ -67,9 +67,7 @@ def _value_for_diff(value: Any) -> Any:
     return value
 
 
-def _build_diff_summary(
-    previous: dict[str, Any], current: dict[str, Any]
-) -> list[dict[str, Any]]:
+def _build_diff_summary(previous: dict[str, Any], current: dict[str, Any]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for field in DIFFABLE_FIELDS:
         before = previous.get(field)
@@ -141,10 +139,10 @@ async def record_amendment(
 
     # Emit one audit event per tenant that has a pursuit on this opp.
     pursuits = (
-        await session.execute(
-            select(Pursuit).where(Pursuit.opportunity_id == opportunity.id)
-        )
-    ).scalars().all()
+        (await session.execute(select(Pursuit).where(Pursuit.opportunity_id == opportunity.id)))
+        .scalars()
+        .all()
+    )
     seen_tenant_ids: set[UUID] = set()
     for pursuit in pursuits:
         if pursuit.tenant_id in seen_tenant_ids:

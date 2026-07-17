@@ -50,20 +50,12 @@ class TestArrivedAt:
         Sorting on received_at leaves them in import order; sorting on
         arrived_at restores the order the mail actually came in.
         """
-        june = _invite(
-            sent_at=datetime(2026, 6, 2, 9, 0, tzinfo=UTC), received_at=IMPORT_RUN
-        )
-        july = _invite(
-            sent_at=datetime(2026, 7, 15, 6, 11, tzinfo=UTC), received_at=IMPORT_RUN
-        )
-        may = _invite(
-            sent_at=datetime(2026, 5, 20, 8, 0, tzinfo=UTC), received_at=IMPORT_RUN
-        )
+        june = _invite(sent_at=datetime(2026, 6, 2, 9, 0, tzinfo=UTC), received_at=IMPORT_RUN)
+        july = _invite(sent_at=datetime(2026, 7, 15, 6, 11, tzinfo=UTC), received_at=IMPORT_RUN)
+        may = _invite(sent_at=datetime(2026, 5, 20, 8, 0, tzinfo=UTC), received_at=IMPORT_RUN)
 
         assert len({i.received_at for i in (june, july, may)}) == 1
-        newest_first = sorted(
-            [june, july, may], key=lambda i: i.arrived_at, reverse=True
-        )
+        newest_first = sorted([june, july, may], key=lambda i: i.arrived_at, reverse=True)
         assert newest_first == [july, june, may]
 
 

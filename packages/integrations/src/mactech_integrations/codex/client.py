@@ -74,9 +74,7 @@ class CodexClient:
         if api_token:
             headers["Authorization"] = f"Bearer {api_token}"
         self._owns_client = http_client is None
-        self._http = http_client or httpx.AsyncClient(
-            timeout=timeout, headers=headers
-        )
+        self._http = http_client or httpx.AsyncClient(timeout=timeout, headers=headers)
 
     async def __aenter__(self) -> CodexClient:
         return self
@@ -85,42 +83,29 @@ class CodexClient:
         if self._owns_client:
             await self._http.aclose()
 
-    async def get_sprs_by_clerk_org(
-        self, clerk_org_id: str
-    ) -> CodexSprsAssessment:
+    async def get_sprs_by_clerk_org(self, clerk_org_id: str) -> CodexSprsAssessment:
         if not clerk_org_id:
             raise CodexError("clerk_org_id is required")
-        url = (
-            f"{self._base_url}/api/sprs/by-clerk-org/{clerk_org_id.strip()}"
-        )
+        url = f"{self._base_url}/api/sprs/by-clerk-org/{clerk_org_id.strip()}"
         try:
             resp = await self._http.get(url)
         except httpx.TransportError as exc:
             raise CodexError(f"Codex transport error: {exc}") from exc
 
         if resp.status_code == 404:
-            raise CodexNotFoundError(
-                f"no organization in Codex for clerk_org_id={clerk_org_id}"
-            )
+            raise CodexNotFoundError(f"no organization in Codex for clerk_org_id={clerk_org_id}")
         if resp.status_code == 401:
             raise CodexError(
-                "Codex 401 — set CODEX_API_TOKEN to a value matching "
-                "Codex's CAPTUREOS_API_TOKEN"
+                "Codex 401 — set CODEX_API_TOKEN to a value matching Codex's CAPTUREOS_API_TOKEN"
             )
         if resp.status_code == 503:
-            raise CodexError(
-                "Codex 503 — CAPTUREOS_API_TOKEN not configured on Codex"
-            )
+            raise CodexError("Codex 503 — CAPTUREOS_API_TOKEN not configured on Codex")
         if resp.status_code >= 400:
-            raise CodexError(
-                f"Codex {resp.status_code} on {url}: {resp.text[:200]}"
-            )
+            raise CodexError(f"Codex {resp.status_code} on {url}: {resp.text[:200]}")
 
         data = resp.json()
         if not isinstance(data, dict):
-            raise CodexError(
-                f"Codex returned non-dict ({type(data).__name__})"
-            )
+            raise CodexError(f"Codex returned non-dict ({type(data).__name__})")
         score = data.get("score")
         if score is not None and not isinstance(score, int):
             raise CodexError(f"Codex returned non-int score: {score!r}")

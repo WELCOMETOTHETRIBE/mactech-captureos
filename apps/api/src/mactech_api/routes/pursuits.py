@@ -14,16 +14,11 @@ Endpoints:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select, text
-from sqlalchemy.exc import IntegrityError
-
-from mactech_api.auth import RequestContext, get_request_context
 from mactech_db.audit import record_event
 from mactech_db.models import (
     EVENT_PURSUIT_BID_DECIDED,
@@ -38,6 +33,11 @@ from mactech_db.models import (
     Pursuit,
 )
 from mactech_db.models.pursuit import BID_DECISIONS, PURSUIT_STAGES
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
+
+from mactech_api.auth import RequestContext, get_request_context
 
 router = APIRouter(tags=["pursuits"])
 
@@ -139,16 +139,14 @@ def _short_agency(p: str | None) -> str | None:
 def _days_until(dt: datetime | None) -> int | None:
     if dt is None:
         return None
-    return int((dt - datetime.now(timezone.utc)).total_seconds() / 86400)
+    return int((dt - datetime.now(UTC)).total_seconds() / 86400)
 
 
 def _days_in_stage(dt: datetime) -> int:
-    return max(0, int((datetime.now(timezone.utc) - dt).total_seconds() / 86400))
+    return max(0, int((datetime.now(UTC) - dt).total_seconds() / 86400))
 
 
-async def _resolve_owner_founder_id(
-    ctx: RequestContext, slug: str | None
-) -> UUID | None:
+async def _resolve_owner_founder_id(ctx: RequestContext, slug: str | None) -> UUID | None:
     if not slug:
         return None
     f = (
@@ -160,9 +158,7 @@ async def _resolve_owner_founder_id(
         )
     ).scalar_one_or_none()
     if f is None:
-        raise HTTPException(
-            status_code=400, detail=f"founder slug '{slug}' not found"
-        )
+        raise HTTPException(status_code=400, detail=f"founder slug '{slug}' not found")
     return f.id
 
 
@@ -188,8 +184,7 @@ async def get_kanban(
     params: dict[str, object] = {"tenant_id": str(tenant_id)}
     if owner:
         where_owner = (
-            "and (select f2.slug from founders f2 "
-            "where f2.id = p.owner_founder_id) = :owner"
+            "and (select f2.slug from founders f2 where f2.id = p.owner_founder_id) = :owner"
         )
         params["owner"] = owner
 
@@ -272,7 +267,7 @@ async def get_kanban(
     ]
 
     return KanbanResponse(
-        rendered_at=datetime.now(timezone.utc).isoformat(),
+        rendered_at=datetime.now(UTC).isoformat(),
         total=total,
         by_owner=by_owner,
         columns=columns,
@@ -426,9 +421,7 @@ async def update_pursuit(
 
     pursuit = (
         await session.execute(
-            select(Pursuit).where(
-                Pursuit.id == pursuit_id, Pursuit.tenant_id == tenant_id
-            )
+            select(Pursuit).where(Pursuit.id == pursuit_id, Pursuit.tenant_id == tenant_id)
         )
     ).scalar_one_or_none()
     if pursuit is None:
@@ -441,7 +434,7 @@ async def update_pursuit(
         if body.stage != pursuit.stage:
             previous_stage = pursuit.stage
             pursuit.stage = body.stage
-            pursuit.last_stage_change_at = datetime.now(timezone.utc)
+            pursuit.last_stage_change_at = datetime.now(UTC)
             await record_event(
                 session,
                 tenant_id=tenant_id,
@@ -480,9 +473,7 @@ async def update_pursuit(
                 entity_type="pursuit",
                 entity_id=pursuit.id,
                 payload={
-                    "from_founder_id": (
-                        str(previous_owner_id) if previous_owner_id else None
-                    ),
+                    "from_founder_id": (str(previous_owner_id) if previous_owner_id else None),
                     "to_founder_id": str(new_owner_id) if new_owner_id else None,
                     "to_founder_slug": body.owner_founder_slug,
                 },
@@ -503,13 +494,9 @@ async def update_pursuit(
 
     if body.win_themes is not None or body.discriminators is not None:
         if body.win_themes is not None:
-            pursuit.win_themes = [
-                t.strip() for t in body.win_themes if t and t.strip()
-            ]
+            pursuit.win_themes = [t.strip() for t in body.win_themes if t and t.strip()]
         if body.discriminators is not None:
-            pursuit.discriminators = [
-                d.strip() for d in body.discriminators if d and d.strip()
-            ]
+            pursuit.discriminators = [d.strip() for d in body.discriminators if d and d.strip()]
         await record_event(
             session,
             tenant_id=tenant_id,
@@ -534,7 +521,7 @@ async def update_pursuit(
                 pursuit.bid_decided_at = None
                 pursuit.bid_decided_by_user_id = None
             else:
-                pursuit.bid_decided_at = datetime.now(timezone.utc)
+                pursuit.bid_decided_at = datetime.now(UTC)
                 pursuit.bid_decided_by_user_id = ctx.user.id
             await record_event(
                 session,
@@ -569,7 +556,7 @@ async def update_pursuit(
     # SQLAlchemy `onupdate=func.now()` should bump `updated_at` on flush, but
     # set it explicitly so the value is correct even if a future raw-SQL path
     # bypasses the ORM. Belt-and-suspenders.
-    pursuit.updated_at = datetime.now(timezone.utc)
+    pursuit.updated_at = datetime.now(UTC)
 
     await session.flush()
     return await get_pursuit_for_opp(pursuit.opportunity_id, ctx)
@@ -593,9 +580,7 @@ async def delete_pursuit(
 
     pursuit = (
         await session.execute(
-            select(Pursuit).where(
-                Pursuit.id == pursuit_id, Pursuit.tenant_id == tenant_id
-            )
+            select(Pursuit).where(Pursuit.id == pursuit_id, Pursuit.tenant_id == tenant_id)
         )
     ).scalar_one_or_none()
     if pursuit is None:

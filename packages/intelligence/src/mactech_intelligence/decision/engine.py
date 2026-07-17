@@ -78,6 +78,7 @@ def _days_to_deadline(inp: DecisionInputs) -> int | None:
 
 # ---- dimensions ----
 
+
 def _relevance(inp: DecisionInputs) -> int:
     s = 0
     if inp.has_direct_cyber:
@@ -145,11 +146,17 @@ def _winability(inp: DecisionInputs) -> int:
 def _deliverability(inp: DecisionInputs) -> int:
     s = 70
     s -= 20 * len(inp.hard_barriers)
-    if inp.estimated_value_high is not None and inp.estimated_value_high > inp.capacity.prime_value_max:
+    if (
+        inp.estimated_value_high is not None
+        and inp.estimated_value_high > inp.capacity.prime_value_max
+    ):
         s -= 15
     if inp.naics_is_construction and inp.has_construction_context and not inp.has_direct_cyber:
         s -= 10
-    if inp.estimated_value_high is not None and inp.estimated_value_high <= inp.capacity.prime_value_max:
+    if (
+        inp.estimated_value_high is not None
+        and inp.estimated_value_high <= inp.capacity.prime_value_max
+    ):
         s += 10
     return _clamp(s)
 
@@ -215,6 +222,7 @@ def _overall(vector: DecisionVector, profile: str) -> int:
 
 # ---- lane selection ----
 
+
 def _prime_blocking_codes(gates: list[Gate]) -> set[str]:
     from mactech_intelligence.decision.gates import PRIME_BLOCKING_BARRIERS
 
@@ -222,9 +230,7 @@ def _prime_blocking_codes(gates: list[Gate]) -> set[str]:
     return {g.gate_code for g in gates if g.status == "fail" and g.gate_code in suppress}
 
 
-def _choose_lane(
-    inp: DecisionInputs, gates: list[Gate]
-) -> tuple[PursuitLane, list[str], str]:
+def _choose_lane(inp: DecisionInputs, gates: list[Gate]) -> tuple[PursuitLane, list[str], str]:
     hard_fails = [g for g in gates if g.is_hard_fail]
     if hard_fails:
         reasons = [g.reason_code for g in hard_fails if g.reason_code]
@@ -234,8 +240,7 @@ def _choose_lane(
     prime_blocked = bool(blocking)
     has_prime_scope = inp.has_direct_cyber or inp.has_training
     value_ok = (
-        inp.estimated_value_high is None
-        or inp.estimated_value_high <= inp.capacity.prime_value_max
+        inp.estimated_value_high is None or inp.estimated_value_high <= inp.capacity.prime_value_max
     )
 
     # Shape early: an early-stage notice we can influence, with real scope.
@@ -306,9 +311,7 @@ def decide(inp: DecisionInputs) -> DecisionResult:
         vector.overall_priority_score = min(vector.overall_priority_score, 45)
 
     confidence = _confidence(inp, vector)
-    needs_review = confidence == "low" or any(
-        g.gate_code == "INCOMPLETE_PACKAGE" for g in gates
-    )
+    needs_review = confidence == "low" or any(g.gate_code == "INCOMPLETE_PACKAGE" for g in gates)
 
     return DecisionResult(
         pursuit_lane=lane,

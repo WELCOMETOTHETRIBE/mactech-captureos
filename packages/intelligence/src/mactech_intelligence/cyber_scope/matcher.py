@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import re
-
 from mactech_intelligence.cyber_scope.dictionary import DictionaryTerm, load_dictionary
 from mactech_intelligence.cyber_scope.regex_utils import (
     compile_literal_patterns,
@@ -20,10 +18,8 @@ def _match_term(
     patterns = [term.term, *term.aliases]
     if term.regex:
         regex = term.regex.strip("/")
-        flags = 0
         if regex.endswith("/i"):
             regex = regex[:-2]
-            flags = re.IGNORECASE
         compiled = [compile_regex_pattern(regex)]
         mt: str = "REGEX"
     else:

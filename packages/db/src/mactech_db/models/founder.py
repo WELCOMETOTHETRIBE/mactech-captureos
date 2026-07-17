@@ -12,7 +12,8 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mactech_db.base import Base
@@ -20,9 +21,7 @@ from mactech_db.base import Base
 
 class Founder(Base):
     __tablename__ = "founders"
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "slug", name="uq_founders_tenant_slug"),
-    )
+    __table_args__ = (UniqueConstraint("tenant_id", "slug", name="uq_founders_tenant_slug"),)
 
     id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")

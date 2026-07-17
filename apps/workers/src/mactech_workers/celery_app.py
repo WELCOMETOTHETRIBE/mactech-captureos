@@ -223,9 +223,7 @@ def _log_integration_token_presence() -> None:
     for var, purpose in checks:
         present = bool(os.environ.get(var))
         marker = "✓" if present else "✗ MISSING"
-        log.warning(
-            "[integration] %s %s — %s", marker.ljust(10), var, purpose
-        )
+        log.warning("[integration] %s %s — %s", marker.ljust(10), var, purpose)
 
 
 _log_integration_token_presence()
@@ -255,26 +253,3 @@ def _reset_db_engine_per_task(*args: object, **kwargs: object) -> None:
 
 
 # Side-effect imports to register tasks defined in submodules. Keep at end of file.
-import mactech_workers.tasks.apify_forecasts  # noqa: E402
-import mactech_workers.tasks.apify_industry_days  # noqa: E402
-import mactech_workers.tasks.attachment_fetcher  # noqa: E402
-import mactech_workers.tasks.codex_sprs_sync  # noqa: E402
-import mactech_workers.tasks.cyber_scope_sam_search  # noqa: E402
-import mactech_workers.tasks.decision  # noqa: E402
-import mactech_workers.tasks.cyber_scope_scan  # noqa: E402
-import mactech_workers.tasks.cyber_scope_summarize  # noqa: E402
-import mactech_workers.tasks.dhs_apfs_ingest  # noqa: E402
-import mactech_workers.tasks.digest  # noqa: E402
-import mactech_workers.tasks.doe_forecast_ingest  # noqa: E402
-import mactech_workers.tasks.dsip_ingest  # noqa: E402
-import mactech_workers.tasks.edgar_signals  # noqa: E402
-import mactech_workers.tasks.embed  # noqa: E402
-import mactech_workers.tasks.enrich  # noqa: E402
-import mactech_workers.tasks.library_import  # noqa: E402
-import mactech_workers.tasks.nasa_naf_ingest  # noqa: E402
-import mactech_workers.tasks.prime_targets  # noqa: E402
-import mactech_workers.tasks.pursuit_plan  # noqa: E402
-import mactech_workers.tasks.work_packages  # noqa: E402
-import mactech_workers.tasks.sam_descriptions  # noqa: E402
-import mactech_workers.tasks.sam_ingest  # noqa: E402
-import mactech_workers.tasks.score  # noqa: E402, F401

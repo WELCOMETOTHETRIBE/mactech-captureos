@@ -82,9 +82,7 @@ def _format_opportunity(opp: AskOpportunityContext) -> str:
     if opp.score is not None:
         lines.append(f"Our score: {opp.score} / 100")
         if opp.score_breakdown:
-            parts = ", ".join(
-                f"{k}={v}" for k, v in sorted(opp.score_breakdown.items())
-            )
+            parts = ", ".join(f"{k}={v}" for k, v in sorted(opp.score_breakdown.items()))
             lines.append(f"Score breakdown: {parts}")
     if opp.why_it_matters:
         lines.append(f"Why it matters (auto-generated): {opp.why_it_matters}")

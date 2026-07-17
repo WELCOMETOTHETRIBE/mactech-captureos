@@ -44,9 +44,7 @@ DEFAULT_TIMEOUT: Final = httpx.Timeout(30.0, connect=10.0)
 # SEC mandates a User-Agent identifying the requester. The "[email]"
 # slot must be a real address. We pull from env in the integration
 # layer; default here is a sentinel so misconfiguration is loud.
-DEFAULT_USER_AGENT: Final = (
-    "MacTech CaptureOS edgar-monitor (please-set-EDGAR_USER_AGENT)"
-)
+DEFAULT_USER_AGENT: Final = "MacTech CaptureOS edgar-monitor (please-set-EDGAR_USER_AGENT)"
 
 
 class EdgarError(Exception):
@@ -108,22 +106,15 @@ class EdgarClient:
         async for attempt in AsyncRetrying(
             wait=wait_random_exponential(multiplier=1, max=20),
             stop=stop_after_attempt(3),
-            retry=retry_if_exception_type(
-                (httpx.TransportError, EdgarRateLimitError)
-            ),
+            retry=retry_if_exception_type((httpx.TransportError, EdgarRateLimitError)),
             reraise=True,
         ):
             with attempt:
                 resp = await self._http.get(url)
                 if resp.status_code == 429:
-                    raise EdgarRateLimitError(
-                        f"SEC EDGAR 429 on {url} — backing off"
-                    )
+                    raise EdgarRateLimitError(f"SEC EDGAR 429 on {url} — backing off")
                 if resp.status_code >= 400:
-                    raise EdgarError(
-                        f"SEC EDGAR {resp.status_code} on {url}: "
-                        f"{resp.text[:200]}"
-                    )
+                    raise EdgarError(f"SEC EDGAR {resp.status_code} on {url}: {resp.text[:200]}")
                 return resp
         raise EdgarError("retry loop exited unexpectedly")
 
@@ -148,9 +139,7 @@ class EdgarClient:
         """Pull recent filings for a CIK. Returns a list of EdgarFiling
         ordered by filing date desc, filtered to the given forms."""
         cik_padded = str(int(str(cik))).zfill(10)
-        resp = await self._request(
-            f"{self._data_base_url}/submissions/CIK{cik_padded}.json"
-        )
+        resp = await self._request(f"{self._data_base_url}/submissions/CIK{cik_padded}.json")
         payload = resp.json()
         recent = (payload.get("filings") or {}).get("recent") or {}
         forms_list = recent.get("form") or []
@@ -187,9 +176,7 @@ class EdgarClient:
             )
         return out
 
-    async def fetch_primary_document(
-        self, filing: EdgarFiling, *, max_chars: int = 30_000
-    ) -> str:
+    async def fetch_primary_document(self, filing: EdgarFiling, *, max_chars: int = 30_000) -> str:
         """Fetch the text of a filing's primary document. Strips HTML
         tags coarsely; the worker passes this to Claude for distress
         extraction so cleanup quality matters less than recall."""

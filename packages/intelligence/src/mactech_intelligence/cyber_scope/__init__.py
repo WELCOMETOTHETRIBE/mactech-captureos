@@ -10,10 +10,10 @@ from mactech_intelligence.cyber_scope.scorer import PARSER_VERSION
 from mactech_intelligence.cyber_scope.sources import CyberScopeTextSource
 
 __all__ = [
+    "PARSER_VERSION",
     "CyberScopeAnalysis",
     "CyberScopeTextSource",
     "DetectionResult",
-    "PARSER_VERSION",
     "SuggestedAction",
     "analyze_cyber_scope",
 ]

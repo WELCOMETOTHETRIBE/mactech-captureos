@@ -21,7 +21,8 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mactech_db.base import Base
@@ -30,9 +31,7 @@ from mactech_db.base import Base
 class ForecastRaw(Base):
     __tablename__ = "forecasts_raw"
     __table_args__ = (
-        UniqueConstraint(
-            "source_url", "title", name="uq_forecasts_raw_url_title"
-        ),
+        UniqueConstraint("source_url", "title", name="uq_forecasts_raw_url_title"),
         Index(
             "ix_forecasts_raw_solicitation_date",
             "expected_solicitation_date",
@@ -48,46 +47,24 @@ class ForecastRaw(Base):
     )
     source_url: Mapped[str] = mapped_column(Text, nullable=False)
     source_host: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    source_run_id: Mapped[str | None] = mapped_column(
-        String(64), nullable=True
-    )
+    source_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     agency: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    contracting_office: Mapped[str | None] = mapped_column(
-        String(512), nullable=True
-    )
+    contracting_office: Mapped[str | None] = mapped_column(String(512), nullable=True)
     title: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     naics_code: Mapped[str | None] = mapped_column(String(8), nullable=True)
     naics_codes: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     set_aside: Mapped[str | None] = mapped_column(String(64), nullable=True)
     contract_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    estimated_value_low: Mapped[Decimal | None] = mapped_column(
-        Numeric(15, 2), nullable=True
-    )
-    estimated_value_high: Mapped[Decimal | None] = mapped_column(
-        Numeric(15, 2), nullable=True
-    )
-    estimated_value_text: Mapped[str | None] = mapped_column(
-        String(128), nullable=True
-    )
-    expected_solicitation_date: Mapped[date | None] = mapped_column(
-        Date, nullable=True
-    )
-    expected_award_date: Mapped[date | None] = mapped_column(
-        Date, nullable=True
-    )
-    period_of_performance_start: Mapped[date | None] = mapped_column(
-        Date, nullable=True
-    )
-    period_of_performance_end: Mapped[date | None] = mapped_column(
-        Date, nullable=True
-    )
-    incumbent_name: Mapped[str | None] = mapped_column(
-        String(255), nullable=True
-    )
-    incumbent_contract_number: Mapped[str | None] = mapped_column(
-        String(64), nullable=True
-    )
+    estimated_value_low: Mapped[Decimal | None] = mapped_column(Numeric(15, 2), nullable=True)
+    estimated_value_high: Mapped[Decimal | None] = mapped_column(Numeric(15, 2), nullable=True)
+    estimated_value_text: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    expected_solicitation_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    expected_award_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    period_of_performance_start: Mapped[date | None] = mapped_column(Date, nullable=True)
+    period_of_performance_end: Mapped[date | None] = mapped_column(Date, nullable=True)
+    incumbent_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    incumbent_contract_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
     poc_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     poc_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     forecast_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
@@ -98,6 +75,4 @@ class ForecastRaw(Base):
     last_seen_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
-    closed_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
+    closed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)

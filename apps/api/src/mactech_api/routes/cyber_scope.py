@@ -8,11 +8,6 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select, text
-from sqlalchemy.dialects.postgresql import insert
-
-from mactech_api.auth import RequestContext, get_request_context
 from mactech_db.audit import record_event
 from mactech_db.models import (
     EVENT_CYBER_SCOPE_ANALYSIS_RUN,
@@ -22,6 +17,11 @@ from mactech_db.models import (
 )
 from mactech_intelligence.cyber_scope import analyze_cyber_scope
 from mactech_intelligence.cyber_scope.sources import CyberScopeTextSource
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select, text
+from sqlalchemy.dialects.postgresql import insert
+
+from mactech_api.auth import RequestContext, get_request_context
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["cyber-scope"])
@@ -112,7 +112,9 @@ def _row_to_feed_item(row: CyberScopeAnalysis, opp: OpportunityRaw | None) -> Cy
         title=opp.title if opp else meta.get("title"),
         agency=opp.agency if opp else meta.get("agency"),
         solicitation_number=opp.solicitation_number if opp else meta.get("solicitation_number"),
-        response_deadline=opp.response_deadline.isoformat() if opp and opp.response_deadline else None,
+        response_deadline=opp.response_deadline.isoformat()
+        if opp and opp.response_deadline
+        else None,
         overall_cyber_likelihood=row.overall_cyber_likelihood,
         recommended_pursuit_model=row.recommended_pursuit_model,
         score=row.score,
@@ -178,9 +180,7 @@ async def _persist_analysis(
         "score": analysis.score,
         "detected_categories_json": cats.model_dump(),
         "top_signals_json": [s.model_dump() for s in analysis.top_signals],
-        "hidden_scope_indicators_json": [
-            s.model_dump() for s in analysis.hidden_scope_indicators
-        ],
+        "hidden_scope_indicators_json": [s.model_dump() for s in analysis.hidden_scope_indicators],
         "missing_requirements_json": analysis.missing_but_likely_requirements,
         "suggested_actions_json": [a.model_dump() for a in analysis.suggested_actions],
         "evidence_snippets_json": [s.model_dump() for s in analysis.evidence_snippets],
@@ -342,9 +342,7 @@ async def rescan_opportunity(
     ctx: Annotated[RequestContext, Depends(get_request_context)],
 ) -> CyberScopeAnalysisOut:
     opp = (
-        await ctx.session.execute(
-            select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id)
-        )
+        await ctx.session.execute(select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id))
     ).scalar_one_or_none()
     if opp is None:
         raise HTTPException(status_code=404, detail="Opportunity not found")

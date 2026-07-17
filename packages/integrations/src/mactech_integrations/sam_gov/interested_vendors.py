@@ -45,9 +45,7 @@ DEFAULT_TIMEOUT: Final = httpx.Timeout(30.0, connect=10.0)
 
 # A vendor is a "cyber firm" if their NAICS profile contains any of these.
 # Mirrors MacTech's primary cyber NAICS — Patrick + James's pillars.
-CYBER_NAICS: Final[frozenset[str]] = frozenset(
-    {"541512", "541513", "541519", "518210"}
-)
+CYBER_NAICS: Final[frozenset[str]] = frozenset({"541512", "541513", "541519", "518210"})
 
 
 class SamInterestedVendorsError(Exception):
@@ -86,10 +84,7 @@ def _vendor_naics(vendor: dict[str, Any]) -> Iterable[str]:
 
 
 def _classify(vendor: dict[str, Any]) -> bool:
-    for code in _vendor_naics(vendor):
-        if code in CYBER_NAICS:
-            return True
-    return False
+    return any(code in CYBER_NAICS for code in _vendor_naics(vendor))
 
 
 class SamInterestedVendorsClient:
@@ -127,10 +122,7 @@ class SamInterestedVendorsClient:
     async def list_for_notice(self, notice_id: str) -> InterestedVendorsResult:
         if not notice_id:
             raise ValueError("notice_id is required")
-        url = (
-            f"{self._base_url}/opportunities/v1/noticedata/"
-            f"{notice_id}/interestedVendorsList"
-        )
+        url = f"{self._base_url}/opportunities/v1/noticedata/{notice_id}/interestedVendorsList"
         params = {"api_key": self._api_key}
 
         async for attempt in AsyncRetrying(
@@ -147,9 +139,7 @@ class SamInterestedVendorsClient:
                     log.warning("sam IVL 429 — backing off")
                     raise SamInterestedVendorsRateLimitError("rate limited")
                 if 500 <= resp.status_code < 600:
-                    raise SamInterestedVendorsRateLimitError(
-                        f"server error {resp.status_code}"
-                    )
+                    raise SamInterestedVendorsRateLimitError(f"server error {resp.status_code}")
                 # 404 or 204 → list not enabled for this notice.
                 if resp.status_code in (404, 204):
                     return InterestedVendorsResult(

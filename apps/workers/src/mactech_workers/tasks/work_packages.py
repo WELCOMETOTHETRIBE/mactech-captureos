@@ -32,8 +32,13 @@ from mactech_workers.celery_app import celery_app
 
 log = logging.getLogger(__name__)
 
-_ACTIONABLE = ("PRIME_NOW", "PRIME_WITH_PARTNER", "SUB_TO_IDENTIFIED_PRIME",
-               "SUB_TO_PRIME_NOT_YET_IDENTIFIED", "SHAPE_EARLY")
+_ACTIONABLE = (
+    "PRIME_NOW",
+    "PRIME_WITH_PARTNER",
+    "SUB_TO_IDENTIFIED_PRIME",
+    "SUB_TO_PRIME_NOT_YET_IDENTIFIED",
+    "SHAPE_EARLY",
+)
 
 
 async def adjudicate_for_opportunity(tenant_id: UUID, opp_id: UUID) -> dict[str, Any]:
@@ -108,17 +113,21 @@ async def adjudicate_batch(tenant_slug: str, *, limit: int = 20) -> dict[str, An
         if tenant is None:
             return {"status": "error", "reason": "tenant_not_found"}
         ids = (
-            await session.execute(
-                text(
-                    "select dv.opportunity_id from opportunity_decision_vectors dv "
-                    "left join opportunity_work_packages wp "
-                    "  on wp.opportunity_id = dv.opportunity_id and wp.tenant_id = dv.tenant_id "
-                    "where dv.tenant_id = :t and dv.pursuit_lane = any(:lanes) and wp.id is null "
-                    "limit :n"
-                ),
-                {"t": str(tenant.id), "lanes": list(_ACTIONABLE), "n": limit},
+            (
+                await session.execute(
+                    text(
+                        "select dv.opportunity_id from opportunity_decision_vectors dv "
+                        "left join opportunity_work_packages wp "
+                        "  on wp.opportunity_id = dv.opportunity_id and wp.tenant_id = dv.tenant_id "
+                        "where dv.tenant_id = :t and dv.pursuit_lane = any(:lanes) and wp.id is null "
+                        "limit :n"
+                    ),
+                    {"t": str(tenant.id), "lanes": list(_ACTIONABLE), "n": limit},
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
     done = 0
     for opp_id in ids:

@@ -15,7 +15,8 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mactech_db.base import Base
@@ -40,7 +41,9 @@ class OpportunityEnriched(Base):
     incumbent_award_amount: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
     requirements: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     naics_match_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    source: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'usaspending'"))
+    source: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=text("'usaspending'")
+    )
     enriched_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

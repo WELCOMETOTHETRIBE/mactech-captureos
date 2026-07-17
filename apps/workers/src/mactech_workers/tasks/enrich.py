@@ -25,13 +25,9 @@ import asyncio
 import logging
 import os
 from dataclasses import asdict, dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
-
-from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from mactech_db import async_session_factory
 from mactech_db.models import (
@@ -45,6 +41,10 @@ from mactech_integrations.usaspending import (
     AwardSearchResult,
     UsaSpendingClient,
 )
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from mactech_workers.celery_app import celery_app
 
 log = logging.getLogger(__name__)
@@ -79,12 +79,10 @@ async def enrich_opportunity(opportunity_id: UUID | str) -> EnrichStats:
     incumbent: AwardSearchResult | None = None
     is_excluded: bool | None = None
 
-    async with session_factory() as session:
+    async with session_factory() as session:  # noqa: SIM117
         async with session.begin():
             opp = (
-                await session.execute(
-                    select(OpportunityRaw).where(OpportunityRaw.id == opp_uuid)
-                )
+                await session.execute(select(OpportunityRaw).where(OpportunityRaw.id == opp_uuid))
             ).scalar_one_or_none()
             if opp is None:
                 raise ValueError(f"opportunity {opp_uuid} not found")
@@ -149,7 +147,7 @@ async def enrich_opportunity(opportunity_id: UUID | str) -> EnrichStats:
 
             # Persist any candidate awards we saw — they are useful intel
             # regardless of whether they were the chosen incumbent.
-            for cand in (page.results if naics and agency_name else []):
+            for cand in page.results if naics and agency_name else []:
                 if not cand.generated_internal_id:
                     continue
                 await _upsert_award_history(session, cand, naics_code=naics)
@@ -207,18 +205,22 @@ async def enrich_unenriched_batch(*, batch_size: int = 25) -> dict[str, Any]:
     session_factory = async_session_factory()
     async with session_factory() as session:
         rows = (
-            await session.execute(
-                select(OpportunityRaw.id)
-                .outerjoin(
-                    OpportunityEnriched,
-                    OpportunityEnriched.opportunity_id == OpportunityRaw.id,
+            (
+                await session.execute(
+                    select(OpportunityRaw.id)
+                    .outerjoin(
+                        OpportunityEnriched,
+                        OpportunityEnriched.opportunity_id == OpportunityRaw.id,
+                    )
+                    .where(OpportunityEnriched.id.is_(None))
+                    .where(OpportunityRaw.naics_code.is_not(None))
+                    .order_by(OpportunityRaw.posted_at.desc().nulls_last())
+                    .limit(batch_size)
                 )
-                .where(OpportunityEnriched.id.is_(None))
-                .where(OpportunityRaw.naics_code.is_not(None))
-                .order_by(OpportunityRaw.posted_at.desc().nulls_last())
-                .limit(batch_size)
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
     log.info("enriching batch of %d opportunities", len(rows))
     results = []
@@ -274,13 +276,9 @@ def _normalize_agency(agency_path: str | None) -> str | None:
     return mapping.get(top.upper(), top)
 
 
-async def _read_exclusion_cache(
-    session: AsyncSession, uei: str
-) -> ExclusionsCache | None:
+async def _read_exclusion_cache(session: AsyncSession, uei: str) -> ExclusionsCache | None:
     row = (
-        await session.execute(
-            select(ExclusionsCache).where(ExclusionsCache.uei == uei)
-        )
+        await session.execute(select(ExclusionsCache).where(ExclusionsCache.uei == uei))
     ).scalar_one_or_none()
     if row is None:
         return None
@@ -374,10 +372,7 @@ async def _upsert_enrichment(
         notes_parts.append("agency not mappable to usaspending toptier")
     if naics and agency_name and not incumbent:
         notes_parts.append("no contract-type award found in last 24 months")
-    if (
-        incumbent
-        and incumbent.period_of_performance_current_end_date is None
-    ):
+    if incumbent and incumbent.period_of_performance_current_end_date is None:
         notes_parts.append(
             "incumbent identified by award amount; usaspending did not "
             "surface period-of-performance dates for this candidate"
@@ -392,9 +387,7 @@ async def _upsert_enrichment(
         "incumbent_end_date": (
             incumbent.period_of_performance_current_end_date if incumbent else None
         ),
-        "incumbent_award_amount": (
-            incumbent.award_amount if incumbent else None
-        ),
+        "incumbent_award_amount": (incumbent.award_amount if incumbent else None),
         "naics_match_notes": notes,
         "source": "usaspending",
         "enriched_at": datetime.now(UTC),

@@ -83,15 +83,10 @@ async def check_identity_access(
 
     resolved_key = _resolve_api_key(api_key)
     if not resolved_key:
-        logger.warning(
-            "MACTECH_AUDIT_INGEST_API_KEY not configured; cannot reach ICC."
-        )
+        logger.warning("MACTECH_AUDIT_INGEST_API_KEY not configured; cannot reach ICC.")
         return IdentityAccessResult(ok=False, reason="transient")
 
-    url = (
-        _resolve_base_url(base_url).rstrip("/")
-        + f"/api/v1/users/{clerk_user_id}/access"
-    )
+    url = _resolve_base_url(base_url).rstrip("/") + f"/api/v1/users/{clerk_user_id}/access"
     params: dict[str, str] = {}
     if app_key:
         params["appKey"] = app_key
@@ -115,12 +110,8 @@ async def check_identity_access(
         if response.status_code == 401:
             return IdentityAccessResult(ok=False, reason="unauthorized", status=401)
         if response.status_code >= 400:
-            logger.error(
-                "ICC returned %s for user %s", response.status_code, clerk_user_id
-            )
-            return IdentityAccessResult(
-                ok=False, reason="transient", status=response.status_code
-            )
+            logger.error("ICC returned %s for user %s", response.status_code, clerk_user_id)
+            return IdentityAccessResult(ok=False, reason="transient", status=response.status_code)
 
         body = response.json()
         user_data = body["user"]
@@ -150,7 +141,7 @@ async def check_identity_access(
     except httpx.HTTPError as exc:
         logger.warning("[mactech-identity] check failed for %s: %s", clerk_user_id, exc)
         return IdentityAccessResult(ok=False, reason="transient")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.exception("[mactech-identity] unexpected error: %s", exc)
         return IdentityAccessResult(ok=False, reason="transient")
 

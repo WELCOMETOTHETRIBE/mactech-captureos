@@ -14,22 +14,17 @@ user. Generation is streaming-only (SSE). Endpoints:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
-from datetime import date as _date_t, datetime
+from collections.abc import AsyncIterator
+from datetime import date as _date_t
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-import json
-from collections.abc import AsyncIterator
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response, StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import desc, select
-
-from mactech_api.auth import RequestContext, get_request_context
-from mactech_api.docx_export import DocxMetadata, markdown_to_docx_bytes
 from mactech_db.models import (
     CapabilityStatement,
     Founder,
@@ -50,6 +45,11 @@ from mactech_intelligence import (
     context_hash,
     stream_sources_sought_draft,
 )
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import desc, select
+
+from mactech_api.auth import RequestContext, get_request_context
+from mactech_api.docx_export import DocxMetadata, markdown_to_docx_bytes
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["drafts"])
@@ -166,37 +166,49 @@ async def _build_input(
     tenant = ctx.tenant
 
     founders = (
-        await session.execute(
-            select(Founder)
-            .where(Founder.tenant_id == tenant.id)
-            .order_by(Founder.full_name)
+        (
+            await session.execute(
+                select(Founder).where(Founder.tenant_id == tenant.id).order_by(Founder.full_name)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     caps = (
-        await session.execute(
-            select(CapabilityStatement).where(
-                CapabilityStatement.tenant_id == tenant.id
+        (
+            await session.execute(
+                select(CapabilityStatement).where(CapabilityStatement.tenant_id == tenant.id)
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     pp_rows = (
-        await session.execute(
-            select(PastPerformance)
-            .where(PastPerformance.tenant_id == tenant.id)
-            .order_by(PastPerformance.period_end.desc().nulls_last())
-        )
-    ).scalars().all()
-
-    partner_rows = (
-        await session.execute(
-            select(TeamingPartner).where(
-                TeamingPartner.tenant_id == tenant.id,
-                TeamingPartner.status == "active",
+        (
+            await session.execute(
+                select(PastPerformance)
+                .where(PastPerformance.tenant_id == tenant.id)
+                .order_by(PastPerformance.period_end.desc().nulls_last())
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
+
+    partner_rows = (
+        (
+            await session.execute(
+                select(TeamingPartner).where(
+                    TeamingPartner.tenant_id == tenant.id,
+                    TeamingPartner.status == "active",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     # Tenant identity. UEI/CAGE may still be pending — the prompt handles that
     # and the drafter is instructed not to fabricate.
@@ -217,9 +229,7 @@ async def _build_input(
             title=opp.title,
             notice_type=opp.notice_type,
             set_aside=opp.set_aside,
-            set_aside_description=(opp.raw_payload or {}).get(
-                "typeOfSetAsideDescription"
-            ),
+            set_aside_description=(opp.raw_payload or {}).get("typeOfSetAsideDescription"),
             naics_code=opp.naics_code,
             agency=opp.agency,
             solicitation_number=opp.solicitation_number,
@@ -260,9 +270,7 @@ async def _build_input(
                 role=p.role,
                 period_start=p.period_start,
                 period_end=p.period_end,
-                contract_value=(
-                    float(p.contract_value) if p.contract_value is not None else None
-                ),
+                contract_value=(float(p.contract_value) if p.contract_value is not None else None),
                 naics_code=p.naics_code,
                 summary=p.summary,
                 keywords=p.keywords or [],
@@ -339,9 +347,7 @@ async def _stream_draft(
         final_output_tokens: int | None = None
         final_stop_reason: str | None = None
         try:
-            async for chunk in stream_sources_sought_draft(
-                client, inp, max_tokens=max_tokens
-            ):
+            async for chunk in stream_sources_sought_draft(client, inp, max_tokens=max_tokens):
                 if chunk.kind == "delta":
                     accumulated.append(chunk.text)
                     payload = {"type": "delta", "text": chunk.text}
@@ -362,9 +368,7 @@ async def _stream_draft(
 
         content = "".join(accumulated).strip()
         if not content:
-            yield (
-                b'data: {"type":"error","message":"empty model response"}\n\n'
-            )
+            yield (b'data: {"type":"error","message":"empty model response"}\n\n')
             return
 
         # Persist on stream completion via fresh session.
@@ -399,7 +403,7 @@ async def _stream_draft(
                 await persist_session.flush()
                 draft_id = str(draft.id)
                 final_version = draft.version
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.exception("draft persistence failed: %s", exc)
             payload = {
                 "type": "error",
@@ -450,9 +454,7 @@ async def create_sources_sought_draft_stream(
     the final event.
     """
     opp = (
-        await ctx.session.execute(
-            select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id)
-        )
+        await ctx.session.execute(select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id))
     ).scalar_one_or_none()
     if opp is None:
         raise HTTPException(status_code=404, detail="opportunity not found")
@@ -497,9 +499,7 @@ async def regenerate_draft_stream(
         )
     ).scalar_one_or_none()
     if opp is None:
-        raise HTTPException(
-            status_code=404, detail="parent draft's opportunity is gone"
-        )
+        raise HTTPException(status_code=404, detail="parent draft's opportunity is gone")
 
     instructions = body.custom_instructions or parent.custom_instructions
     return await _stream_draft(
@@ -641,9 +641,7 @@ async def delete_draft(
 # ── helper used in opportunity detail (fetched separately by the web client) ──
 
 
-@router.get(
-    "/opportunities/{opportunity_id}/drafts", response_model=DraftListResponse
-)
+@router.get("/opportunities/{opportunity_id}/drafts", response_model=DraftListResponse)
 async def list_drafts_for_opportunity(
     opportunity_id: UUID,
     ctx: Annotated[RequestContext, Depends(get_request_context)],
@@ -701,10 +699,7 @@ async def export_draft_docx(
     filename = f"{_safe_filename(draft.title)}-v{draft.version}.docx"
     return Response(
         content=blob,
-        media_type=(
-            "application/vnd.openxmlformats-officedocument."
-            "wordprocessingml.document"
-        ),
+        media_type=("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
             "Cache-Control": "no-store",

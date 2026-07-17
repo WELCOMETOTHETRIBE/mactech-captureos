@@ -108,9 +108,7 @@ def main() -> int:
         required=True,
         help="Full webhook URL incl. basic auth: https://postmark:<secret>@host/webhooks/postmark/inbound",
     )
-    parser.add_argument(
-        "--dry-run", action="store_true", help="Parse and print, don't POST"
-    )
+    parser.add_argument("--dry-run", action="store_true", help="Parse and print, don't POST")
     args = parser.parse_args()
 
     box = mailbox.mbox(args.mbox_path)

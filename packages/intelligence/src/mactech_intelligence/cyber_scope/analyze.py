@@ -12,11 +12,11 @@ from mactech_intelligence.cyber_scope.normalize import normalize_contract_text
 from mactech_intelligence.cyber_scope.schemas import CyberScopeAnalysis, DetectedCategories
 from mactech_intelligence.cyber_scope.scorer import (
     PARSER_VERSION,
+    _likelihood_from_score,
     build_top_signals,
     compute_score,
     missing_likely_requirements,
     recommend_pursuit_model,
-    _likelihood_from_score,
 )
 from mactech_intelligence.cyber_scope.sources import CyberScopeTextSource
 from mactech_intelligence.cyber_scope.ufgs_tiers import (
@@ -82,9 +82,7 @@ def analyze_cyber_scope(source: CyberScopeTextSource) -> CyberScopeAnalysis:
         hidden_scope_indicators=hidden,
         ufgs_center_of_gravity=center,
         ufgs_tier_1_hit=any(h.ufgs_tier == 1 for h in ufgs_hits),
-        top_ufgs_sections=list(
-            dict.fromkeys(h.normalized_term for h in ufgs_hits if h.ufgs)
-        )[:8],
+        top_ufgs_sections=list(dict.fromkeys(h.normalized_term for h in ufgs_hits if h.ufgs))[:8],
         scan_pass=source.scan_pass,
         parser_version=PARSER_VERSION,
         metadata=dict(source.metadata),

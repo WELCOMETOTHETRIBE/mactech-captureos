@@ -93,7 +93,9 @@ def find_identifiers(text: str) -> list[IdentifierHit]:
                 continue
             groups = [g for g in m.groups() if g]
             canonical = canon(*groups) if groups else canon(m.group(0))
-            hits.append(IdentifierHit(kind=kind, canonical=canonical, raw=m.group(0), start=s, end=e))
+            hits.append(
+                IdentifierHit(kind=kind, canonical=canonical, raw=m.group(0), start=s, end=e)
+            )
             seen_spans.append((s, e))
 
     # Prefixed forms first (highest confidence), then bare separated forms.

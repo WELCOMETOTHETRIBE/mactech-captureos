@@ -44,12 +44,8 @@ BID_INVITE_KINDS = (
 
 _EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 _PHONE_RE = re.compile(r"\+?\d[\d ()./-]{8,}\d")
-_RFP_ID_RE = re.compile(
-    r"app\.buildingconnected\.com/rfps/([0-9a-f]{24})", re.I
-)
-_GOTO_URL_RE = re.compile(
-    r"https://app\.buildingconnected\.com/(?:goto|rfps)/[^\s)>\"]+", re.I
-)
+_RFP_ID_RE = re.compile(r"app\.buildingconnected\.com/rfps/([0-9a-f]{24})", re.I)
+_GOTO_URL_RE = re.compile(r"https://app\.buildingconnected\.com/(?:goto|rfps)/[^\s)>\"]+", re.I)
 
 _INVITE_RE = re.compile(
     r"(?P<lead>[^\n]{1,80}?)\s+from\s+(?P<company>.{1,120}?)\s+has\s+invited\s+"
@@ -71,9 +67,7 @@ _EXTENDED_RE = re.compile(
     r"extended\s+(?:to\s+|until\s+)?"
     r"(?P<date>[A-Z][a-z]+\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4})"
 )
-_DATE_IN_TEXT_RE = re.compile(
-    r"(?P<date>[A-Z][a-z]+\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4})"
-)
+_DATE_IN_TEXT_RE = re.compile(r"(?P<date>[A-Z][a-z]+\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4})")
 
 
 @dataclass
@@ -138,7 +132,9 @@ def _split_title(title: str | None) -> tuple[str | None, str | None]:
     return _collapse(title), None
 
 
-def _classify(subject: str, headline: str | None, *, invited: bool, messaged: bool, was_reply: bool) -> str:
+def _classify(
+    subject: str, headline: str | None, *, invited: bool, messaged: bool, was_reply: bool
+) -> str:
     probe = " ".join(filter(None, [subject.lower(), (headline or "").lower()]))
     if was_reply:
         return "reply"
@@ -160,11 +156,7 @@ def _lead_contact(text: str) -> tuple[str | None, str | None, str | None]:
     section = re.split(r"(?:Client|Sender)\s+Details", text, maxsplit=1)
     tail = section[1] if len(section) > 1 else text
     email = next(
-        (
-            e
-            for e in _EMAIL_RE.findall(tail)
-            if "buildingconnected" not in e.lower()
-        ),
+        (e for e in _EMAIL_RE.findall(tail) if "buildingconnected" not in e.lower()),
         None,
     )
     phone_m = _PHONE_RE.search(tail.split("www.buildingconnected", 1)[0])
@@ -196,9 +188,7 @@ def parse_bid_invite(subject: str, text_body: str | None) -> ParsedBidInvite:
         # Everything between the title's dash rule and the Project
         # Details block is the message: headline first, then optional
         # free-text (where a due-date extension states the new date).
-        message_body = re.split(
-            r"Project\s+Details", text[message_m.end() :], maxsplit=1
-        )[0]
+        message_body = re.split(r"Project\s+Details", text[message_m.end() :], maxsplit=1)[0]
         headline_m = _HEADLINE_RE.match(message_body)
         if headline_m:
             headline = _collapse(headline_m.group("headline"))
@@ -218,9 +208,7 @@ def parse_bid_invite(subject: str, text_body: str | None) -> ParsedBidInvite:
     if due_m:
         bid_due_on = _parse_us_date(due_m.group("due"))
     # A due-date-extension message supersedes the (stale) Bid Due block.
-    extension_source = " ".join(
-        filter(None, [message_body, stripped_subject])
-    )
+    extension_source = " ".join(filter(None, [message_body, stripped_subject]))
     ext_m = _EXTENDED_RE.search(extension_source)
     if ext_m:
         bid_due_on = _parse_us_date(ext_m.group("date")) or bid_due_on

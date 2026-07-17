@@ -18,11 +18,11 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mactech_db.base import Base
-
 
 WEB_MENTION_KINDS = ("program", "incumbent", "press", "agency_news")
 
@@ -57,9 +57,7 @@ class WebMentionCache(Base):
     query: Mapped[str] = mapped_column(Text, nullable=False)
     results: Mapped[list[dict]] = mapped_column(JSONB, nullable=False)
     result_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    engine: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="google"
-    )
+    engine: Mapped[str] = mapped_column(String(32), nullable=False, default="google")
     fetched_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

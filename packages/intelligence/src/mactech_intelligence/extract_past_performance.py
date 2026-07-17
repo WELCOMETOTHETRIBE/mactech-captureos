@@ -53,7 +53,7 @@ def _strip_code_fence(text: str) -> str:
         if nl > 0:
             text = text[nl + 1 :]
         if text.endswith("```"):
-            text = text[: -3]
+            text = text[:-3]
     return text.strip()
 
 
@@ -133,9 +133,7 @@ async def extract_past_performance(
             "extract_past_performance got non-JSON output (first 200 chars): %s",
             raw[:200],
         )
-        raise PastPerformanceExtractionError(
-            f"model output is not valid JSON: {exc.msg}"
-        ) from exc
+        raise PastPerformanceExtractionError(f"model output is not valid JSON: {exc.msg}") from exc
     if not isinstance(data, dict):
         raise PastPerformanceExtractionError(
             f"top-level JSON is not an object: {type(data).__name__}"
@@ -157,20 +155,17 @@ async def extract_past_performance(
         title=title.strip()[:255],
         customer_agency=(
             data.get("customer_agency").strip()[:255]
-            if isinstance(data.get("customer_agency"), str)
-            and data.get("customer_agency").strip()
+            if isinstance(data.get("customer_agency"), str) and data.get("customer_agency").strip()
             else None
         ),
         customer_office=(
             data.get("customer_office").strip()[:255]
-            if isinstance(data.get("customer_office"), str)
-            and data.get("customer_office").strip()
+            if isinstance(data.get("customer_office"), str) and data.get("customer_office").strip()
             else None
         ),
         contract_number=(
             data.get("contract_number").strip()[:64]
-            if isinstance(data.get("contract_number"), str)
-            and data.get("contract_number").strip()
+            if isinstance(data.get("contract_number"), str) and data.get("contract_number").strip()
             else None
         ),
         role=role,

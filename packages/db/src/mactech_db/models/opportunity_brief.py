@@ -26,7 +26,8 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mactech_db.base import Base
@@ -35,9 +36,7 @@ from mactech_db.base import Base
 class OpportunityBrief(Base):
     __tablename__ = "opportunity_briefs"
     __table_args__ = (
-        UniqueConstraint(
-            "tenant_id", "opportunity_id", name="uq_opp_briefs_tenant_opp"
-        ),
+        UniqueConstraint("tenant_id", "opportunity_id", name="uq_opp_briefs_tenant_opp"),
     )
 
     id: Mapped[UUID] = mapped_column(

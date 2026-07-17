@@ -17,6 +17,7 @@ from mactech_workers.documents.store import FilesystemDocumentStore, storage_key
 
 # ---- format detection + extraction ----
 
+
 def test_detect_and_extract_txt():
     blob = b"This solicitation requires an FRCS cybersecurity specialist."
     assert detect_format("scope.txt", blob) == "txt"
@@ -59,6 +60,7 @@ def test_zip_is_not_treated_as_text():
 
 
 # ---- safe archive expansion ----
+
 
 def test_expand_archive_flattens_members():
     buf = io.BytesIO()
@@ -121,6 +123,7 @@ def test_is_zip():
 
 # ---- classification ----
 
+
 @pytest.mark.parametrize(
     "filename,text,expected",
     [
@@ -130,7 +133,11 @@ def test_is_zip():
         ("Section M - Evaluation.pdf", "", "section_m"),
         ("Wage Determination.pdf", "", "wage_determination"),
         ("Amendment 0002.pdf", "", "amendment"),
-        ("random.pdf", "SECTION 25 05 11 CYBERSECURITY FOR FACILITY-RELATED CONTROL SYSTEMS", "ufgs_specification"),
+        (
+            "random.pdf",
+            "SECTION 25 05 11 CYBERSECURITY FOR FACILITY-RELATED CONTROL SYSTEMS",
+            "ufgs_specification",
+        ),
         ("misc.pdf", "nothing notable here", "other"),
     ],
 )
@@ -139,6 +146,7 @@ def test_classify_document(filename, text, expected):
 
 
 # ---- sections / provenance ----
+
 
 def test_build_sections_page_offsets_align():
     pages = ["SECTION 25 05 11\nCybersecurity for FRCS", "PART 2 - PRODUCTS\nBACnet controllers"]
@@ -155,6 +163,7 @@ def test_build_sections_page_offsets_align():
 
 
 # ---- object store ----
+
 
 def test_filesystem_store_roundtrip(tmp_path):
     store = FilesystemDocumentStore(root=tmp_path)

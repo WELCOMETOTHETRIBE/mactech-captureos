@@ -41,9 +41,7 @@ SBIR_DEPTHS = ("scaffold", "standard", "complete")
 class SBIRSubmission(Base):
     __tablename__ = "sbir_submissions"
     __table_args__ = (
-        UniqueConstraint(
-            "tenant_id", "topic_number", name="uq_sbir_submissions_tenant_topic"
-        ),
+        UniqueConstraint("tenant_id", "topic_number", name="uq_sbir_submissions_tenant_topic"),
         Index(
             "ix_sbir_submissions_tenant_created",
             "tenant_id",
@@ -72,9 +70,7 @@ class SBIRSubmission(Base):
     proposal_title: Mapped[str | None] = mapped_column(String(512), nullable=True)
     component: Mapped[str] = mapped_column(String(32), nullable=False)
     depth: Mapped[str] = mapped_column(String(16), nullable=False)
-    status: Mapped[str] = mapped_column(
-        String(16), nullable=False, server_default=text("'queued'")
-    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default=text("'queued'"))
     output_dir: Mapped[str] = mapped_column(String(512), nullable=False)
     verify_flags: Mapped[list[str]] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'::jsonb")
@@ -89,12 +85,8 @@ class SBIRSubmission(Base):
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
-    started_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
-    completed_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
+    started_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
 
 SBIR_TOPIC_STATUSES = ("prerelease", "open", "closed", "unknown")
@@ -110,9 +102,7 @@ class SBIRTopic(Base):
 
     __tablename__ = "sbir_topics"
     __table_args__ = (
-        UniqueConstraint(
-            "source", "topic_number", name="uq_sbir_topics_source_topic"
-        ),
+        UniqueConstraint("source", "topic_number", name="uq_sbir_topics_source_topic"),
         Index("ix_sbir_topics_status_close", "status", "close_date"),
         Index("ix_sbir_topics_component", "component"),
     )
@@ -134,18 +124,12 @@ class SBIRTopic(Base):
     prerelease_date: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
-    open_date: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
-    close_date: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
+    open_date: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    close_date: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     technology_areas: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
-    modernization_priorities: Mapped[list[str] | None] = mapped_column(
-        JSONB, nullable=True
-    )
+    modernization_priorities: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     keywords: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     itar_export_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     phase_i_ceiling: Mapped[int | None] = mapped_column(Integer, nullable=True)

@@ -21,6 +21,7 @@ from datetime import datetime
 from pathlib import Path
 
 from mactech_db.models.solicitation_extraction import REQUIREMENT_CATEGORIES
+
 from mactech_intelligence.llm import AnthropicLLMClient, LLMResponse
 
 log = logging.getLogger(__name__)
@@ -143,7 +144,7 @@ def _strip_code_fence(text: str) -> str:
         if nl > 0:
             text = text[nl + 1 :]
         if text.endswith("```"):
-            text = text[: -3]
+            text = text[:-3]
     return text.strip()
 
 
@@ -166,9 +167,7 @@ def _normalize_category(value: object) -> str:
     return "other"
 
 
-def _coerce_compliance_item(
-    raw: object, fallback_index: int
-) -> ExtractedComplianceItem | None:
+def _coerce_compliance_item(raw: object, fallback_index: int) -> ExtractedComplianceItem | None:
     if not isinstance(raw, dict):
         return None
     statement = raw.get("statement")
@@ -194,9 +193,7 @@ def _coerce_compliance_item(
     )
 
 
-def _coerce_requirement_item(
-    raw: object, fallback_index: int
-) -> ExtractedRequirementItem | None:
+def _coerce_requirement_item(raw: object, fallback_index: int) -> ExtractedRequirementItem | None:
     if not isinstance(raw, dict):
         return None
     statement = raw.get("statement")
@@ -295,14 +292,10 @@ async def extract_solicitation(
             "extract_solicitation got non-JSON output (first 200 chars): %s",
             raw[:200],
         )
-        raise SolicitationExtractionError(
-            f"model output is not valid JSON: {exc.msg}"
-        ) from exc
+        raise SolicitationExtractionError(f"model output is not valid JSON: {exc.msg}") from exc
 
     if not isinstance(data, dict):
-        raise SolicitationExtractionError(
-            f"top-level JSON is not an object: {type(data).__name__}"
-        )
+        raise SolicitationExtractionError(f"top-level JSON is not an object: {type(data).__name__}")
 
     raw_compliance = data.get("compliance_items") or []
     raw_requirements = data.get("requirement_items") or []

@@ -162,7 +162,7 @@ _TEXT_EXTS = {".txt", ".md", ".markdown", ".json", ".yaml", ".yml", ".csv", ".ts
 @router.post("/sbir/decode/file", response_model=SBIRDecodedFile)
 async def decode_sbir_file(
     _ctx: Annotated[RequestContext, Depends(get_request_context)],
-    file: UploadFile = File(...),  # noqa: B008 — FastAPI's required idiom
+    file: UploadFile = File(...),
 ) -> SBIRDecodedFile:
     """Decode an uploaded PDF or text file to plain text.
 

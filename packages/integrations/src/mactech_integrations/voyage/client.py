@@ -87,9 +87,7 @@ class VoyageClient:
         if not inputs:
             return VoyageEmbeddingResponse(model=model, embeddings=[], total_tokens=0)
         if len(inputs) > MAX_BATCH_SIZE:
-            raise ValueError(
-                f"Voyage caps inputs at {MAX_BATCH_SIZE} per call; got {len(inputs)}"
-            )
+            raise ValueError(f"Voyage caps inputs at {MAX_BATCH_SIZE} per call; got {len(inputs)}")
         # Truncate per input to bound per-call cost and latency.
         trimmed = [(s or "")[:MAX_INPUT_CHARS] for s in inputs]
         body = {"input": trimmed, "model": model, "input_type": input_type}
@@ -109,9 +107,7 @@ class VoyageClient:
                 if 500 <= resp.status_code < 600:
                     raise VoyageRateLimitError(f"server error {resp.status_code}")
                 if resp.status_code >= 400:
-                    raise VoyageError(
-                        f"voyage error {resp.status_code}: {resp.text[:200]}"
-                    )
+                    raise VoyageError(f"voyage error {resp.status_code}: {resp.text[:200]}")
                 payload = resp.json()
                 data = payload.get("data") or []
                 # Sort by index in case the API doesn't preserve order; safe even

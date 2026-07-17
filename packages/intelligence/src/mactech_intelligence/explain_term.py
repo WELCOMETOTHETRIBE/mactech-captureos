@@ -54,9 +54,7 @@ _KIND_INTROS: dict[str, str] = {
         "profile, set-aside fit, capability statements, and other signals; "
         "this is one of the constituent components."
     ),
-    "agency": (
-        "A federal agency or sub-agency that issues procurement notices."
-    ),
+    "agency": ("A federal agency or sub-agency that issues procurement notices."),
     "clause": (
         "A FAR (Federal Acquisition Regulation) or DFARS (Defense FAR "
         "Supplement) clause cited in a federal solicitation. Clauses define "
@@ -121,9 +119,7 @@ _KIND_INTROS: dict[str, str] = {
         "Secret, Top Secret). Without an FCL at the required level, you "
         "cannot legally bid solicitations that handle classified data."
     ),
-    "term": (
-        "A federal-contracting term encountered in the dashboard."
-    ),
+    "term": ("A federal-contracting term encountered in the dashboard."),
 }
 
 
@@ -241,11 +237,7 @@ def _split_summary_body(text: str) -> tuple[str, str]:
             body_start = i + 1
             break
     summary = " ".join(summary_lines).strip()
-    body = (
-        "\n".join(lines[body_start:]).strip()
-        if body_start is not None
-        else ""
-    )
+    body = "\n".join(lines[body_start:]).strip() if body_start is not None else ""
     if not body:
         # Whole response is one paragraph — promote to body.
         return summary, summary

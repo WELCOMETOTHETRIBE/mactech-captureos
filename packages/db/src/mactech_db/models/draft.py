@@ -24,11 +24,11 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mactech_db.base import Base
-
 
 DRAFT_TYPES = ("sources_sought", "rfp_response", "compliance_matrix", "white_paper")
 DRAFT_STATUSES = ("draft", "reviewed", "submitted", "archived")

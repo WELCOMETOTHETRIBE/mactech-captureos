@@ -12,6 +12,7 @@ from mactech_intelligence.detection import (
 
 # ---- identifier normalization ----
 
+
 @pytest.mark.parametrize(
     "text,expected",
     [
@@ -32,7 +33,7 @@ def test_ufgs_variants_normalize(text, expected):
     [
         ("DFARS 252.204-7012", "252.204-7012"),
         ("clause 252.204-7012 applies", "252.204-7012"),
-        ("DFARS 252.204–7012 (en dash)", "252.204-7012"),  # noqa: RUF001 - en dash is the point
+        ("DFARS 252.204–7012 (en dash)", "252.204-7012"),
     ],
 )
 def test_dfars_variants_normalize(text, expected):
@@ -53,6 +54,7 @@ def test_bare_six_digits_not_a_false_ufgs():
 
 
 # ---- multi-family detection ----
+
 
 def test_direct_cyber_signals_detected():
     text = "The contractor shall perform a CMMC Level 2 gap assessment, SSP and POA&M review."

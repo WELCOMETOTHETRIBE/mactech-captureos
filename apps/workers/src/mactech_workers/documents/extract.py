@@ -134,9 +134,7 @@ def _extract_pdf(blob: bytes, *, allow_ocr: bool) -> ExtractedDoc:
             for page in doc:
                 pages.append(page.get_text("text"))
     except Exception as exc:  # fitz.FileDataError, RuntimeError, …
-        return ExtractedDoc(
-            text="", format="pdf", mime_type=_MIME["pdf"], ok=False, error=str(exc)
-        )
+        return ExtractedDoc(text="", format="pdf", mime_type=_MIME["pdf"], ok=False, error=str(exc))
 
     embedded = "\n\n".join(p.strip() for p in pages).strip()
     if len(embedded) >= OCR_FALLBACK_THRESHOLD or not allow_ocr:
@@ -255,7 +253,10 @@ def _extract_csv(blob: bytes) -> ExtractedDoc:
         lines = ["\t".join(r) for r in rows if any(c.strip() for c in r)]
         text = "\n".join(lines).strip()
         return ExtractedDoc(
-            text=text[:MAX_TEXT_CHARS], format="csv", mime_type=_MIME["csv"], ok=bool(text),
+            text=text[:MAX_TEXT_CHARS],
+            format="csv",
+            mime_type=_MIME["csv"],
+            ok=bool(text),
             pages=[text],
         )
     except Exception as exc:
@@ -268,7 +269,10 @@ def _extract_html(blob: bytes) -> ExtractedDoc:
         parser.feed(_decode(blob))
         text = parser.text.strip()
         return ExtractedDoc(
-            text=text[:MAX_TEXT_CHARS], format="html", mime_type=_MIME["html"], ok=bool(text),
+            text=text[:MAX_TEXT_CHARS],
+            format="html",
+            mime_type=_MIME["html"],
+            ok=bool(text),
             pages=[text],
         )
     except Exception as exc:
@@ -280,7 +284,10 @@ def _extract_html(blob: bytes) -> ExtractedDoc:
 def _extract_txt(blob: bytes) -> ExtractedDoc:
     text = _decode(blob).strip()
     return ExtractedDoc(
-        text=text[:MAX_TEXT_CHARS], format="txt", mime_type=_MIME["txt"], ok=bool(text),
+        text=text[:MAX_TEXT_CHARS],
+        format="txt",
+        mime_type=_MIME["txt"],
+        ok=bool(text),
         pages=[text],
     )
 
@@ -303,6 +310,9 @@ def extract_text(filename: str, blob: bytes, *, allow_ocr: bool = True) -> Extra
     if fmt == "txt":
         return _extract_txt(blob)
     return ExtractedDoc(
-        text="", format=fmt, mime_type=_MIME.get(fmt, _MIME["unknown"]), ok=False,
+        text="",
+        format=fmt,
+        mime_type=_MIME.get(fmt, _MIME["unknown"]),
+        ok=False,
         error=f"unsupported format: {fmt}",
     )

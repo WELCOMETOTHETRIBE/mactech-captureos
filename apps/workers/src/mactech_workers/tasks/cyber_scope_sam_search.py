@@ -292,10 +292,14 @@ async def run_cyber_sam_search(
     for tenant in tenants:
         async with session_factory() as session:
             searches = (
-                await session.execute(
-                    select(SavedSearch).where(SavedSearch.tenant_id == tenant.id)
+                (
+                    await session.execute(
+                        select(SavedSearch).where(SavedSearch.tenant_id == tenant.id)
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
         for search in searches:
             filters = dict(search.filters or {})
             filters["_name"] = search.name

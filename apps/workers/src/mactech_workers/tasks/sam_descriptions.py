@@ -54,9 +54,7 @@ class DescStats:
     duration_ms: int
 
 
-async def _fetch_noticedesc(
-    client: httpx.AsyncClient, url: str, api_key: str
-) -> str | None:
+async def _fetch_noticedesc(client: httpx.AsyncClient, url: str, api_key: str) -> str | None:
     """Returns the description text if the endpoint returned valid JSON,
     None if the response was empty or parseable-but-empty. Raises on
     transport / 5xx errors after retries are exhausted."""
@@ -186,9 +184,7 @@ async def fetch_descriptions_batch(
             fetched += 1
 
     duration_ms = int((datetime.now(UTC) - started).total_seconds() * 1000)
-    return DescStats(
-        fetched=fetched, skipped=skipped, errors=errors, duration_ms=duration_ms
-    )
+    return DescStats(fetched=fetched, skipped=skipped, errors=errors, duration_ms=duration_ms)
 
 
 @celery_app.task(name="mactech.sam.fetch_descriptions")

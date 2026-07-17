@@ -14,6 +14,7 @@ from mactech_db.models import (
     CyberScopeAnalysis,
     Tenant,
 )
+from mactech_intelligence.cyber_scope.db_adapter import schema_from_persisted
 from mactech_intelligence.cyber_scope.llm_exports import (
     SUMMARY_VERSION,
     CyberScopeOppContext,
@@ -23,7 +24,6 @@ from mactech_intelligence.cyber_scope.llm_exports import (
 from mactech_intelligence.llm import AnthropicLLMClient
 from sqlalchemy import select
 
-from mactech_intelligence.cyber_scope.db_adapter import schema_from_persisted
 from mactech_workers.celery_app import celery_app
 
 log = logging.getLogger(__name__)
@@ -43,19 +43,21 @@ async def _summarize_batch(*, batch_size: int = 15) -> dict[str, int]:
         tenants = (await session.execute(select(Tenant))).scalars().all()
         for tenant in tenants:
             rows = (
-                await session.execute(
-                    select(CyberScopeAnalysis)
-                    .where(
-                        CyberScopeAnalysis.tenant_id == tenant.id,
-                        CyberScopeAnalysis.opportunity_id.is_not(None),
-                        CyberScopeAnalysis.overall_cyber_likelihood.in_(
-                            ("HIGH", "CRITICAL")
-                        ),
+                (
+                    await session.execute(
+                        select(CyberScopeAnalysis)
+                        .where(
+                            CyberScopeAnalysis.tenant_id == tenant.id,
+                            CyberScopeAnalysis.opportunity_id.is_not(None),
+                            CyberScopeAnalysis.overall_cyber_likelihood.in_(("HIGH", "CRITICAL")),
+                        )
+                        .order_by(CyberScopeAnalysis.score.desc())
+                        .limit(batch_size * 3)
                     )
-                    .order_by(CyberScopeAnalysis.score.desc())
-                    .limit(batch_size * 3)
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
             for row in rows:
                 meta = row.metadata_json or {}
@@ -71,9 +73,7 @@ async def _summarize_batch(*, batch_size: int = 15) -> dict[str, int]:
                 if row.opportunity_id:
                     opp = (
                         await session.execute(
-                            select(OpportunityRaw).where(
-                                OpportunityRaw.id == row.opportunity_id
-                            )
+                            select(OpportunityRaw).where(OpportunityRaw.id == row.opportunity_id)
                         )
                     ).scalar_one_or_none()
 
@@ -107,9 +107,7 @@ async def _summarize_batch(*, batch_size: int = 15) -> dict[str, int]:
                     generated_by = "llm"
                     model = resp.model
                 except Exception as exc:
-                    log.warning(
-                        "summarize failed analysis=%s: %s", row.id, exc
-                    )
+                    log.warning("summarize failed analysis=%s: %s", row.id, exc)
                     summary = deterministic_summary(schema, opp_ctx)
                     generated_by = "template"
                     model = None

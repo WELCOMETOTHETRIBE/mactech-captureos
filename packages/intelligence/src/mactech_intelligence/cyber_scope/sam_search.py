@@ -87,9 +87,7 @@ def is_cyber_scope_saved_search(filters: dict[str, Any]) -> bool:
     name = str(filters.get("_name") or "")
     if "CYBER SCOPE" in name.upper() or "MACTECH SHORTLIST" in name.upper():
         return True
-    if "HIDDEN CONSTRUCTION CYBER" in name.upper():
-        return True
-    return False
+    return "HIDDEN CONSTRUCTION CYBER" in name.upper()
 
 
 def search_keywords_from_filters(filters: dict[str, Any]) -> list[str]:
