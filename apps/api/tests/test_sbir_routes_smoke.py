@@ -13,7 +13,9 @@ from mactech_api.main import app
 
 
 def test_router_mounted_listing() -> None:
-    routes = [r.path for r in app.routes]  # type: ignore[attr-defined]
+    # app.routes can include non-path entries (e.g. FastAPI's _IncludedRouter
+    # markers) depending on version; getattr keeps this robust.
+    routes = [getattr(r, "path", None) for r in app.routes]
     assert "/sbir/submissions" in routes
     assert "/sbir/generate/stream" in routes
     assert "/sbir/decode/file" in routes

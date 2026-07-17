@@ -37,7 +37,9 @@ PAYLOAD = {
 
 
 def test_router_mounted() -> None:
-    routes = [r.path for r in app.routes]  # type: ignore[attr-defined]
+    # app.routes can include non-path entries (e.g. FastAPI's _IncludedRouter
+    # markers) depending on version; getattr keeps this robust.
+    routes = [getattr(r, "path", None) for r in app.routes]
     assert "/webhooks/postmark/inbound" in routes
     assert "/bid-invites" in routes
     assert "/bid-invites/{invite_id}" in routes
