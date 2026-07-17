@@ -36,10 +36,24 @@ PAYLOAD = {
 }
 
 
+def _mounted_paths() -> set[str]:
+    # FastAPI version-robust: newer versions keep included routers nested rather
+    # than flattening their paths into app.routes. Combine the OpenAPI schema
+    # paths with a recursive walk of the route tree (covers include_in_schema
+    # =False routes like the webhook too).
+    paths: set[str] = set(app.openapi().get("paths", {}))
+    stack = list(app.routes)
+    while stack:
+        r = stack.pop()
+        p = getattr(r, "path", None)
+        if isinstance(p, str):
+            paths.add(p)
+        stack.extend(getattr(r, "routes", []) or [])
+    return paths
+
+
 def test_router_mounted() -> None:
-    # app.routes can include non-path entries (e.g. FastAPI's _IncludedRouter
-    # markers) depending on version; getattr keeps this robust.
-    routes = [getattr(r, "path", None) for r in app.routes]
+    routes = _mounted_paths()
     assert "/webhooks/postmark/inbound" in routes
     assert "/bid-invites" in routes
     assert "/bid-invites/{invite_id}" in routes

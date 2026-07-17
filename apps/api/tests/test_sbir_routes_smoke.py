@@ -12,10 +12,23 @@ from fastapi.testclient import TestClient
 from mactech_api.main import app
 
 
+def _mounted_paths() -> set[str]:
+    # FastAPI version-robust: newer versions keep included routers nested rather
+    # than flattening their paths into app.routes. Combine the OpenAPI schema
+    # paths with a recursive walk of the route tree.
+    paths: set[str] = set(app.openapi().get("paths", {}))
+    stack = list(app.routes)
+    while stack:
+        r = stack.pop()
+        p = getattr(r, "path", None)
+        if isinstance(p, str):
+            paths.add(p)
+        stack.extend(getattr(r, "routes", []) or [])
+    return paths
+
+
 def test_router_mounted_listing() -> None:
-    # app.routes can include non-path entries (e.g. FastAPI's _IncludedRouter
-    # markers) depending on version; getattr keeps this robust.
-    routes = [getattr(r, "path", None) for r in app.routes]
+    routes = _mounted_paths()
     assert "/sbir/submissions" in routes
     assert "/sbir/generate/stream" in routes
     assert "/sbir/decode/file" in routes
