@@ -1,0 +1,74 @@
+# Pursuit playbooks — the ordered action patterns per pursuit lane.
+#
+# Consumed by the pursuit-plan generator (Slice 6) to seed dated `pursuit_
+# actions`. Documented here in Slice 1 so the taxonomy is versioned with the
+# rest of the knowledge pack. Actions use real dates (computed from the notice's
+# response/decision deadlines), never vague language.
+
+family: pursuit_playbooks
+version: "2026.07.0"
+effective_date: 2026-07-01
+
+playbooks:
+  PRIME_NOW:
+    - action: confirm eligibility and submission instructions
+    - action: confirm required past performance
+    - action: identify mandatory personnel and certifications
+    - action: hold a 30-minute bid/no-bid review
+    - action: develop customer and incumbent intelligence
+    - action: request clarification where needed
+    - action: create capture plan
+    - action: generate compliance matrix
+    - action: assign proposal sections
+    - action: establish internal color-review dates
+    - action: prepare and submit response
+
+  PRIME_WITH_PARTNER:
+    - action: confirm eligibility and submission instructions
+    - action: define the single bounded capability gap
+    - action: identify and contact a named partner to fill the gap
+    - action: negotiate NDA / teaming agreement
+    - action: hold a 30-minute bid/no-bid review
+    - action: generate compliance matrix
+    - action: assign proposal sections
+    - action: prepare and submit response
+
+  SUB_TO_IDENTIFIED_PRIME:
+    - action: isolate the exact cyber work package
+    - action: estimate likely work-share range
+    - action: confirm the identified prime and their capture lead
+    - action: prepare one-page opportunity-specific capability brief
+    - action: contact small-business liaison and capture leads
+    - action: request inclusion in the bidder/subcontractor team
+    - action: propose a narrowly defined scope and deliverables
+    - action: negotiate NDA or teaming agreement
+    - action: establish follow-up cadence before the prime's team-lock date
+
+  SUB_TO_PRIME_NOT_YET_IDENTIFIED:
+    - action: isolate the exact cyber work package
+    - action: estimate likely work-share range
+    - action: identify incumbent and likely bidders
+    - action: rank five to ten prime targets
+    - action: prepare one-page opportunity-specific capability brief
+    - action: contact small-business liaisons and capture leads
+    - action: propose a narrowly defined scope and deliverables
+    - action: establish follow-up cadence before the prime's team-lock date
+
+  SHAPE_EARLY:
+    - action: respond to the Sources Sought or RFI
+    - action: recommend an SDVOSB or small-business acquisition path where credible
+    - action: ask whether FRCS cybersecurity is separately scoped
+    - action: request applicable UFGS and UFC documents
+    - action: identify interested primes
+    - action: attend industry day
+    - action: schedule capability meetings
+    - action: track expected solicitation date
+    - action: create a future follow-up task
+
+  WATCH:
+    - action: set a review date tied to the expected solicitation or task order
+    - action: monitor for amendments and attachment releases
+
+  NO_BID:
+    - action: record the no-bid reason code and supporting evidence
+    - action: archive; re-evaluate only if an amendment materially changes scope

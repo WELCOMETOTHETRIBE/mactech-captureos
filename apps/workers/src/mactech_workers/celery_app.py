@@ -260,6 +260,7 @@ import mactech_workers.tasks.apify_industry_days  # noqa: E402
 import mactech_workers.tasks.attachment_fetcher  # noqa: E402
 import mactech_workers.tasks.codex_sprs_sync  # noqa: E402
 import mactech_workers.tasks.cyber_scope_sam_search  # noqa: E402
+import mactech_workers.tasks.decision  # noqa: E402
 import mactech_workers.tasks.cyber_scope_scan  # noqa: E402
 import mactech_workers.tasks.cyber_scope_summarize  # noqa: E402
 import mactech_workers.tasks.dhs_apfs_ingest  # noqa: E402
@@ -271,6 +272,9 @@ import mactech_workers.tasks.embed  # noqa: E402
 import mactech_workers.tasks.enrich  # noqa: E402
 import mactech_workers.tasks.library_import  # noqa: E402
 import mactech_workers.tasks.nasa_naf_ingest  # noqa: E402
+import mactech_workers.tasks.prime_targets  # noqa: E402
+import mactech_workers.tasks.pursuit_plan  # noqa: E402
+import mactech_workers.tasks.work_packages  # noqa: E402
 import mactech_workers.tasks.sam_descriptions  # noqa: E402
 import mactech_workers.tasks.sam_ingest  # noqa: E402
 import mactech_workers.tasks.score  # noqa: E402, F401

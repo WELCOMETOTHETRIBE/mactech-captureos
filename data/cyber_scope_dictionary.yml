@@ -130,7 +130,7 @@ terms:
     normalized_term: PIT
     weight: 16
     aliases: ["PIT System", "PIT Systems"]
-    regex: '/Platform\s+Information\s+Technology|\bPIT\b/i'
+    regex: '/Platform\s+Information\s+Technology|\bPIT\s+(System|Systems|Cyber|Determination|Assessment)/i'
   - category: ot_ics_scada_pit
     term: UMCS
     normalized_term: UMCS

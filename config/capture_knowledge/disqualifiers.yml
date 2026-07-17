@@ -1,0 +1,109 @@
+# Barriers & disqualifiers.
+#
+# These concepts carry `disqualifier: true`, a `gate_code`, and a non-legacy
+# `barrier` evidence_category so they are NOT projected into the legacy
+# cyber_scope detector (parity preserved in Slice 1). The Slice 4 decision
+# engine consumes them: a detected barrier opens an `opportunity_gates` row with
+# the given gate_code. `severity: hard` gates can force NO_BID / suppress
+# PRIME_NOW; `severity: soft` only reduce confidence.
+
+family: disqualifiers
+version: "2026.07.0"
+effective_date: 2026-07-01
+
+concepts:
+  - id: bar_facility_clearance
+    canonical_name: Facility Clearance Requirement
+    normalized_term: facility_clearance
+    evidence_category: barrier
+    disqualifier: true
+    gate_code: MANDATORY_CLEARANCE_GAP
+    severity: hard
+    aliases: ["Facility Clearance", "FCL", "facility security clearance"]
+    exact_phrases: ["contractor facility clearance"]
+    negative_weight: 30
+    source_ref: "NISPOM / 32 CFR Part 117"
+    enabled: true
+  - id: bar_bonding
+    canonical_name: Bonding Requirement
+    normalized_term: bonding
+    evidence_category: barrier
+    disqualifier: true
+    gate_code: BONDING_GAP
+    severity: hard
+    aliases: ["payment bond", "performance bond", "bid guarantee", "bid bond"]
+    regex: '/payment\s+(and\s+performance\s+)?bonds?|performance\s+bonds?|bid\s+(bond|guarantee)|\bbonding\b/i'
+    negative_weight: 20
+    source_ref: "FAR 28 / Miller Act"
+    enabled: true
+  - id: bar_electrical_license
+    canonical_name: State Electrical License Requirement
+    normalized_term: electrical_license
+    evidence_category: barrier
+    disqualifier: true
+    gate_code: MANDATORY_LICENSE_GAP
+    severity: hard
+    aliases: ["licensed electrician", "state electrical license", "master electrician"]
+    negative_weight: 18
+    enabled: true
+  - id: bar_professional_engineer
+    canonical_name: Professional Engineer Requirement
+    normalized_term: professional_engineer
+    evidence_category: barrier
+    disqualifier: true
+    gate_code: MANDATORY_LICENSE_GAP
+    severity: soft
+    aliases: ["Professional Engineer", "P.E. stamp", "registered professional engineer"]
+    negative_weight: 10
+    enabled: true
+  - id: bar_self_performance
+    canonical_name: Self-Performance Percentage
+    normalized_term: self_performance
+    evidence_category: barrier
+    disqualifier: true
+    gate_code: SCOPE_TOO_LARGE
+    severity: soft
+    aliases: ["self-perform", "percentage of work", "limitations on subcontracting"]
+    negative_weight: 12
+    source_ref: "FAR 52.219-14"
+    enabled: true
+  - id: bar_oem_authorized_dealer
+    canonical_name: OEM / Authorized Dealer Requirement
+    normalized_term: oem_restriction
+    evidence_category: barrier
+    disqualifier: true
+    gate_code: OEM_RESTRICTION
+    severity: soft
+    aliases: ["authorized dealer", "OEM certified", "factory authorized", "authorized reseller"]
+    negative_weight: 12
+    enabled: true
+  - id: bar_vehicle_restriction
+    canonical_name: Contract Vehicle Restriction
+    normalized_term: vehicle_restriction
+    evidence_category: barrier
+    disqualifier: true
+    gate_code: VEHICLE_UNAVAILABLE
+    severity: hard
+    aliases: ["GWAC", "SEWP", "OASIS", "8(a) STARS", "GSA Schedule holders only", "IDIQ holders only"]
+    negative_weight: 20
+    enabled: true
+  - id: bar_clearance_staffing
+    canonical_name: Cleared Staffing Count
+    normalized_term: cleared_staffing
+    evidence_category: barrier
+    disqualifier: true
+    gate_code: STAFFING_UNREALISTIC
+    severity: soft
+    aliases: ["cleared personnel", "TS/SCI cleared staff", "number of cleared"]
+    negative_weight: 10
+    enabled: true
+  - id: bar_geographic
+    canonical_name: Geographic Restriction
+    normalized_term: geographic_restriction
+    evidence_category: barrier
+    disqualifier: true
+    gate_code: GEOGRAPHIC_MISMATCH
+    severity: soft
+    aliases: ["local firms only", "within 50 miles", "place of performance restricted"]
+    negative_weight: 8
+    enabled: true

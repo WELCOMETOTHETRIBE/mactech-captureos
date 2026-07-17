@@ -36,6 +36,7 @@ from uuid import UUID
 import yaml
 from mactech_db import async_session_factory
 from mactech_db.models import (
+    ExclusionsCache,
     Founder,
     NaicsCode,
     OpportunityBrief,
@@ -335,9 +336,10 @@ def _high_moat_flags_payload(
 
 
 def _make_facts(
-    opp: OpportunityRaw, enr: OpportunityEnriched | None
+    opp: OpportunityRaw,
+    enr: OpportunityEnriched | None,
+    incumbent_excluded: bool | None = None,
 ) -> OpportunityFacts:
-    incumbent_excluded: bool | None = None
     incumbent_end = None
     if enr is not None:
         incumbent_end = enr.incumbent_end_date
@@ -355,6 +357,27 @@ def _make_facts(
         has_capability_match=False,
         has_capability_match_score=0,
     )
+
+
+async def _lookup_incumbent_excluded(
+    session: AsyncSession, enr: OpportunityEnriched | None
+) -> bool | None:
+    """Resolve the incumbent's SAM exclusion status from exclusions_cache.
+
+    Fixes the long-standing bug where _make_facts hardcoded None, so the base
+    scorer's debarment boost (scoring.py) never fired even though enrich.py had
+    populated exclusions_cache. Returns None when there's no incumbent UEI or no
+    cached check.
+    """
+    uei = enr.incumbent_uei if enr else None
+    if not uei:
+        return None
+    row = (
+        await session.execute(
+            select(ExclusionsCache).where(ExclusionsCache.uei == uei)
+        )
+    ).scalar_one_or_none()
+    return None if row is None else bool(row.is_excluded)
 
 
 async def _capability_similarity_score(
@@ -449,7 +472,7 @@ async def _maybe_generate_brief(
     except BriefExtractionError as exc:
         log.warning("auto-brief: bad JSON for %s: %s", opp.id, exc)
         return False
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning("auto-brief: extract failed for %s: %s", opp.id, exc)
         return False
 
@@ -562,7 +585,8 @@ async def score_unscored_batch(
                 )
             ).scalar_one_or_none()
 
-            facts = _make_facts(opp, enr)
+            incumbent_excluded = await _lookup_incumbent_excluded(session, enr)
+            facts = _make_facts(opp, enr, incumbent_excluded=incumbent_excluded)
             cap_pts, cap_titles = await _capability_similarity_score(
                 session, tenant.id, opp.id
             )
@@ -733,7 +757,8 @@ async def score_one_opportunity(opportunity_id: UUID | str) -> dict[str, Any]:
                 )
             )
         ).scalar_one_or_none()
-        facts = _make_facts(opp, enr)
+        incumbent_excluded = await _lookup_incumbent_excluded(session, enr)
+        facts = _make_facts(opp, enr, incumbent_excluded=incumbent_excluded)
         cap_pts, cap_titles = await _capability_similarity_score(
             session, tenant.id, opp.id
         )

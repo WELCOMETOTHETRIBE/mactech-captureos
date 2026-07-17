@@ -375,11 +375,107 @@ export type OpportunityHeader = {
   additional_info_link: string | null;
 };
 
+export type DecisionVectorOut = {
+  relevance: number;
+  prime_fit: number;
+  subcontract_fit: number;
+  winability: number;
+  deliverability: number;
+  strategic_value: number;
+  urgency: number;
+  evidence_completeness: number;
+  overall_priority: number;
+};
+
+export type GateOut = {
+  gate_code: string;
+  status: string;
+  severity: string;
+  reason_code: string | null;
+  detail: string | null;
+};
+
+export type DecisionBlock = {
+  pursuit_lane: string;
+  reason_codes: string[];
+  confidence: string;
+  lane_weight_profile: string;
+  needs_human_review: boolean;
+  vector: DecisionVectorOut;
+  gates: GateOut[];
+  knowledge_pack_version: string | null;
+  formula_version: string | null;
+  computed_at: string | null;
+};
+
+export type CaptureQueueItem = {
+  opportunity_id: string;
+  title: string;
+  agency: string | null;
+  naics_code: string | null;
+  set_aside: string | null;
+  pursuit_lane: string;
+  overall_priority: number;
+  confidence: string;
+  relevance: number;
+  prime_fit: number;
+  subcontract_fit: number;
+  response_deadline: string | null;
+  reason_codes: string[];
+  needs_human_review: boolean;
+  next_action: string | null;
+  prime_target_names: string[];
+};
+
+export type CaptureQueues = {
+  pursue_as_prime: CaptureQueueItem[];
+  team_as_sub: CaptureQueueItem[];
+  shape_early: CaptureQueueItem[];
+  needs_review: CaptureQueueItem[];
+  counts: Record<string, number>;
+};
+
+export type PrimeTargetOut = {
+  name: string;
+  uei: string | null;
+  target_type: string;
+  confidence: string;
+  why_target: string | null;
+  recommended_contact_role: string | null;
+  outreach_deadline: string | null;
+  rank: number;
+};
+
+export type PursuitActionOut = {
+  sequence: number;
+  action: string;
+  owner_founder_slug: string | null;
+  due_at: string | null;
+  status: string;
+};
+
+export type PursuitPlanBlock = {
+  pursuit_lane: string;
+  executive_decision: string;
+  why_this_is_real: string | null;
+  mactech_work_package: string | null;
+  blocking_issues: string[];
+  prime_target_names: string[];
+  recommended_owner_slug: string | null;
+  decision_deadline: string | null;
+  response_deadline: string | null;
+  confidence: string;
+  actions: PursuitActionOut[];
+};
+
 export type OpportunityDetail = {
   opportunity: OpportunityHeader;
   description: DescriptionBlock;
   incumbent: IncumbentBlock | null;
   score: ScoreBlock | null;
+  decision: DecisionBlock | null;
+  pursuit_plan: PursuitPlanBlock | null;
+  prime_targets: PrimeTargetOut[];
   capability_matches: CapabilityMatch[];
   enrichment_notes: string | null;
   enriched_at: string | null;

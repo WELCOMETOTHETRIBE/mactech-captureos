@@ -97,3 +97,9 @@ class OpportunityScore(Base):
     cyber_scope_flags: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB, nullable=True
     )
+    # Decision-layer mirror (Slice 4). Authoritative source is
+    # opportunity_decision_vectors; these two are denormalized here — written in
+    # the same transaction — so list/sort views stay single-table. Null until
+    # the decision engine has run for this (tenant, opportunity).
+    overall_priority_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pursuit_lane: Mapped[str | None] = mapped_column(String(40), nullable=True)

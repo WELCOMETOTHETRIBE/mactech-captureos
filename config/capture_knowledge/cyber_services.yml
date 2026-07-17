@@ -1,0 +1,223 @@
+# Direct cyber-services signal family.
+#
+# Slice 1: faithful relocation of the rmf_ato_emass and nist_cnssi_fips terms
+# from data/cyber_scope_dictionary.yml (LEGACY evidence categories, projected
+# into the legacy detector unchanged). Direct-cyber vocabulary EXPANSION
+# (DFARS -7019/-7020/-7021, SPRS, Nessus, tabletop/AAR, cyber training) lands in
+# Slice 3 with its own non-legacy categories and updated golden tests.
+
+family: cyber_services
+version: "2026.07.0"
+effective_date: 2026-07-01
+
+concepts:
+  # --- rmf_ato_emass ---
+  - id: dodi_8510_01
+    canonical_name: DoDI 8510.01
+    normalized_term: DoDI 8510.01
+    evidence_category: rmf_ato_emass
+    aliases: ["DODI 8510.01", "DoD Instruction 8510.01"]
+    regex: '/DoD[Ii]\s*8510\.01/i'
+    related_concepts: [rmf, ato]
+    positive_weight: 28
+    source_ref: "DoDI 8510.01"
+    enabled: true
+  - id: rmf
+    canonical_name: Risk Management Framework
+    normalized_term: RMF
+    evidence_category: rmf_ato_emass
+    aliases: ["RMF"]
+    regex: '/Risk\s+Management\s+Framework|\bRMF\b/i'
+    related_concepts: [ato, emass, ssp, poam]
+    positive_weight: 20
+    source_ref: "NIST SP 800-37"
+    enabled: true
+  - id: ato
+    canonical_name: Authority to Operate
+    normalized_term: ATO
+    evidence_category: rmf_ato_emass
+    aliases: ["Authorization to Operate", "ATO"]
+    regex: '/Authority\s+to\s+Operate|\bATO\b/i'
+    related_concepts: [rmf, emass]
+    positive_weight: 22
+    source_ref: "DoDI 8510.01"
+    enabled: true
+  - id: emass
+    canonical_name: eMASS
+    normalized_term: eMASS
+    evidence_category: rmf_ato_emass
+    aliases: ["Enterprise Mission Assurance Support Service"]
+    regex: '/\beMASS\b/i'
+    positive_weight: 18
+    enabled: true
+  - id: ssp
+    canonical_name: System Security Plan
+    normalized_term: SSP
+    evidence_category: rmf_ato_emass
+    aliases: ["SSP"]
+    regex: '/System\s+Security\s+Plan|\bSSP\b/i'
+    positive_weight: 16
+    enabled: true
+  - id: sar
+    canonical_name: Security Assessment Report
+    normalized_term: SAR
+    evidence_category: rmf_ato_emass
+    aliases: ["SAR", "Security Assessment"]
+    regex: '/Security\s+Assessment\s+Report|\bSAR\b/i'
+    positive_weight: 16
+    enabled: true
+  - id: poam
+    canonical_name: POA&M
+    normalized_term: POA&M
+    evidence_category: rmf_ato_emass
+    regex: '/POA[&\s]?M/i'
+    positive_weight: 14
+    enabled: true
+  - id: acas
+    canonical_name: ACAS
+    normalized_term: ACAS
+    evidence_category: rmf_ato_emass
+    positive_weight: 12
+    enabled: true
+  - id: scap
+    canonical_name: SCAP
+    normalized_term: SCAP
+    evidence_category: rmf_ato_emass
+    positive_weight: 10
+    enabled: true
+  - id: stig
+    canonical_name: STIG
+    normalized_term: STIG
+    evidence_category: rmf_ato_emass
+    aliases: ["STIGs"]
+    positive_weight: 12
+    enabled: true
+
+  # --- nist_cnssi_fips ---
+  - id: nist_800_82
+    canonical_name: NIST SP 800-82
+    normalized_term: NIST SP 800-82
+    evidence_category: nist_cnssi_fips
+    aliases: ["NIST 800-82", "SP 800-82", "Industrial Control Systems Security"]
+    regex: '/NIST\s*(SP)?\s*800[-\s]?82/i'
+    positive_weight: 18
+    source_ref: "NIST SP 800-82"
+    enabled: true
+  - id: nist_800_53
+    canonical_name: NIST SP 800-53
+    normalized_term: NIST SP 800-53
+    evidence_category: nist_cnssi_fips
+    regex: '/NIST\s*(SP)?\s*800[-\s]?53/i'
+    positive_weight: 14
+    source_ref: "NIST SP 800-53"
+    enabled: true
+  - id: nist_800_171
+    canonical_name: NIST SP 800-171
+    normalized_term: NIST SP 800-171
+    evidence_category: nist_cnssi_fips
+    regex: '/NIST\s*(SP)?\s*800[-\s]?171/i'
+    positive_weight: 14
+    source_ref: "NIST SP 800-171"
+    enabled: true
+  - id: cnssi_1253
+    canonical_name: CNSSI 1253
+    normalized_term: CNSSI 1253
+    evidence_category: nist_cnssi_fips
+    regex: '/CNSSI\s*(No\.)?\s*1253/i'
+    positive_weight: 16
+    source_ref: "CNSSI 1253"
+    enabled: true
+
+  # --- direct_cyber (Slice 3 multi-family; non-legacy category) ---
+  - id: sprs
+    canonical_name: SPRS
+    normalized_term: SPRS
+    evidence_category: direct_cyber
+    aliases: ["Supplier Performance Risk System"]
+    regex: '/\bSPRS\b|Supplier\s+Performance\s+Risk\s+System/i'
+    related_concepts: [nist_800_171, dfars_252_204_7019]
+    positive_weight: 16
+    source_ref: "DFARS 252.204-7020"
+    enabled: true
+  - id: nessus
+    canonical_name: Nessus
+    normalized_term: Nessus
+    evidence_category: direct_cyber
+    aliases: ["Tenable Nessus"]
+    positive_weight: 10
+    enabled: true
+  - id: vulnerability_assessment
+    canonical_name: Vulnerability Assessment
+    normalized_term: vulnerability_assessment
+    evidence_category: direct_cyber
+    aliases: ["vulnerability scanning", "vulnerability management"]
+    regex: '/vulnerability\s+(assessment|scanning|management)/i'
+    positive_weight: 14
+    enabled: true
+  - id: penetration_testing
+    canonical_name: Penetration Testing
+    normalized_term: penetration_testing
+    evidence_category: direct_cyber
+    aliases: ["pen test", "pen testing", "red team assessment"]
+    regex: '/penetration\s+test(ing)?|\bpen[\s-]?test/i'
+    positive_weight: 14
+    enabled: true
+  - id: security_controls_assessment
+    canonical_name: Security Controls Assessment
+    normalized_term: security_controls_assessment
+    evidence_category: direct_cyber
+    aliases: ["security control assessment", "controls assessment", "SCA"]
+    regex: '/security\s+controls?\s+assessment/i'
+    positive_weight: 14
+    enabled: true
+  - id: incident_response
+    canonical_name: Incident Response
+    normalized_term: incident_response
+    evidence_category: direct_cyber
+    aliases: ["incident response plan", "IR plan", "CIRT", "CSIRT"]
+    regex: '/incident\s+response/i'
+    positive_weight: 12
+    enabled: true
+  - id: tabletop_exercise
+    canonical_name: Tabletop Exercise
+    normalized_term: tabletop_exercise
+    evidence_category: direct_cyber
+    aliases: ["TTX", "table-top exercise"]
+    regex: '/table[\s-]?top\s+exercise|\bTTX\b/i'
+    positive_weight: 16
+    source_ref: "CISA CTEP"
+    enabled: true
+  - id: after_action_report
+    canonical_name: After-Action Report
+    normalized_term: after_action_report
+    evidence_category: direct_cyber
+    aliases: ["AAR", "after action review"]
+    regex: '/after[\s-]?action\s+(report|review)|\bAAR\b/i'
+    positive_weight: 12
+    enabled: true
+
+  # --- training (Slice 3 multi-family; non-legacy category) ---
+  - id: cybersecurity_training
+    canonical_name: Cybersecurity Training
+    normalized_term: cybersecurity_training
+    evidence_category: training
+    aliases: ["cyber training", "role-based training"]
+    regex: '/cyber\s?security\s+training|cyber\s+training|role[\s-]based\s+training/i'
+    positive_weight: 14
+    enabled: true
+  - id: security_awareness
+    canonical_name: Security Awareness Training
+    normalized_term: security_awareness
+    evidence_category: training
+    aliases: ["security awareness", "phishing exercise"]
+    regex: '/security\s+awareness|phishing\s+(exercise|campaign|simulation)/i'
+    positive_weight: 10
+    enabled: true
+  - id: cmmc_training
+    canonical_name: CMMC Training
+    normalized_term: cmmc_training
+    evidence_category: training
+    aliases: ["RMF training", "CMMC workshop"]
+    regex: '/CMMC\s+training|RMF\s+training/i'
+    positive_weight: 12
+    enabled: true

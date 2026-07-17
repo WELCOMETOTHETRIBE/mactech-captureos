@@ -95,6 +95,7 @@ async def _record_job_state(
     upserts: int,
     status: str,
     error: str | None = None,
+    metrics: dict[str, Any] | None = None,
 ) -> None:
     now = datetime.now(UTC)
     state_row = {
@@ -105,6 +106,7 @@ async def _record_job_state(
         "last_cursor": posted_to.isoformat() if status == "ok" else None,
         "last_status": status,
         "last_error": error,
+        "metrics": metrics,
         "updated_at": now,
     }
     stmt = (
@@ -124,6 +126,7 @@ async def _record_job_state(
                 ),
                 "last_status": status,
                 "last_error": error,
+                "metrics": metrics,
                 "ingested_count_lifetime": IngestionState.ingested_count_lifetime + upserts,
                 "updated_at": state_row["updated_at"],
             },
@@ -221,6 +224,19 @@ async def _execute_job(
                     posted_to=posted_to,
                     upserts=upserts,
                     status="ok",
+                    metrics={
+                        "saved_search_name": job.saved_search_name,
+                        "naics_code": job.naics_code,
+                        "title_query": job.title_query,
+                        "pages": pages,
+                        "examined": examined,
+                        "matched": matched,
+                        "inserted": inserts,
+                        "updated": updates,
+                        "posted_from": posted_from.isoformat() if posted_from else None,
+                        "posted_to": posted_to.isoformat() if posted_to else None,
+                        "ran_at": datetime.now(UTC).isoformat(),
+                    },
                 )
         except Exception as exc:
             await session.rollback()

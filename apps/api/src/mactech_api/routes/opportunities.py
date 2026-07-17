@@ -17,24 +17,30 @@ thin redirect so any bookmarked links still resolve.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select, text
-
-from mactech_api.auth import RequestContext, get_request_context
 from mactech_db.models import (
     CyberScopeAnalysis,
     ExclusionsCache,
     Founder,
+    OpportunityDecisionVector,
     OpportunityEnriched,
+    OpportunityGate,
+    OpportunityPrimeTarget,
     OpportunityRaw,
     OpportunityScore,
+    PrimeTarget,
+    PursuitAction,
+    PursuitRecommendation,
 )
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import select, text
+
+from mactech_api.auth import RequestContext, get_request_context
 
 router = APIRouter(tags=["opportunities"])
 
@@ -144,11 +150,80 @@ class CapabilityMatch(_Out):
     similarity: float  # 0..1 cosine
 
 
+class DecisionVectorOut(_Out):
+    relevance: int
+    prime_fit: int
+    subcontract_fit: int
+    winability: int
+    deliverability: int
+    strategic_value: int
+    urgency: int
+    evidence_completeness: int
+    overall_priority: int
+
+
+class GateOut(_Out):
+    gate_code: str
+    status: str
+    severity: str
+    reason_code: str | None
+    detail: str | None
+
+
+class DecisionBlock(_Out):
+    pursuit_lane: str
+    reason_codes: list[str]
+    confidence: str
+    lane_weight_profile: str
+    needs_human_review: bool
+    vector: DecisionVectorOut
+    gates: list[GateOut]
+    knowledge_pack_version: str | None
+    formula_version: str | None
+    computed_at: str | None
+
+
+class PrimeTargetOut(_Out):
+    name: str
+    uei: str | None
+    target_type: str
+    confidence: str
+    why_target: str | None
+    recommended_contact_role: str | None
+    outreach_deadline: str | None
+    rank: int
+
+
+class PursuitActionOut(_Out):
+    sequence: int
+    action: str
+    owner_founder_slug: str | None
+    due_at: str | None
+    status: str
+
+
+class PursuitPlanBlock(_Out):
+    pursuit_lane: str
+    executive_decision: str
+    why_this_is_real: str | None
+    mactech_work_package: str | None
+    blocking_issues: list[str]
+    prime_target_names: list[str]
+    recommended_owner_slug: str | None
+    decision_deadline: str | None
+    response_deadline: str | None
+    confidence: str
+    actions: list[PursuitActionOut]
+
+
 class OpportunityDetail(_Out):
     opportunity: OpportunityHeader
     description: DescriptionBlock
     incumbent: IncumbentBlock | None
     score: ScoreBlock | None
+    decision: DecisionBlock | None
+    pursuit_plan: PursuitPlanBlock | None
+    prime_targets: list[PrimeTargetOut]
     capability_matches: list[CapabilityMatch]
     enrichment_notes: str | None
     enriched_at: str | None
@@ -177,7 +252,7 @@ def _opp_header(opp: OpportunityRaw) -> OpportunityHeader:
     raw: dict[str, Any] = opp.raw_payload or {}
     days = None
     if opp.response_deadline:
-        delta = opp.response_deadline - datetime.now(timezone.utc)
+        delta = opp.response_deadline - datetime.now(UTC)
         days = int(delta.total_seconds() / 86400)
     return OpportunityHeader(
         id=str(opp.id),
@@ -302,7 +377,7 @@ def _short_agency_path(p: str | None) -> str | None:
 def _days_until(dt: datetime | None) -> int | None:
     if dt is None:
         return None
-    delta = dt - datetime.now(timezone.utc)
+    delta = dt - datetime.now(UTC)
     return int(delta.total_seconds() / 86400)
 
 
@@ -589,7 +664,7 @@ async def get_ingest_status(
             status="unknown", sources_ok=0, sources_error=0, feeds=[]
         )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     feeds: list[IngestFeed] = []
     for r in rows:
         feeds.append(
@@ -652,7 +727,7 @@ async def get_opportunity_detail(
             )
         ).scalar_one_or_none()
         if excl_row is not None:
-            age = datetime.now(timezone.utc) - excl_row.checked_at
+            age = datetime.now(UTC) - excl_row.checked_at
             excl_block = ExclusionBlock(
                 uei=excl_row.uei,
                 is_excluded=excl_row.is_excluded,
@@ -804,11 +879,134 @@ async def get_opportunity_detail(
             text=None, source_url=None, fetch_status="unavailable", source=opp.source
         )
 
+    # Decision block — the authoritative pursuit lane + vector + gates.
+    decision_block: DecisionBlock | None = None
+    dv = (
+        await session.execute(
+            select(OpportunityDecisionVector).where(
+                OpportunityDecisionVector.tenant_id == tenant_id,
+                OpportunityDecisionVector.opportunity_id == opportunity_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if dv is not None:
+        gate_rows = (
+            await session.execute(
+                select(OpportunityGate)
+                .where(
+                    OpportunityGate.tenant_id == tenant_id,
+                    OpportunityGate.opportunity_id == opportunity_id,
+                )
+                .order_by(OpportunityGate.severity, OpportunityGate.gate_code)
+            )
+        ).scalars().all()
+        decision_block = DecisionBlock(
+            pursuit_lane=dv.manual_lane_override or dv.pursuit_lane,
+            reason_codes=list(dv.reason_codes or []),
+            confidence=dv.confidence,
+            lane_weight_profile=dv.lane_weight_profile,
+            needs_human_review=dv.needs_human_review,
+            vector=DecisionVectorOut(
+                relevance=dv.relevance_score,
+                prime_fit=dv.prime_fit_score,
+                subcontract_fit=dv.subcontract_fit_score,
+                winability=dv.winability_score,
+                deliverability=dv.deliverability_score,
+                strategic_value=dv.strategic_value_score,
+                urgency=dv.urgency_score,
+                evidence_completeness=dv.evidence_completeness_score,
+                overall_priority=dv.overall_priority_score,
+            ),
+            gates=[
+                GateOut(
+                    gate_code=g.gate_code,
+                    status=g.status,
+                    severity=g.severity,
+                    reason_code=g.reason_code,
+                    detail=g.detail,
+                )
+                for g in gate_rows
+            ],
+            knowledge_pack_version=dv.knowledge_pack_version,
+            formula_version=dv.formula_version,
+            computed_at=dv.computed_at.isoformat() if dv.computed_at else None,
+        )
+
+    # Prime targets (ranked) for this notice.
+    pt_rows = (
+        await session.execute(
+            select(OpportunityPrimeTarget, PrimeTarget)
+            .join(PrimeTarget, PrimeTarget.id == OpportunityPrimeTarget.prime_target_id)
+            .where(
+                OpportunityPrimeTarget.tenant_id == tenant_id,
+                OpportunityPrimeTarget.opportunity_id == opportunity_id,
+            )
+            .order_by(OpportunityPrimeTarget.rank)
+        )
+    ).all()
+    prime_targets = [
+        PrimeTargetOut(
+            name=pt.name,
+            uei=pt.uei,
+            target_type=link.target_type,
+            confidence=link.confidence,
+            why_target=link.why_target,
+            recommended_contact_role=link.recommended_contact_role,
+            outreach_deadline=link.outreach_deadline.isoformat() if link.outreach_deadline else None,
+            rank=link.rank,
+        )
+        for link, pt in pt_rows
+    ]
+
+    # Pursuit plan + dated actions.
+    pursuit_plan_block: PursuitPlanBlock | None = None
+    rec = (
+        await session.execute(
+            select(PursuitRecommendation).where(
+                PursuitRecommendation.tenant_id == tenant_id,
+                PursuitRecommendation.opportunity_id == opportunity_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if rec is not None:
+        action_rows = (
+            await session.execute(
+                select(PursuitAction)
+                .where(PursuitAction.recommendation_id == rec.id)
+                .order_by(PursuitAction.sequence)
+            )
+        ).scalars().all()
+        pursuit_plan_block = PursuitPlanBlock(
+            pursuit_lane=rec.pursuit_lane,
+            executive_decision=rec.executive_decision,
+            why_this_is_real=rec.why_this_is_real,
+            mactech_work_package=rec.mactech_work_package,
+            blocking_issues=list(rec.blocking_issues or []),
+            prime_target_names=list(rec.prime_target_names or []),
+            recommended_owner_slug=rec.recommended_owner_slug,
+            decision_deadline=rec.decision_deadline.isoformat() if rec.decision_deadline else None,
+            response_deadline=rec.response_deadline.isoformat() if rec.response_deadline else None,
+            confidence=rec.confidence,
+            actions=[
+                PursuitActionOut(
+                    sequence=a.sequence,
+                    action=a.action,
+                    owner_founder_slug=a.owner_founder_slug,
+                    due_at=a.due_at.isoformat() if a.due_at else None,
+                    status=a.status,
+                )
+                for a in action_rows
+            ],
+        )
+
     return OpportunityDetail(
         opportunity=_opp_header(opp),
         description=desc,
         incumbent=incumbent_block,
         score=score_block,
+        decision=decision_block,
+        pursuit_plan=pursuit_plan_block,
+        prime_targets=prime_targets,
         capability_matches=capability_matches,
         enrichment_notes=enr.naics_match_notes if enr else None,
         enriched_at=enr.enriched_at.isoformat() if enr else None,
@@ -881,5 +1079,5 @@ async def get_founder_digest(
         founder_pillar=founder.pillar,
         items_count=len(items),
         items=items,
-        rendered_at=datetime.now(timezone.utc).isoformat(),
+        rendered_at=datetime.now(UTC).isoformat(),
     )

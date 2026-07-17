@@ -1,0 +1,154 @@
+# Acquisition signals — the five SAM.gov query families (recall-first retrieval).
+#
+# SAM provides no reliable full-text attachment search, so the API is used to
+# assemble a BROAD candidate universe; precision comes later from downloading
+# and parsing the full procurement package (Slice 2+). Each family drives two
+# retrieval modes:
+#   * naics  -> broad `ncode` pulls (NO cyber language required at the API)
+#   * title_queries -> targeted SAM `title` lookups (short, direct)
+#
+# Pipeline weight (per the approved plan): LEAD PIPELINE B. Families C
+# (facility/construction) and D (prime/teaming) are first-class; A/B/E broaden
+# coverage. Family C/D title_queries absorb the legacy ufgs_shortlist and
+# hidden_construction groups so nothing regresses.
+
+family: acquisition_signals
+version: "2026.07.0"
+effective_date: 2026-07-01
+
+query_families:
+  # ---- Pipeline B (lead) ----
+  - key: family_c_facility_construction
+    label: "Family C — Facility & construction projects"
+    pipeline: B
+    enabled: true
+    # Broad construction/engineering NAICS. The brief is explicit: do NOT
+    # require cyber language at the SAM stage — pull the project, then detect
+    # the embedded Division 25 cyber work package from the documents.
+    naics:
+      - "236220"   # Commercial & Institutional Building Construction
+      - "237130"   # Power & Communication Line / Related Structures
+      - "237310"   # Highway, Street & Bridge Construction
+      - "237990"   # Other Heavy & Civil Engineering Construction
+      - "238210"   # Electrical Contractors
+      - "541330"   # Engineering Services
+      - "541512"   # Computer Systems Design
+      - "541513"   # Computer Facilities Management
+      - "541519"   # Other Computer Related Services
+    title_queries:
+      - "25 05 11"
+      - "25 08 11.00 20"
+      - "25 10 10"
+      - "25 08 10"
+      - "23 09 23.02"
+      - "28 10 05"
+      - "27 05 29.00 10"
+      - "26 37 13"
+      - "40 60 00"
+      - "HVAC controls"
+      - "building automation"
+      - "BACnet"
+      - "UMCS"
+      - "microgrid"
+      - "electronic security systems"
+      - "utility monitoring"
+      - "central plant controls"
+
+  - key: family_d_prime_teaming
+    label: "Family D — Likely prime & teaming opportunities"
+    pipeline: B
+    enabled: true
+    naics:
+      - "236220"
+      - "237130"
+      - "237310"
+      - "238210"
+      - "541330"
+    title_queries:
+      - "design-build"
+      - "MATOC"
+      - "SATOC"
+      - "MACC"
+      - "IDIQ"
+      - "architect-engineer"
+      - "controls integration"
+      - "subcontracting plan"
+      - "central utility plant"
+
+  # ---- Pipeline A ----
+  - key: family_a_direct_cyber
+    label: "Family A — Direct cyber services"
+    pipeline: A
+    enabled: true
+    naics:
+      - "541512"
+      - "541519"
+      - "541513"
+      - "518210"
+      - "541611"
+      - "541690"
+    title_queries:
+      - "RMF"
+      - "ATO"
+      - "cybersecurity"
+      - "information assurance"
+      - "NIST 800-171"
+      - "CMMC"
+      - "vulnerability assessment"
+      - "continuous monitoring"
+      - "STIG"
+      - "security controls assessment"
+      - "penetration testing"
+
+  - key: family_b_training_exercise
+    label: "Family B — Training & exercise services"
+    pipeline: A
+    enabled: true
+    naics:
+      - "611420"
+      - "611430"
+      - "541519"
+      - "541611"
+    title_queries:
+      - "cybersecurity training"
+      - "cyber exercise"
+      - "tabletop exercise"
+      - "incident response exercise"
+      - "after action report"
+      - "security awareness"
+      - "role-based training"
+      - "RMF training"
+      - "CMMC training"
+
+  # ---- Cross-cutting ----
+  - key: family_e_early_stage
+    label: "Family E — Early-stage pipeline"
+    pipeline: AB
+    enabled: true
+    # Early-stage retrieval leans on notice TYPE more than NAICS; the ingest
+    # side pairs these title_queries with the notice-type filter below.
+    naics:
+      - "541519"
+      - "541330"
+      - "236220"
+      - "238210"
+    title_queries:
+      - "sources sought"
+      - "request for information"
+      - "industry day"
+      - "draft RFP"
+      - "presolicitation"
+
+# Notice types worth prioritizing for shaping. Consumed by the decision engine
+# (SHAPE_EARLY lane) and by Family E retrieval.
+notice_types:
+  early_stage:
+    - "Sources Sought"
+    - "Presolicitation"
+    - "Special Notice"
+    - "Request for Information"
+  solicitation:
+    - "Solicitation"
+    - "Combined Synopsis/Solicitation"
+  award:
+    - "Award Notice"
