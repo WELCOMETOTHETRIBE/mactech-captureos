@@ -85,7 +85,7 @@ def detect(
     for family, compiled in clause_compiled.items():
         if not _any_match(blob, compiled):
             continue
-        if family == "emass_ics":
+        if family == "emass_ics":  # noqa: SIM102
             # eMASS by itself isn't an OT/ICS signal — only counts when paired
             # with an industrial / control-systems mention in the same blob.
             if not re.search(
@@ -94,7 +94,7 @@ def detect(
                 re.IGNORECASE,
             ):
                 continue
-        if family == "civil_works_plc":
+        if family == "civil_works_plc":  # noqa: SIM102
             # "Civil Works" alone is too broad (it's a USACE construction
             # category). Only counts when paired with PLC / cyber / control.
             if not re.search(
@@ -106,15 +106,9 @@ def detect(
         clause_hits.append(family)
 
     clearance_hits = [
-        family
-        for family, compiled in clearance_compiled.items()
-        if _any_match(blob, compiled)
+        family for family, compiled in clearance_compiled.items() if _any_match(blob, compiled)
     ]
-    role_hits = [
-        family
-        for family, compiled in role_compiled.items()
-        if _any_match(blob, compiled)
-    ]
+    role_hits = [family for family, compiled in role_compiled.items() if _any_match(blob, compiled)]
 
     has_exact = ("ufgs_25_05_11" in clause_hits) or ("ufgs_25_08_11" in clause_hits)
     has_division = "ufgs_25_other" in clause_hits

@@ -16,10 +16,9 @@ from __future__ import annotations
 import logging
 import os
 
+from mactech_integrations.voyage import VoyageClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from mactech_integrations.voyage import VoyageClient
 
 log = logging.getLogger(__name__)
 

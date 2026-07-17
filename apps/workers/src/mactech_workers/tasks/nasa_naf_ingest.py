@@ -22,10 +22,10 @@ from typing import Any
 
 import httpx
 import openpyxl
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-
 from mactech_db import unscoped_session
 from mactech_db.models import ForecastRaw
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+
 from mactech_workers.celery_app import celery_app
 
 log = logging.getLogger(__name__)
@@ -88,7 +88,7 @@ async def _ingest() -> NafIngestStats:
                     duration_ms=_ms(started),
                 )
             xlsx_bytes = resp.content
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return NafIngestStats(
             fetched_rows=0,
             upserted=0,
@@ -98,10 +98,8 @@ async def _ingest() -> NafIngestStats:
         )
 
     try:
-        wb = openpyxl.load_workbook(
-            io.BytesIO(xlsx_bytes), read_only=True, data_only=True
-        )
-    except Exception as exc:  # noqa: BLE001
+        wb = openpyxl.load_workbook(io.BytesIO(xlsx_bytes), read_only=True, data_only=True)
+    except Exception as exc:
         return NafIngestStats(
             fetched_rows=0,
             upserted=0,
@@ -112,10 +110,7 @@ async def _ingest() -> NafIngestStats:
 
     # NASA file has two sheets — "Forecast Requirements" is the data,
     # "Sheet1" is empty. Look up the right one defensively.
-    if "Forecast Requirements" in wb.sheetnames:
-        ws = wb["Forecast Requirements"]
-    else:
-        ws = wb.active
+    ws = wb["Forecast Requirements"] if "Forecast Requirements" in wb.sheetnames else wb.active
 
     rows_iter = ws.iter_rows(values_only=True)
     header = next(rows_iter, None)
@@ -155,7 +150,9 @@ async def _ingest() -> NafIngestStats:
 
     log.info(
         "nasa_naf ingest: rows=%d upserted=%d skipped=%d",
-        fetched, upserted, skipped,
+        fetched,
+        upserted,
+        skipped,
     )
     return NafIngestStats(
         fetched_rows=fetched,
@@ -188,7 +185,11 @@ def _map_row(row: tuple, idx: dict[str, int]) -> dict[str, Any] | None:
 
     set_aside = _str_or_none(col("SetAsideType"))
     if set_aside and set_aside.lower() in (
-        "no set aside used.", "no set aside used", "n/a", "tbd", "to be determined"
+        "no set aside used.",
+        "no set aside used",
+        "n/a",
+        "tbd",
+        "to be determined",
     ):
         set_aside = None
 
@@ -212,19 +213,13 @@ def _map_row(row: tuple, idx: dict[str, int]) -> dict[str, Any] | None:
         elif loc:
             contracting_office = loc
 
-    expected_release = _resolve_quarter(
-        col("FYofSolOrNOFORelease"), col("QtrSolOrNOFORelease")
-    )
-    expected_award = _resolve_quarter(
-        col("AnticipatedFYAward"), col("Anticipated Qtr of Award")
-    )
+    expected_release = _resolve_quarter(col("FYofSolOrNOFORelease"), col("QtrSolOrNOFORelease"))
+    expected_award = _resolve_quarter(col("AnticipatedFYAward"), col("Anticipated Qtr of Award"))
 
     description = _str_or_none(col("Description")) or _str_or_none(col("Summary"))
 
     source_id = _str_or_none(col("SourceID"))
-    source_url = (
-        f"{NAF_PAGE_URL}#{source_id}" if source_id else NAF_PAGE_URL
-    )
+    source_url = f"{NAF_PAGE_URL}#{source_id}" if source_id else NAF_PAGE_URL
 
     return {
         "source_url": source_url[:2000],
@@ -302,7 +297,7 @@ def _parse_value_range(s: str | None) -> tuple[Decimal | None, Decimal | None]:
             low = Decimal(m.group(1)) * mult[m.group(2).upper()]
             high = Decimal(m.group(3)) * mult[m.group(4).upper()]
             return low, high
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
     return None, None
 

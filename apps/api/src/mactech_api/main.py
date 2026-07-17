@@ -9,6 +9,7 @@ from mactech_api.routes.amendments import router as amendments_router
 from mactech_api.routes.ask import router as ask_router
 from mactech_api.routes.bid_invites import router as bid_invites_router
 from mactech_api.routes.brief import router as brief_router
+from mactech_api.routes.capture import router as capture_router
 from mactech_api.routes.capture_package import router as capture_package_router
 from mactech_api.routes.cyber import router as cyber_router
 from mactech_api.routes.cyber_scope import router as cyber_scope_router
@@ -23,7 +24,6 @@ from mactech_api.routes.founders import router as founders_router
 from mactech_api.routes.integrations import router as integrations_router
 from mactech_api.routes.library import router as library_router
 from mactech_api.routes.library_import import router as library_import_router
-from mactech_api.routes.capture import router as capture_router
 from mactech_api.routes.me import router as me_router
 from mactech_api.routes.onboarding import router as onboarding_router
 from mactech_api.routes.opportunities import router as opportunities_router
@@ -45,9 +45,7 @@ app = FastAPI(
     description="The operating system for defense contractors.",
 )
 
-_origins = [
-    o.strip() for o in settings.cors_allow_origins.split(",") if o.strip()
-]
+_origins = [o.strip() for o in settings.cors_allow_origins.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,

@@ -24,15 +24,14 @@ import os
 import re
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal
 from typing import Any
-
-from sqlalchemy import desc, func, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from mactech_db import unscoped_session
 from mactech_db.models import AwardHistory, IncumbentSignal
 from mactech_integrations.sec_edgar import EdgarClient, EdgarError
+from sqlalchemy import desc, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+
 from mactech_workers.celery_app import celery_app
 
 log = logging.getLogger(__name__)

@@ -109,7 +109,9 @@ def _hash_payload(payload: dict[str, Any]) -> str:
 
 def _row_from_record(record: OpportunityRecord) -> dict[str, Any]:
     raw = _normalize_payload(record)
-    pop = record.place_of_performance.model_dump(mode="json") if record.place_of_performance else None
+    pop = (
+        record.place_of_performance.model_dump(mode="json") if record.place_of_performance else None
+    )
     return {
         "source": SOURCE,
         "source_id": record.notice_id,
@@ -205,9 +207,7 @@ async def _upsert_record(session: AsyncSession, record: OpportunityRecord) -> st
     if existing is not None and previous_snapshot is not None:
         # Re-load to get the post-upsert state for amendment recording.
         refreshed = (
-            await session.execute(
-                select(OpportunityRaw).where(OpportunityRaw.id == existing.id)
-            )
+            await session.execute(select(OpportunityRaw).where(OpportunityRaw.id == existing.id))
         ).scalar_one()
         await record_amendment(
             session,
@@ -386,20 +386,30 @@ async def ingest_all_mactech_naics(
     session_factory = async_session_factory()
     async with session_factory() as session:
         rows = (
-            await session.execute(
-                select(NaicsCode.code).where(
-                    NaicsCode.mactech_tier.in_(["primary", "secondary"])
-                ).order_by(NaicsCode.code)
+            (
+                await session.execute(
+                    select(NaicsCode.code)
+                    .where(NaicsCode.mactech_tier.in_(["primary", "secondary"]))
+                    .order_by(NaicsCode.code)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
     log.info("ingesting %d NAICS codes", len(rows))
     stats: list[IngestStats] = []
     for code in rows:
         try:
             s = await ingest_one_naics(code, backfill_days=backfill_days)
-            log.info("naics %s: +%d (%d inserts, %d updates) over %d pages",
-                     code, s.upserts, s.inserts, s.updates, s.pages)
+            log.info(
+                "naics %s: +%d (%d inserts, %d updates) over %d pages",
+                code,
+                s.upserts,
+                s.inserts,
+                s.updates,
+                s.pages,
+            )
             stats.append(s)
         except Exception as exc:
             log.exception("naics %s failed: %s", code, exc)
@@ -410,7 +420,9 @@ async def ingest_all_mactech_naics(
 
 
 @celery_app.task(name="mactech.sam.ingest_one_naics")
-def ingest_one_naics_task(naics_code: str, *, backfill_days: int = DEFAULT_BACKFILL_DAYS) -> dict[str, Any]:
+def ingest_one_naics_task(
+    naics_code: str, *, backfill_days: int = DEFAULT_BACKFILL_DAYS
+) -> dict[str, Any]:
     return asdict(asyncio.run(ingest_one_naics(naics_code, backfill_days=backfill_days)))
 
 
@@ -455,12 +467,16 @@ async def first_feed_ingest_for_tenant(
 
         if not target_naics:
             seeded = (
-                await session.execute(
-                    select(NaicsCode.code).where(
-                        NaicsCode.mactech_tier.in_(["primary", "secondary"])
+                (
+                    await session.execute(
+                        select(NaicsCode.code).where(
+                            NaicsCode.mactech_tier.in_(["primary", "secondary"])
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             target_naics = list(seeded)
 
     log.info(
@@ -501,11 +517,5 @@ async def first_feed_ingest_for_tenant(
 
 
 @celery_app.task(name="mactech.onboarding.first_feed_ingest")
-def first_feed_ingest_task(
-    tenant_slug: str, backfill_days: int = 30
-) -> dict[str, Any]:
-    return asyncio.run(
-        first_feed_ingest_for_tenant(
-            tenant_slug, backfill_days=backfill_days
-        )
-    )
+def first_feed_ingest_task(tenant_slug: str, backfill_days: int = 30) -> dict[str, Any]:
+    return asyncio.run(first_feed_ingest_for_tenant(tenant_slug, backfill_days=backfill_days))

@@ -35,9 +35,7 @@ from mactech_db.base import Base
 class TermExplanation(Base):
     __tablename__ = "term_explanations"
     __table_args__ = (
-        UniqueConstraint(
-            "slug", "prompt_version", name="uq_term_explanations_slug_version"
-        ),
+        UniqueConstraint("slug", "prompt_version", name="uq_term_explanations_slug_version"),
         Index("ix_term_explanations_slug", "slug"),
     )
 

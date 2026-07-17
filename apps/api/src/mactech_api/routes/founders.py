@@ -166,12 +166,16 @@ async def _linked_founder_ids(session, founder_ids: list[UUID]) -> set[UUID]:
     if not founder_ids:
         return set()
     rows = (
-        await session.execute(
-            select(User.founder_id)
-            .where(User.founder_id.in_(founder_ids), User.clerk_user_id.is_not(None))
-            .distinct()
+        (
+            await session.execute(
+                select(User.founder_id)
+                .where(User.founder_id.in_(founder_ids), User.clerk_user_id.is_not(None))
+                .distinct()
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return set(rows)
 
 
@@ -180,20 +184,22 @@ async def list_founders(
     ctx: Annotated[RequestContext, Depends(get_request_context)],
 ) -> FoundersList:
     rows = (
-        await ctx.session.execute(
-            select(Founder)
-            .where(Founder.tenant_id == ctx.tenant.id)
-            .order_by(Founder.full_name)
+        (
+            await ctx.session.execute(
+                select(Founder)
+                .where(Founder.tenant_id == ctx.tenant.id)
+                .order_by(Founder.full_name)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     ids = [r.id for r in rows]
     naics = await _naics_by_founder(ctx.session, ids)
     linked = await _linked_founder_ids(ctx.session, ids)
     return FoundersList(
         total=len(rows),
-        items=[
-            _to_out(r, naics=naics.get(r.id), profile_linked=r.id in linked) for r in rows
-        ],
+        items=[_to_out(r, naics=naics.get(r.id), profile_linked=r.id in linked) for r in rows],
     )
 
 
@@ -217,17 +223,13 @@ async def get_founder(
     return _to_out(f, naics=naics.get(f.id), profile_linked=f.id in linked)
 
 
-async def _unique_slug(
-    session, tenant_id: UUID, base: str, exclude_id: UUID | None = None
-) -> str:
+async def _unique_slug(session, tenant_id: UUID, base: str, exclude_id: UUID | None = None) -> str:
     """Pick a slug not yet used in this tenant. If `base` is taken,
     append -2, -3, etc."""
     slug = base
     suffix = 1
     while True:
-        stmt = select(Founder).where(
-            Founder.tenant_id == tenant_id, Founder.slug == slug
-        )
+        stmt = select(Founder).where(Founder.tenant_id == tenant_id, Founder.slug == slug)
         if exclude_id is not None:
             stmt = stmt.where(Founder.id != exclude_id)
         existing = (await session.execute(stmt)).scalar_one_or_none()
@@ -314,9 +316,7 @@ async def update_founder(
     return _to_out(f)
 
 
-@router.delete(
-    "/founders/{founder_id}", status_code=status.HTTP_204_NO_CONTENT
-)
+@router.delete("/founders/{founder_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_founder(
     founder_id: UUID,
     ctx: Annotated[RequestContext, Depends(get_request_context)],

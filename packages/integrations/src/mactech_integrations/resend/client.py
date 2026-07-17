@@ -113,9 +113,7 @@ class ResendClient:
                 if 500 <= resp.status_code < 600:
                     raise ResendRateLimitError(f"server error {resp.status_code}")
                 if resp.status_code >= 400:
-                    raise ResendError(
-                        f"resend error {resp.status_code}: {resp.text[:300]}"
-                    )
+                    raise ResendError(f"resend error {resp.status_code}: {resp.text[:300]}")
                 d = resp.json()
                 return ResendSendResult(
                     message_id=d.get("id", ""),

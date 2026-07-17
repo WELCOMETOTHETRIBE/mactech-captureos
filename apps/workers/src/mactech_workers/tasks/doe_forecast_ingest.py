@@ -40,10 +40,10 @@ from typing import Any
 
 import httpx
 import openpyxl
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-
 from mactech_db import unscoped_session
 from mactech_db.models import ForecastRaw
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+
 from mactech_workers.celery_app import celery_app
 
 log = logging.getLogger(__name__)
@@ -104,7 +104,7 @@ async def _ingest() -> DoeIngestStats:
                     duration_ms=_ms_since(started),
                 )
             xlsx_bytes = resp.content
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return DoeIngestStats(
             xlsx_url=None,
             fetched_rows=0,
@@ -115,10 +115,8 @@ async def _ingest() -> DoeIngestStats:
         )
 
     try:
-        wb = openpyxl.load_workbook(
-            io.BytesIO(xlsx_bytes), read_only=True, data_only=True
-        )
-    except Exception as exc:  # noqa: BLE001
+        wb = openpyxl.load_workbook(io.BytesIO(xlsx_bytes), read_only=True, data_only=True)
+    except Exception as exc:
         return DoeIngestStats(
             xlsx_url=xlsx_url,
             fetched_rows=0,
@@ -130,7 +128,7 @@ async def _ingest() -> DoeIngestStats:
 
     ws = wb.active
     rows_iter = ws.iter_rows(values_only=True)
-    header_row, header_idx = _find_header_row(rows_iter)
+    header_row, _header_idx = _find_header_row(rows_iter)
     if not header_row:
         return DoeIngestStats(
             xlsx_url=xlsx_url,
@@ -221,9 +219,7 @@ def _map_row(row: tuple, *, source_url: str) -> dict[str, Any] | None:
     state = _str_or_none(row[11]) if len(row) > 11 else None
     contracting_office = program_office
     if state and state.lower() != "unavailable":
-        contracting_office = (
-            f"{program_office} ({state})" if program_office else state
-        )
+        contracting_office = f"{program_office} ({state})" if program_office else state
 
     value_text = _str_or_none(row[7])
     val_low, val_high = _parse_value_range(value_text)
@@ -306,7 +302,7 @@ def _parse_value_range(s: str | None) -> tuple[Decimal | None, Decimal | None]:
         low = Decimal(low_n.replace(",", "")) * _MULTIPLIER[low_u.upper()]
         high = Decimal(high_n.replace(",", "")) * _MULTIPLIER[high_u.upper()]
         return low, high
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None, None
 
 

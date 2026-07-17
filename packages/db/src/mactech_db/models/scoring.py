@@ -12,7 +12,8 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID as PgUUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mactech_db.base import Base
@@ -20,9 +21,7 @@ from mactech_db.base import Base
 
 class CapabilityStatement(Base):
     __tablename__ = "capability_statements"
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "title", name="uq_capability_tenant_title"),
-    )
+    __table_args__ = (UniqueConstraint("tenant_id", "title", name="uq_capability_tenant_title"),)
 
     id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
@@ -50,9 +49,7 @@ class CapabilityStatement(Base):
 
 class OpportunityScore(Base):
     __tablename__ = "opportunity_scores"
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "opportunity_id", name="uq_scores_tenant_opp"),
-    )
+    __table_args__ = (UniqueConstraint("tenant_id", "opportunity_id", name="uq_scores_tenant_opp"),)
 
     id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
@@ -81,22 +78,14 @@ class OpportunityScore(Base):
     # high_moat_scoring config block is absent or hasn't been computed
     # yet. See packages/intelligence/.../scoring_high_moat.py for the rubric.
     high_moat_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    high_moat_breakdown: Mapped[dict[str, Any] | None] = mapped_column(
-        JSONB, nullable=True
-    )
+    high_moat_breakdown: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     # Stores {clause_hits, clearance_hits, role_hits, top_clearance,
     # is_high_probability_easy_win, why_it_matters_seed}.
-    high_moat_flags: Mapped[dict[str, Any] | None] = mapped_column(
-        JSONB, nullable=True
-    )
+    high_moat_flags: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     cyber_scope_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cyber_scope_likelihood: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    cyber_scope_pursuit_model: Mapped[str | None] = mapped_column(
-        String(32), nullable=True
-    )
-    cyber_scope_flags: Mapped[dict[str, Any] | None] = mapped_column(
-        JSONB, nullable=True
-    )
+    cyber_scope_pursuit_model: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    cyber_scope_flags: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     # Decision-layer mirror (Slice 4). Authoritative source is
     # opportunity_decision_vectors; these two are denormalized here — written in
     # the same transaction — so list/sort views stay single-table. Null until

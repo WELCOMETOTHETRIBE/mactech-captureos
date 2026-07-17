@@ -18,11 +18,11 @@ import os
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from sqlalchemy import bindparam, text
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from mactech_db import async_session_factory
 from mactech_integrations.voyage import VoyageClient
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from mactech_workers.celery_app import celery_app
 
 log = logging.getLogger(__name__)
@@ -94,10 +94,7 @@ async def _write_embeddings(
     # SQLAlchemy's `:bindparam` prefix collides with Postgres's `::cast`
     # operator inside the VALUES list ("syntax error at or near ':'").
     # Per-row is fine at our batch size (≤128 × ~5 ms = sub-second).
-    sql = text(
-        f"update {table} set embedding = CAST(:emb AS vector) "
-        f"where id = CAST(:id AS uuid)"
-    )
+    sql = text(f"update {table} set embedding = CAST(:emb AS vector) where id = CAST(:id AS uuid)")
     for row_id, emb in items:
         await session.execute(sql, {"id": row_id, "emb": _embedding_literal(emb)})
 
@@ -113,7 +110,7 @@ async def embed_unembedded_batch(*, batch_size: int = DEFAULT_BATCH_SIZE) -> Emb
     tokens = 0
     model: str | None = None
 
-    async with VoyageClient(api_key=api_key) as voyage, session_factory() as session:
+    async with VoyageClient(api_key=api_key) as voyage, session_factory() as session:  # noqa: SIM117
         async with session.begin():
             opp_items = await _claim_unembedded_opportunities(session, batch_size)
             cap_items = await _claim_unembedded_capabilities(session, batch_size)

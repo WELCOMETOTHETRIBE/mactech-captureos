@@ -169,9 +169,13 @@ def build_bid_no_bid_review(
     if analysis.hidden_scope_indicators:
         rationale += "\n• Hidden construction/facilities cyber scope — clarify FRCS/RMF boundaries before commit.\n"
     if model in ("FRCS_OT_SPECIALIST", "PRIME_PURSUE"):
-        rationale += "\n• Strong fit for MacTech cyber/FRCS delivery — evaluate capacity and teaming.\n"
+        rationale += (
+            "\n• Strong fit for MacTech cyber/FRCS delivery — evaluate capacity and teaming.\n"
+        )
     elif model == "SUBCONTRACTOR_PURSUE":
-        rationale += "\n• Prime scope likely construction/facilities — pursue as cyber/FRCS subcontractor.\n"
+        rationale += (
+            "\n• Prime scope likely construction/facilities — pursue as cyber/FRCS subcontractor.\n"
+        )
     elif model == "NO_ACTION":
         rationale += "\n• Low cyber signal — default no-bid unless strategic agency relationship.\n"
     else:

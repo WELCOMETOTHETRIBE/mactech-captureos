@@ -29,11 +29,6 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-
-from mactech_api.auth import RequestContext, get_request_context
 from mactech_db.models import (
     OpportunityEnriched,
     OpportunityRaw,
@@ -44,6 +39,11 @@ from mactech_integrations.serpapi import (
     SerpApiError,
     SerpApiRateLimitError,
 )
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+from mactech_api.auth import RequestContext, get_request_context
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["web-mentions"])
@@ -147,9 +147,7 @@ def _short_agency(agency_full: str | None) -> str:
     return top_canonical
 
 
-def _build_queries(
-    opp: OpportunityRaw, enr: OpportunityEnriched | None
-) -> list[tuple[str, str]]:
+def _build_queries(opp: OpportunityRaw, enr: OpportunityEnriched | None) -> list[tuple[str, str]]:
     """Return (kind, query) pairs to issue. Three kinds:
 
       program    — direct match on the program/RFP title scoped to the
@@ -182,7 +180,7 @@ def _build_queries(
             # Hunt for substance, not award listings.
             q = (
                 f'"{incumbent}" '
-                f'(lawsuit OR earnings OR layoff OR layoffs OR protest OR '
+                f"(lawsuit OR earnings OR layoff OR layoffs OR protest OR "
                 f'"GAO" OR settlement OR resigns OR acquires OR fraud) '
                 f"{_EXCLUDE_AGGREGATORS}"
             ).strip()
@@ -226,17 +224,19 @@ def _to_group(row: WebMentionCache, *, now: datetime) -> WebMentionGroup:
     )
 
 
-async def _read_cache(
-    ctx: RequestContext, opportunity_id: UUID
-) -> list[WebMentionCache]:
+async def _read_cache(ctx: RequestContext, opportunity_id: UUID) -> list[WebMentionCache]:
     rows = (
-        await ctx.session.execute(
-            select(WebMentionCache).where(
-                WebMentionCache.tenant_id == ctx.tenant.id,
-                WebMentionCache.opportunity_id == opportunity_id,
+        (
+            await ctx.session.execute(
+                select(WebMentionCache).where(
+                    WebMentionCache.tenant_id == ctx.tenant.id,
+                    WebMentionCache.opportunity_id == opportunity_id,
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return list(rows)
 
 
@@ -251,9 +251,7 @@ async def get_web_mentions(
     """Return cached web-mentions for the opp. Never fetches — the
     refresh endpoint is the only path that calls SerpAPI."""
     opp = (
-        await ctx.session.execute(
-            select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id)
-        )
+        await ctx.session.execute(select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id))
     ).scalar_one_or_none()
     if opp is None:
         raise HTTPException(status_code=404, detail="opportunity not found")
@@ -261,7 +259,13 @@ async def get_web_mentions(
     rows = await _read_cache(ctx, opportunity_id)
     now = datetime.now(UTC)
     groups = [_to_group(r, now=now) for r in rows]
-    groups.sort(key=lambda g: ("program", "incumbent", "press", "agency_news").index(g.kind) if g.kind in ("program", "incumbent", "press", "agency_news") else 99)
+    groups.sort(
+        key=lambda g: (
+            ("program", "incumbent", "press", "agency_news").index(g.kind)
+            if g.kind in ("program", "incumbent", "press", "agency_news")
+            else 99
+        )
+    )
     return WebMentionsResponse(
         opportunity_id=str(opportunity_id),
         groups=groups,
@@ -289,18 +293,14 @@ async def refresh_web_mentions(
         )
 
     opp = (
-        await ctx.session.execute(
-            select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id)
-        )
+        await ctx.session.execute(select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id))
     ).scalar_one_or_none()
     if opp is None:
         raise HTTPException(status_code=404, detail="opportunity not found")
 
     enr = (
         await ctx.session.execute(
-            select(OpportunityEnriched).where(
-                OpportunityEnriched.opportunity_id == opportunity_id
-            )
+            select(OpportunityEnriched).where(OpportunityEnriched.opportunity_id == opportunity_id)
         )
     ).scalar_one_or_none()
 

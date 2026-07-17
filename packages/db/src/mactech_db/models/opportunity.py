@@ -3,8 +3,19 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import TIMESTAMP, BigInteger, ForeignKey, Numeric, String, Text, UniqueConstraint, func, text
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
+from sqlalchemy import (
+    TIMESTAMP,
+    BigInteger,
+    ForeignKey,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+    text,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mactech_db.base import Base
@@ -12,7 +23,9 @@ from mactech_db.base import Base
 
 class OpportunityRaw(Base):
     __tablename__ = "opportunities_raw"
-    __table_args__ = (UniqueConstraint("source", "source_id", name="uq_opportunities_raw_source_id"),)
+    __table_args__ = (
+        UniqueConstraint("source", "source_id", name="uq_opportunities_raw_source_id"),
+    )
 
     id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
@@ -55,12 +68,8 @@ class OpportunityRaw(Base):
     # Counts from SAM.gov Interested Vendors List endpoint. cyber_count is
     # the subset of vendors whose NAICS profile intersects MacTech's cyber
     # codes. None = list endpoint never called for this opportunity.
-    interested_vendors_count: Mapped[int | None] = mapped_column(
-        BigInteger, nullable=True
-    )
-    interested_vendors_cyber_count: Mapped[int | None] = mapped_column(
-        BigInteger, nullable=True
-    )
+    interested_vendors_count: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    interested_vendors_cyber_count: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     interested_vendors_fetched_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )

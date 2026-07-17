@@ -95,7 +95,7 @@ def _strip_code_fence(text: str) -> str:
         if nl > 0:
             text = text[nl + 1 :]
         if text.endswith("```"):
-            text = text[: -3]
+            text = text[:-3]
     return text.strip()
 
 
@@ -141,19 +141,13 @@ async def extract_structured_brief(
             "extract_brief got non-JSON output (first 200 chars): %s",
             raw[:200],
         )
-        raise BriefExtractionError(
-            f"model output is not valid JSON: {exc.msg}"
-        ) from exc
+        raise BriefExtractionError(f"model output is not valid JSON: {exc.msg}") from exc
     if not isinstance(data, dict):
-        raise BriefExtractionError(
-            f"top-level JSON is not an object: {type(data).__name__}"
-        )
+        raise BriefExtractionError(f"top-level JSON is not an object: {type(data).__name__}")
 
     scope = data.get("scope_one_sentence")
     if not isinstance(scope, str) or not scope.strip():
-        raise BriefExtractionError(
-            "missing or empty 'scope_one_sentence' field in extracted brief"
-        )
+        raise BriefExtractionError("missing or empty 'scope_one_sentence' field in extracted brief")
 
     return StructuredBrief(
         scope_one_sentence=scope.strip(),

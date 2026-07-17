@@ -24,11 +24,11 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, UUID as PgUUID
+from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mactech_db.base import Base
-
 
 PAST_PERFORMANCE_ROLES = ("prime", "sub", "joint_venture", "individual")
 
@@ -65,12 +65,8 @@ class PastPerformance(Base):
     naics_code: Mapped[str | None] = mapped_column(String(8), nullable=True)
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     keywords: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)
-    related_capability_slugs: Mapped[list[str] | None] = mapped_column(
-        ARRAY(String), nullable=True
-    )
-    related_founder_slugs: Mapped[list[str] | None] = mapped_column(
-        ARRAY(String), nullable=True
-    )
+    related_capability_slugs: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)
+    related_founder_slugs: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
@@ -104,9 +100,7 @@ class TeamingPartner(Base):
     cage_code: Mapped[str | None] = mapped_column(String(8), nullable=True)
     capabilities: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)
     naics_codes: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)
-    set_aside_certifications: Mapped[list[str] | None] = mapped_column(
-        ARRAY(String), nullable=True
-    )
+    set_aside_certifications: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)
     contact_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

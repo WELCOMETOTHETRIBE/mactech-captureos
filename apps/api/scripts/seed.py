@@ -20,10 +20,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from mactech_db import async_session_factory
 from mactech_db.models import (
     CapabilityStatement,
@@ -33,6 +29,9 @@ from mactech_db.models import (
     SavedSearch,
     Tenant,
 )
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CONFIG_PATH = REPO_ROOT / "config" / "mactech_tenant_defaults.yml"
@@ -233,7 +232,9 @@ async def seed_saved_searches(
     for s in config.get("saved_searches", []):
         owner = founders_by_slug.get(s["owner_slug"])
         if owner is None:
-            print(f"  warn: saved_search {s['name']!r} references unknown founder {s['owner_slug']!r}")
+            print(
+                f"  warn: saved_search {s['name']!r} references unknown founder {s['owner_slug']!r}"
+            )
             continue
 
         existing = (
@@ -280,26 +281,23 @@ async def main() -> int:
     naics_doc = _load_json(NAICS_PATH)
 
     session_factory = async_session_factory()
-    async with session_factory() as session:
-        async with session.begin():
-            print(f"seeding tenant {config['tenant']['slug']!r}...")
-            tenant = await seed_tenant(session, config)
+    async with session_factory() as session, session.begin():
+        print(f"seeding tenant {config['tenant']['slug']!r}...")
+        tenant = await seed_tenant(session, config)
 
-            print(f"seeding {len(naics_doc['naics_codes'])} NAICS codes...")
-            await seed_naics(session, naics_doc)
+        print(f"seeding {len(naics_doc['naics_codes'])} NAICS codes...")
+        await seed_naics(session, naics_doc)
 
-            print(f"seeding {len(founders_doc['founders'])} founders + NAICS matrix...")
-            founders_by_slug = await seed_founders(
-                session, founders_doc, naics_doc, tenant=tenant
-            )
+        print(f"seeding {len(founders_doc['founders'])} founders + NAICS matrix...")
+        founders_by_slug = await seed_founders(session, founders_doc, naics_doc, tenant=tenant)
 
-            print(
-                f"seeding {len(config.get('capability_statements_seed', []))} capability statements..."
-            )
-            await seed_capability_statements(session, tenant, founders_by_slug, config)
+        print(
+            f"seeding {len(config.get('capability_statements_seed', []))} capability statements..."
+        )
+        await seed_capability_statements(session, tenant, founders_by_slug, config)
 
-            print(f"seeding {len(config.get('saved_searches', []))} saved searches...")
-            await seed_saved_searches(session, tenant, founders_by_slug, config)
+        print(f"seeding {len(config.get('saved_searches', []))} saved searches...")
+        await seed_saved_searches(session, tenant, founders_by_slug, config)
 
     print("seed complete.")
     return 0

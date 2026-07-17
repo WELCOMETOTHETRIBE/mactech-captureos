@@ -44,7 +44,7 @@ def _strip_code_fence(text: str) -> str:
         if nl > 0:
             text = text[nl + 1 :]
         if text.endswith("```"):
-            text = text[: -3]
+            text = text[:-3]
     return text.strip()
 
 
@@ -97,13 +97,9 @@ async def extract_capability_statement(
             "extract_capability_statement got non-JSON output (first 200 chars): %s",
             raw[:200],
         )
-        raise CapabilityExtractionError(
-            f"model output is not valid JSON: {exc.msg}"
-        ) from exc
+        raise CapabilityExtractionError(f"model output is not valid JSON: {exc.msg}") from exc
     if not isinstance(data, dict):
-        raise CapabilityExtractionError(
-            f"top-level JSON is not an object: {type(data).__name__}"
-        )
+        raise CapabilityExtractionError(f"top-level JSON is not an object: {type(data).__name__}")
 
     title = data.get("title")
     if not isinstance(title, str) or not title.strip():
@@ -116,12 +112,8 @@ async def extract_capability_statement(
         title=title.strip()[:255],
         summary=summary.strip(),
         keywords=_coerce_str_list(data.get("keywords"), max_len=10),
-        related_naics=_coerce_str_list(
-            data.get("related_naics"), max_len=6, max_item_chars=8
-        ),
-        related_founder_slugs=_coerce_str_list(
-            data.get("related_founder_slugs"), max_len=4
-        ),
+        related_naics=_coerce_str_list(data.get("related_naics"), max_len=6, max_item_chars=8),
+        related_founder_slugs=_coerce_str_list(data.get("related_founder_slugs"), max_len=4),
         response=response,
         text_chars=len(text),
     )

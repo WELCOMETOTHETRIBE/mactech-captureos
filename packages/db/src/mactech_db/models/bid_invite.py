@@ -22,7 +22,8 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -61,9 +62,7 @@ class BidInvite(Base):
     )
     # Postmark's MessageID — the idempotency key. Postmark retries the
     # webhook on non-200s, so the same message can be POSTed twice.
-    postmark_message_id: Mapped[str] = mapped_column(
-        String(64), unique=True, nullable=False
-    )
+    postmark_message_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     from_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     from_name: Mapped[str | None] = mapped_column(String(320), nullable=True)
     subject: Mapped[str] = mapped_column(String(1024), nullable=False)
@@ -71,13 +70,9 @@ class BidInvite(Base):
     html_body: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Attachment metadata only: [{"name":..., "content_type":..., "size":...}]
     attachments: Mapped[list | None] = mapped_column(JSONB, nullable=True)
-    status: Mapped[str] = mapped_column(
-        String(16), nullable=False, server_default=text("'new'")
-    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default=text("'new'"))
     # When the original email was sent (Postmark's Date header), best-effort.
-    sent_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
+    sent_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     received_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
@@ -121,9 +116,7 @@ class BidInvite(Base):
     rfp_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     # Message-mail subheading, e.g. "Due Date Extended", "Addendum #01 …".
     headline: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    parsed_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
+    parsed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     # Normalized project identity (bid_invite_routing.project_group_key):
     # ties an invite + its reminders + due-date changes to one
     # solicitation for linking and the UI's card grouping.

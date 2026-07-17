@@ -29,8 +29,6 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
-
 from mactech_db import unscoped_session
 from mactech_db.audit import record_event
 from mactech_db.models import (
@@ -47,6 +45,8 @@ from mactech_integrations.sam_gov import (
     SamExclusionsClient,
     SamExclusionsError,
 )
+from sqlalchemy import select
+
 from mactech_workers.celery_app import celery_app
 
 log = logging.getLogger(__name__)
@@ -173,10 +173,7 @@ async def _verify_one_tenant(
             tenant.uei,
             exc,
         )
-        error = (
-            error
-            or f"sam_exclusions_error: {exc!s}"[:200]
-        )
+        error = error or f"sam_exclusions_error: {exc!s}"[:200]
         new_excluded = previous_excluded
     else:
         new_excluded = exclusion.is_excluded
@@ -263,7 +260,7 @@ async def verify_all_tenants() -> SamVerifyStats:
 
     async with unscoped_session() as session:
         tenants = (await session.execute(select(Tenant))).scalars().all()
-        async with SamEntityClient(api_key=api_key) as entity_client:
+        async with SamEntityClient(api_key=api_key) as entity_client:  # noqa: SIM117
             async with SamExclusionsClient(api_key=api_key) as exclusions_client:
                 for tenant in tenants:
                     seen += 1

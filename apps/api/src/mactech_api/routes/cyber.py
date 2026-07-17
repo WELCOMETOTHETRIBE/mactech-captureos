@@ -21,15 +21,15 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select
-
-from mactech_api.auth import RequestContext, get_request_context
 from mactech_db.models import OpportunityBrief, OpportunityRaw
 from mactech_intelligence.capture_package_builder import (
     CLAUSE_PATTERN,
     CMMC_LEVEL_PATTERN,
 )
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import select
+
+from mactech_api.auth import RequestContext, get_request_context
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["cyber"])
@@ -123,9 +123,7 @@ async def get_cyber_summary(
     ctx: Annotated[RequestContext, Depends(get_request_context)],
 ) -> CyberSummaryOut:
     opp = (
-        await ctx.session.execute(
-            select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id)
-        )
+        await ctx.session.execute(select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id))
     ).scalar_one_or_none()
     if opp is None:
         raise HTTPException(status_code=404, detail="opportunity not found")
@@ -140,9 +138,7 @@ async def get_cyber_summary(
     ).scalar_one_or_none()
 
     haystack = _build_haystack(opp, brief)
-    clauses = sorted(
-        {m.upper().replace("  ", " ") for m in CLAUSE_PATTERN.findall(haystack)}
-    )
+    clauses = sorted({m.upper().replace("  ", " ") for m in CLAUSE_PATTERN.findall(haystack)})
     cmmc_match = CMMC_LEVEL_PATTERN.search(haystack)
     cmmc_required = f"Level {cmmc_match.group(1)}" if cmmc_match else None
 
@@ -161,15 +157,11 @@ async def get_cyber_summary(
         sprs_score=ctx.tenant.sprs_score,
         sprs_max=ctx.tenant.sprs_max,
         sprs_assessment_date=(
-            ctx.tenant.sprs_assessment_date.isoformat()
-            if ctx.tenant.sprs_assessment_date
-            else None
+            ctx.tenant.sprs_assessment_date.isoformat() if ctx.tenant.sprs_assessment_date else None
         ),
         sprs_source_url=ctx.tenant.sprs_source_url,
         sprs_synced_at=(
-            ctx.tenant.sprs_synced_at.isoformat()
-            if ctx.tenant.sprs_synced_at
-            else None
+            ctx.tenant.sprs_synced_at.isoformat() if ctx.tenant.sprs_synced_at else None
         ),
     )
 

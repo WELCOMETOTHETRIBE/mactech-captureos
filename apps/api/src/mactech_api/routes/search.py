@@ -56,9 +56,7 @@ class SearchResponse(_Out):
     grouped: dict[str, list[SearchHit]]
 
 
-async def _opportunities_recents(
-    ctx: RequestContext, limit: int
-) -> list[SearchHit]:
+async def _opportunities_recents(ctx: RequestContext, limit: int) -> list[SearchHit]:
     """When q is empty, surface recent scored opps for this tenant."""
     rows = (
         await ctx.session.execute(
@@ -92,9 +90,7 @@ async def _opportunities_recents(
     ]
 
 
-async def _opportunities_search(
-    ctx: RequestContext, q: str, limit: int
-) -> list[SearchHit]:
+async def _opportunities_search(ctx: RequestContext, q: str, limit: int) -> list[SearchHit]:
     rows = (
         await ctx.session.execute(
             text(
@@ -129,9 +125,7 @@ async def _opportunities_search(
     ]
 
 
-async def _drafts_search(
-    ctx: RequestContext, q: str | None, limit: int
-) -> list[SearchHit]:
+async def _drafts_search(ctx: RequestContext, q: str | None, limit: int) -> list[SearchHit]:
     if q:
         rows = (
             await ctx.session.execute(
@@ -176,9 +170,7 @@ async def _drafts_search(
     ]
 
 
-async def _partners_search(
-    ctx: RequestContext, q: str | None, limit: int
-) -> list[SearchHit]:
+async def _partners_search(ctx: RequestContext, q: str | None, limit: int) -> list[SearchHit]:
     if q:
         rows = (
             await ctx.session.execute(
@@ -223,9 +215,7 @@ async def _partners_search(
     ]
 
 
-async def _pp_search(
-    ctx: RequestContext, q: str | None, limit: int
-) -> list[SearchHit]:
+async def _pp_search(ctx: RequestContext, q: str | None, limit: int) -> list[SearchHit]:
     if q:
         rows = (
             await ctx.session.execute(
@@ -289,9 +279,7 @@ async def global_search(
     # selective. SET LOCAL doesn't accept bind params, so use set_config.
     if q:
         await ctx.session.execute(
-            text(
-                "select set_config('pg_trgm.similarity_threshold', :t, true)"
-            ),
+            text("select set_config('pg_trgm.similarity_threshold', :t, true)"),
             {"t": str(SIMILARITY_THRESHOLD)},
         )
 

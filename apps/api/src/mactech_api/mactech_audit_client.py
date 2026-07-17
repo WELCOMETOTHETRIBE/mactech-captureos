@@ -92,12 +92,10 @@ async def send_audit_log(
             logger.warning("[mactech-audit] %s for %s", msg, payload.get("eventType"))
             return None
         return response.json()
-    except Exception as exc:  # noqa: BLE001 — we deliberately swallow
+    except Exception as exc:
         if raise_on_error:
             raise
-        logger.warning(
-            "[mactech-audit] send failed for %s: %s", payload.get("eventType"), exc
-        )
+        logger.warning("[mactech-audit] send failed for %s: %s", payload.get("eventType"), exc)
         return None
 
 
@@ -134,10 +132,8 @@ def send_audit_log_sync(
             logger.warning("[mactech-audit] %s for %s", msg, payload.get("eventType"))
             return None
         return response.json()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         if raise_on_error:
             raise
-        logger.warning(
-            "[mactech-audit] send failed for %s: %s", payload.get("eventType"), exc
-        )
+        logger.warning("[mactech-audit] send failed for %s: %s", payload.get("eventType"), exc)
         return None

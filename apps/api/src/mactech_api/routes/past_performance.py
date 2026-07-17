@@ -18,13 +18,13 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from mactech_db.models import PastPerformance
+from mactech_db.models.library import PAST_PERFORMANCE_ROLES
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from mactech_api.auth import RequestContext, get_request_context
-from mactech_db.models import PastPerformance
-from mactech_db.models.library import PAST_PERFORMANCE_ROLES
 
 router = APIRouter(tags=["past-performance"])
 
@@ -127,15 +127,19 @@ async def list_past_performance(
     ctx: Annotated[RequestContext, Depends(get_request_context)],
 ) -> PastPerformanceList:
     rows = (
-        await ctx.session.execute(
-            select(PastPerformance)
-            .where(PastPerformance.tenant_id == ctx.tenant.id)
-            .order_by(
-                PastPerformance.period_end.desc().nulls_last(),
-                PastPerformance.created_at.desc(),
+        (
+            await ctx.session.execute(
+                select(PastPerformance)
+                .where(PastPerformance.tenant_id == ctx.tenant.id)
+                .order_by(
+                    PastPerformance.period_end.desc().nulls_last(),
+                    PastPerformance.created_at.desc(),
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return PastPerformanceList(total=len(rows), items=[_to_out(r) for r in rows])
 
 
@@ -258,9 +262,7 @@ async def update_past_performance(
     return _to_out(pp)
 
 
-@router.delete(
-    "/past-performance/{pp_id}", status_code=status.HTTP_204_NO_CONTENT
-)
+@router.delete("/past-performance/{pp_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_past_performance(
     pp_id: UUID,
     ctx: Annotated[RequestContext, Depends(get_request_context)],

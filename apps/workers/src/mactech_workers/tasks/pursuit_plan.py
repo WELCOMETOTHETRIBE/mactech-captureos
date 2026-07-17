@@ -32,8 +32,13 @@ from mactech_workers.celery_app import celery_app
 
 log = logging.getLogger(__name__)
 
-_ACTIONABLE = ("PRIME_NOW", "PRIME_WITH_PARTNER", "SUB_TO_IDENTIFIED_PRIME",
-               "SUB_TO_PRIME_NOT_YET_IDENTIFIED", "SHAPE_EARLY")
+_ACTIONABLE = (
+    "PRIME_NOW",
+    "PRIME_WITH_PARTNER",
+    "SUB_TO_IDENTIFIED_PRIME",
+    "SUB_TO_PRIME_NOT_YET_IDENTIFIED",
+    "SHAPE_EARLY",
+)
 
 
 async def generate_for_opportunity(tenant_id: UUID, opp_id: UUID) -> dict[str, Any]:
@@ -91,7 +96,9 @@ async def generate_for_opportunity(tenant_id: UUID, opp_id: UUID) -> dict[str, A
             "mactech_work_package": plan.mactech_work_package,
             "blocking_issues": plan.blocking_issues,
             "prime_target_names": plan.prime_target_names,
-            "recommended_owner_slug": (plan.next_actions[0].owner_slug if plan.next_actions else None),
+            "recommended_owner_slug": (
+                plan.next_actions[0].owner_slug if plan.next_actions else None
+            ),
             "decision_deadline": plan.decision_deadline,
             "response_deadline": plan.response_deadline,
             "confidence": plan.confidence,
@@ -102,7 +109,9 @@ async def generate_for_opportunity(tenant_id: UUID, opp_id: UUID) -> dict[str, A
             .values(**rec_values)
             .on_conflict_do_update(
                 constraint="uq_pursuit_recs_tenant_opp",
-                set_={k: rec_values[k] for k in rec_values if k not in ("tenant_id", "opportunity_id")},
+                set_={
+                    k: rec_values[k] for k in rec_values if k not in ("tenant_id", "opportunity_id")
+                },
             )
         )
         rec_id = (
@@ -149,12 +158,16 @@ def _why(dv: OpportunityDecisionVector) -> str:
 
 def _work_package(dv: OpportunityDecisionVector, opp: OpportunityRaw) -> str:
     if dv.pursuit_lane.startswith("SUB"):
-        return ("Own the FRCS/OT cybersecurity work package: RMF artifacts, control-system "
-                "inventory, secure architecture review, cybersecurity submittals, and "
-                "commissioning support under the prime.")
+        return (
+            "Own the FRCS/OT cybersecurity work package: RMF artifacts, control-system "
+            "inventory, secure architecture review, cybersecurity submittals, and "
+            "commissioning support under the prime."
+        )
     if dv.pursuit_lane.startswith("PRIME"):
-        return ("Deliver the bounded cyber scope directly (assessment, SSP/POA&M, remediation "
-                "roadmap, executive briefing).")
+        return (
+            "Deliver the bounded cyber scope directly (assessment, SSP/POA&M, remediation "
+            "roadmap, executive briefing)."
+        )
     return "Shape the acquisition toward a scoped cyber requirement."
 
 
@@ -167,14 +180,18 @@ async def generate_batch(tenant_slug: str, *, limit: int = 60) -> dict[str, Any]
         if tenant is None:
             return {"status": "error", "reason": "tenant_not_found"}
         ids = (
-            await session.execute(
-                text(
-                    "select opportunity_id from opportunity_decision_vectors "
-                    "where tenant_id=:t and pursuit_lane = any(:lanes) limit :n"
-                ),
-                {"t": str(tenant.id), "lanes": list(_ACTIONABLE), "n": limit},
+            (
+                await session.execute(
+                    text(
+                        "select opportunity_id from opportunity_decision_vectors "
+                        "where tenant_id=:t and pursuit_lane = any(:lanes) limit :n"
+                    ),
+                    {"t": str(tenant.id), "lanes": list(_ACTIONABLE), "n": limit},
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
     generated = 0
     for opp_id in ids:

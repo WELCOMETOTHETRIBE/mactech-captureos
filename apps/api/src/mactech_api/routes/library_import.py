@@ -34,12 +34,6 @@ from uuid import UUID
 import fitz  # type: ignore[import-untyped]  # PyMuPDF
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
-
-from mactech_api.auth import RequestContext, get_request_context
-from mactech_api.embed_helpers import embed_capability_inline
 from mactech_db.models import (
     CapabilityStatement,
     LibraryImportJob,
@@ -52,6 +46,12 @@ from mactech_intelligence import (
     extract_capability_statement,
     extract_past_performance,
 )
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+
+from mactech_api.auth import RequestContext, get_request_context
+from mactech_api.embed_helpers import embed_capability_inline
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["library-import"])
@@ -118,13 +118,9 @@ def _pdf_text_pymupdf(blob: bytes) -> str:
             pages = [page.get_text("text") for page in doc]
         return "\n\n".join(pages).strip()
     except fitz.FileDataError as exc:
-        raise HTTPException(
-            status_code=400, detail=f"not a valid PDF: {exc}"
-        ) from exc
+        raise HTTPException(status_code=400, detail=f"not a valid PDF: {exc}") from exc
     except RuntimeError as exc:
-        raise HTTPException(
-            status_code=400, detail=f"could not parse PDF: {exc}"
-        ) from exc
+        raise HTTPException(status_code=400, detail=f"could not parse PDF: {exc}") from exc
 
 
 def _date_or_none(d: date | None) -> date | None:
@@ -156,10 +152,7 @@ async def _validate_pdf(file: UploadFile) -> bytes:
     if len(blob) > MAX_PDF_BYTES:
         raise HTTPException(
             status_code=413,
-            detail=(
-                f"PDF too large ({len(blob):,} bytes). "
-                f"Limit is {MAX_PDF_BYTES:,} bytes."
-            ),
+            detail=(f"PDF too large ({len(blob):,} bytes). Limit is {MAX_PDF_BYTES:,} bytes."),
         )
     return blob
 
@@ -197,7 +190,7 @@ async def _enqueue_ocr_job(
             kind,
             len(blob),
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         # The job row is persisted; the cron beat (added below) will pick
         # it up on the next sweep. Don't fail the request.
         log.warning(
@@ -260,9 +253,7 @@ async def import_past_performance_pdf(
         ext = await extract_past_performance(client, text)
     except PastPerformanceExtractionError as exc:
         log.warning("pdf import got bad extraction: %s", exc)
-        raise HTTPException(
-            status_code=502, detail=f"extraction failed: {exc}"
-        ) from exc
+        raise HTTPException(status_code=502, detail=f"extraction failed: {exc}") from exc
     except Exception as exc:
         log.exception("pdf import unexpected: %s", exc)
         raise HTTPException(
@@ -280,9 +271,7 @@ async def import_past_performance_pdf(
         period_start=_date_or_none(ext.period_start),
         period_end=_date_or_none(ext.period_end),
         contract_value=(
-            Decimal(str(ext.contract_value))
-            if ext.contract_value is not None
-            else None
+            Decimal(str(ext.contract_value)) if ext.contract_value is not None else None
         ),
         naics_code=ext.naics_code,
         summary=ext.summary,
@@ -303,9 +292,7 @@ async def import_past_performance_pdf(
             period_start=_date_or_none(ext.period_start),
             period_end=_date_or_none(ext.period_end),
             contract_value=(
-                Decimal(str(ext.contract_value))
-                if ext.contract_value is not None
-                else None
+                Decimal(str(ext.contract_value)) if ext.contract_value is not None else None
             ),
             naics_code=ext.naics_code,
             summary=ext.summary,
@@ -325,9 +312,7 @@ async def import_past_performance_pdf(
         edit_url=f"/library/past-performance/{pp.id}/edit",
         notes=notes,
     )
-    return JSONResponse(
-        status_code=status.HTTP_201_CREATED, content=body.model_dump()
-    )
+    return JSONResponse(status_code=status.HTTP_201_CREATED, content=body.model_dump())
 
 
 @router.post(
@@ -375,9 +360,7 @@ async def import_capability_statement_pdf(
         ext = await extract_capability_statement(client, text)
     except CapabilityExtractionError as exc:
         log.warning("capability pdf import got bad extraction: %s", exc)
-        raise HTTPException(
-            status_code=502, detail=f"extraction failed: {exc}"
-        ) from exc
+        raise HTTPException(status_code=502, detail=f"extraction failed: {exc}") from exc
     except Exception as exc:
         log.exception("capability pdf import unexpected: %s", exc)
         raise HTTPException(
@@ -387,9 +370,7 @@ async def import_capability_statement_pdf(
 
     related_founders_payload: list[dict[str, str]] | None = None
     if ext.related_founder_slugs:
-        related_founders_payload = [
-            {"slug": s} for s in ext.related_founder_slugs
-        ]
+        related_founders_payload = [{"slug": s} for s in ext.related_founder_slugs]
 
     cs = CapabilityStatement(
         tenant_id=ctx.tenant.id,
@@ -438,9 +419,7 @@ async def import_capability_statement_pdf(
         edit_url=f"/library/capability-statements/{cs.id}/edit",
         notes=notes,
     )
-    return JSONResponse(
-        status_code=status.HTTP_201_CREATED, content=body.model_dump()
-    )
+    return JSONResponse(status_code=status.HTTP_201_CREATED, content=body.model_dump())
 
 
 @router.get(
@@ -467,16 +446,10 @@ async def get_library_import_job(
         status=job.status,
         filename=job.filename,
         result_id=str(job.result_id) if job.result_id else None,
-        edit_url=_kind_to_edit_url(
-            job.kind, str(job.result_id) if job.result_id else None
-        ),
+        edit_url=_kind_to_edit_url(job.kind, str(job.result_id) if job.result_id else None),
         text_chars=job.text_chars,
         notes=list(job.notes or []),
         error_message=job.error_message,
         created_at=job.created_at.isoformat(),
-        completed_at=(
-            job.completed_at.isoformat() if job.completed_at else None
-        ),
+        completed_at=(job.completed_at.isoformat() if job.completed_at else None),
     )
-
-

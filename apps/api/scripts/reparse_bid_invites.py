@@ -17,12 +17,11 @@ import os
 import sys
 from datetime import UTC, datetime
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from mactech_db.models import BidInvite
 from mactech_intelligence.bid_invite_parser import parse_bid_invite
 from mactech_intelligence.bid_invite_routing import project_group_key
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 def _database_url() -> str:

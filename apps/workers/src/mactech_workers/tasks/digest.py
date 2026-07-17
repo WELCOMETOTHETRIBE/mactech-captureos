@@ -22,11 +22,8 @@ import logging
 import os
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, timedelta
-from uuid import UUID
 from html import escape
-
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from uuid import UUID
 
 from mactech_db import async_session_factory
 from mactech_db.models import (
@@ -40,6 +37,9 @@ from mactech_db.models import (
 )
 from mactech_integrations.resend import ResendClient, ResendError
 from mactech_intelligence.bid_invite_routing import project_group_key, suggest_founder
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from mactech_workers.celery_app import celery_app
 
 log = logging.getLogger(__name__)
@@ -118,9 +118,7 @@ def _incumbent_one_liner(enr: OpportunityEnriched | None) -> str | None:
         return None
     parts = [enr.incumbent_name]
     if enr.incumbent_award_amount is not None:
-        parts.append(
-            f"${float(enr.incumbent_award_amount):,.0f} prior obligations"
-        )
+        parts.append(f"${float(enr.incumbent_award_amount):,.0f} prior obligations")
     return " — ".join(parts)
 
 
@@ -139,14 +137,18 @@ async def _load_saved_search_hits(
     value matches).
     """
     searches = (
-        await session.execute(
-            select(SavedSearch).where(
-                SavedSearch.tenant_id == tenant.id,
-                SavedSearch.owner_founder_id == founder.id,
-                SavedSearch.alert_cadence == "daily",
+        (
+            await session.execute(
+                select(SavedSearch).where(
+                    SavedSearch.tenant_id == tenant.id,
+                    SavedSearch.owner_founder_id == founder.id,
+                    SavedSearch.alert_cadence == "daily",
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     out: list[SavedSearchHits] = []
     for search in searches:
@@ -194,9 +196,7 @@ async def _load_saved_search_hits(
             # sent=False, so no digest was ever delivered. Coerce here
             # rather than trusting the JSON: filters are free-form and
             # hand-editable, so the query must tolerate either type.
-            stmt = stmt.where(
-                OpportunityRaw.naics_code.in_([str(c) for c in naics_codes])
-            )
+            stmt = stmt.where(OpportunityRaw.naics_code.in_([str(c) for c in naics_codes]))
         if set_asides:
             stmt = stmt.where(OpportunityRaw.set_aside.in_(set_asides))
         # Keyword ILIKE pre-filter is for general saved searches that don't
@@ -232,8 +232,7 @@ async def _load_saved_search_hits(
             else:
                 row_score = sc.score
             sweet_spot = bool(
-                use_high_moat
-                and (sc.high_moat_flags or {}).get("is_high_probability_easy_win")
+                use_high_moat and (sc.high_moat_flags or {}).get("is_high_probability_easy_win")
             )
             digest_rows.append(
                 DigestRow(
@@ -267,9 +266,7 @@ async def _load_saved_search_hits(
     return out
 
 
-async def _stamp_saved_searches_delivered(
-    session: AsyncSession, search_ids: list[UUID]
-) -> None:
+async def _stamp_saved_searches_delivered(session: AsyncSession, search_ids: list[UUID]) -> None:
     if not search_ids:
         return
     now = datetime.now(UTC)
@@ -320,9 +317,7 @@ async def _load_top_for_founder(
 
 
 def _app_base_url() -> str:
-    return os.environ.get(
-        "APP_BASE_URL", "https://capture.mactechsolutionsllc.com"
-    ).rstrip("/")
+    return os.environ.get("APP_BASE_URL", "https://capture.mactechsolutionsllc.com").rstrip("/")
 
 
 def _due_label(bid_due_on: date | None, today: date) -> str | None:
@@ -438,9 +433,9 @@ def _render_bid_invites_html(rows: list[BidInviteDigestRow]) -> str:
         urgent = due is not None and due.startswith(("due today", "due tomorrow"))
         due_html = (
             f'<span style="display:inline-block;background:'
-            f'{"#7f1d1d" if urgent else "#f3f4f6"};color:{"#fff" if urgent else "#444"};'
-            f'font-size:10px;letter-spacing:.06em;text-transform:uppercase;'
-            f'padding:2px 8px;border-radius:3px;margin-left:8px;'
+            f"{'#7f1d1d' if urgent else '#f3f4f6'};color:{'#fff' if urgent else '#444'};"
+            f"font-size:10px;letter-spacing:.06em;text-transform:uppercase;"
+            f"padding:2px 8px;border-radius:3px;margin-left:8px;"
             f'vertical-align:middle">{escape(due)}</span>'
             if due
             else ""
@@ -448,7 +443,7 @@ def _render_bid_invites_html(rows: list[BidInviteDigestRow]) -> str:
         new_html = (
             '<span style="display:inline-block;background:#207b78;color:#fff;'
             "font-size:10px;letter-spacing:.08em;text-transform:uppercase;"
-            'padding:2px 8px;border-radius:3px;margin-left:8px;'
+            "padding:2px 8px;border-radius:3px;margin-left:8px;"
             'vertical-align:middle">New overnight</span>'
             if r.is_recent
             else ""
@@ -479,8 +474,7 @@ def _render_bid_invites_html(rows: list[BidInviteDigestRow]) -> str:
     return (
         f'<div style="margin:18px 0 8px"><h2 style="font-size:14px;'
         f'margin:0 0 8px;color:#1a3a5c">'
-        f"Bid invites in your lane · {len(rows)} awaiting review</h2></div>"
-        + "".join(items)
+        f"Bid invites in your lane · {len(rows)} awaiting review</h2></div>" + "".join(items)
     )
 
 
@@ -529,8 +523,8 @@ def _render_search_block_html(hits: SavedSearchHits) -> str:
         # prime + active). No emoji per the playbook copy rules.
         sweet_marker = (
             '<span style="display:inline-block;background:#0b3d2e;color:#fff;'
-            'font-size:10px;letter-spacing:.08em;text-transform:uppercase;'
-            'padding:2px 8px;border-radius:3px;margin-left:8px;'
+            "font-size:10px;letter-spacing:.08em;text-transform:uppercase;"
+            "padding:2px 8px;border-radius:3px;margin-left:8px;"
             'vertical-align:middle">High-Probability Easy Win</span>'
             if r.is_sweet_spot
             else ""
@@ -561,8 +555,7 @@ def _render_search_block_html(hits: SavedSearchHits) -> str:
         f'<div style="margin:18px 0 8px"><h2 style="font-size:14px;'
         f'margin:0 0 8px;color:#1a3a5c">'
         f"Saved search: {escape(hits.search_name)} · {len(hits.rows)} new hit"
-        f"{'s' if len(hits.rows) != 1 else ''}</h2></div>"
-        + "".join(items)
+        f"{'s' if len(hits.rows) != 1 else ''}</h2></div>" + "".join(items)
     )
 
 
@@ -583,8 +576,7 @@ def _render_html(
         ]
         meta = " · ".join(b for b in meta_bits if b)
         why = (
-            f'<p style="margin:8px 0 0;color:#333;line-height:1.5">'
-            f"{escape(r.why_it_matters)}</p>"
+            f'<p style="margin:8px 0 0;color:#333;line-height:1.5">{escape(r.why_it_matters)}</p>'
             if r.why_it_matters
             else ""
         )
@@ -617,9 +609,13 @@ def _render_html(
             </div>
             """.strip()
         )
-    items_block = "\n".join(items_html) if items_html else (
-        '<p style="color:#666">No opportunities scored above the threshold today. '
-        "Continuous SAM ingestion runs every 2 hours; check back tomorrow.</p>"
+    items_block = (
+        "\n".join(items_html)
+        if items_html
+        else (
+            '<p style="color:#666">No opportunities scored above the threshold today. '
+            "Continuous SAM ingestion runs every 2 hours; check back tomorrow.</p>"
+        )
     )
     # Invites lead: a GC solicitation is a named human waiting on a reply
     # against a short fuse, which outranks a scored SAM notice.
@@ -691,9 +687,7 @@ def _render_text(
         out.append("")
         out.append(f"-- Saved search: {hits.search_name} ({len(hits.rows)} new) --")
         for r in hits.rows:
-            label = (
-                f"high-moat {r.score}" if r.high_moat_score is not None else f"score {r.score}"
-            )
+            label = f"high-moat {r.score}" if r.high_moat_score is not None else f"score {r.score}"
             tag = " [High-Probability Easy Win]" if r.is_sweet_spot else ""
             out.append(f"  {label}{tag}  {r.title}")
             if r.why_it_matters:
@@ -713,9 +707,7 @@ async def send_digest_for_founder(
     top_n: int = DEFAULT_TOP_N,
 ) -> DigestSendStats:
     api_key = os.environ.get("RESEND_API_KEY", "")
-    from_addr = os.environ.get(
-        "RESEND_FROM", "MacTech CaptureOS <onboarding@resend.dev>"
-    )
+    from_addr = os.environ.get("RESEND_FROM", "MacTech CaptureOS <onboarding@resend.dev>")
     reply_to = os.environ.get("RESEND_REPLY_TO") or None
     # Tenant scope: explicit param wins; falls back to MACTECH_TENANT_SLUG
     # env (legacy single-tenant default).
@@ -800,17 +792,13 @@ async def send_digest_for_founder(
             await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))
         ).scalar_one()
         rows = await _load_top_for_founder(session, tenant, founder, top_n)
-        saved_hits = await _load_saved_search_hits(
-            session, tenant=tenant, founder=founder
-        )
+        saved_hits = await _load_saved_search_hits(session, tenant=tenant, founder=founder)
         bid_invites = await _load_bid_invites_for_founder(session, tenant, founder)
 
     saved_total = sum(len(h.rows) for h in saved_hits)
     today = datetime.now(UTC).strftime("%a %b %-d")
     extra = (
-        f" + {saved_total} saved-search hit{'s' if saved_total != 1 else ''}"
-        if saved_total
-        else ""
+        f" + {saved_total} saved-search hit{'s' if saved_total != 1 else ''}" if saved_total else ""
     )
     # Invites go in the subject so they're visible without opening the
     # mail — that's the whole point of putting them in the digest.
@@ -859,9 +847,7 @@ async def send_digest_for_founder(
     # we don't depend on the prior `with` block still being open.
     if saved_hits:
         async with session_factory() as session2:
-            await _stamp_saved_searches_delivered(
-                session2, [h.search_id for h in saved_hits]
-            )
+            await _stamp_saved_searches_delivered(session2, [h.search_id for h in saved_hits])
             await session2.commit()
 
     log.info(
@@ -907,7 +893,7 @@ async def send_digest_to_all_founders(
         from mactech_db.models import Tenant as _T
 
         stmt = select(_T)
-        if pin:
+        if pin:  # noqa: SIM108
             stmt = stmt.where(_T.slug == pin)
         else:
             # Stable order so the run is reproducible across deploys.
@@ -916,10 +902,10 @@ async def send_digest_to_all_founders(
 
         # Pre-load all (tenant_id → list[Founder]) in one query.
         all_founders = (
-            await session.execute(
-                select(Founder).where(Founder.digest_enabled.is_(True))
-            )
-        ).scalars().all()
+            (await session.execute(select(Founder).where(Founder.digest_enabled.is_(True))))
+            .scalars()
+            .all()
+        )
 
     by_tenant: dict[UUID, list[Founder]] = {}
     for f in all_founders:
@@ -929,10 +915,8 @@ async def send_digest_to_all_founders(
     for t in tenants:
         for f in by_tenant.get(t.id, []):
             try:
-                stats = await send_digest_for_founder(
-                    f.slug, tenant_slug=t.slug, top_n=top_n
-                )
-            except Exception as exc:  # noqa: BLE001 — per-founder failure shouldn't abort fan-out
+                stats = await send_digest_for_founder(f.slug, tenant_slug=t.slug, top_n=top_n)
+            except Exception as exc:
                 log.exception(
                     "digest send_all failed for tenant=%s founder=%s: %s",
                     t.slug,
@@ -959,7 +943,5 @@ def send_digest_all_task(top_n: int = DEFAULT_TOP_N) -> list[dict[str, object]]:
 
 
 @celery_app.task(name="mactech.digest.send_one")
-def send_digest_one_task(
-    founder_slug: str, top_n: int = DEFAULT_TOP_N
-) -> dict[str, object]:
+def send_digest_one_task(founder_slug: str, top_n: int = DEFAULT_TOP_N) -> dict[str, object]:
     return asdict(asyncio.run(send_digest_for_founder(founder_slug, top_n=top_n)))

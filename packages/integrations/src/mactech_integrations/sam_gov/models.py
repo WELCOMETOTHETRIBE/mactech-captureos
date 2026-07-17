@@ -131,5 +131,7 @@ class OpportunitySearchResponse(_Loose):
     total_records: int = Field(alias="totalRecords")
     limit: int
     offset: int
-    opportunities_data: list[OpportunityRecord] = Field(default_factory=list, alias="opportunitiesData")
+    opportunities_data: list[OpportunityRecord] = Field(
+        default_factory=list, alias="opportunitiesData"
+    )
     links: list[OpportunityLink] | None = None

@@ -14,13 +14,10 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
-
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from mactech_db.models import (
     ComplianceMatrixItem,
@@ -44,6 +41,9 @@ from mactech_db.models import (
     Tenant,
     User,
 )
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from mactech_intelligence.schemas.capture_package import (
     AmendmentDiffEntry,
     BidDecisionSection,
@@ -57,8 +57,8 @@ from mactech_intelligence.schemas.capture_package import (
     EvaluationSection,
     GovernanceReadinessSection,
     IncumbentSummary,
-    KeyPersonRef,
     KeyPersonnelSection,
+    KeyPersonRef,
     OpportunitySection,
     PackageCompleteness,
     PassFailItem,
@@ -134,30 +134,16 @@ class CapturePackageBuilder:
         solicitation_section = await self._build_solicitation_section(opportunity)
         cyber_section = await self._build_cyber_section(opportunity, brief, tenant)
         capture_strategy = self._build_capture_strategy_section(brief, enriched)
-        bid_decision = await self._build_bid_decision_section(
-            pursuit, score, founder_owner
-        )
+        bid_decision = await self._build_bid_decision_section(pursuit, score, founder_owner)
         qa_section = self._build_qa_section(questions)
 
-        past_performance = await self._build_past_performance_section(
-            tenant_id, pursuit.id
-        )
-        key_personnel = await self._build_key_personnel_section(
-            tenant_id, pursuit.id
-        )
-        teaming_partners = await self._build_teaming_partners_section(
-            tenant_id, pursuit.id
-        )
+        past_performance = await self._build_past_performance_section(tenant_id, pursuit.id)
+        key_personnel = await self._build_key_personnel_section(tenant_id, pursuit.id)
+        teaming_partners = await self._build_teaming_partners_section(tenant_id, pursuit.id)
 
-        compliance = await self._build_compliance_matrix_section(
-            tenant_id, opportunity.id
-        )
-        requirements = await self._build_requirements_matrix_section(
-            tenant_id, opportunity.id
-        )
-        evaluation = await self._build_evaluation_section(
-            tenant_id, opportunity.id
-        )
+        compliance = await self._build_compliance_matrix_section(tenant_id, opportunity.id)
+        requirements = await self._build_requirements_matrix_section(tenant_id, opportunity.id)
+        evaluation = await self._build_evaluation_section(tenant_id, opportunity.id)
         win_strategy = WinStrategySection(
             win_themes=list(pursuit.win_themes or []),
             discriminators=list(pursuit.discriminators or []),
@@ -175,7 +161,9 @@ class CapturePackageBuilder:
                 else None
             ),
             reps_certs_last_renewed_at=to_iso(tenant.sam_registration_date),
-            source=("captureos_partial" if set_asides or tenant.sam_registration_status else "stub"),
+            source=(
+                "captureos_partial" if set_asides or tenant.sam_registration_status else "stub"
+            ),
         )
 
         tenant_registration = self._build_tenant_registration_section(tenant)
@@ -199,7 +187,7 @@ class CapturePackageBuilder:
         )
 
         return CapturePackage(
-            generated_at=datetime.now(timezone.utc).isoformat(),
+            generated_at=datetime.now(UTC).isoformat(),
             tenant_id=str(tenant.id),
             tenant_slug=tenant.slug,
             pursuit_id=str(pursuit.id),
@@ -253,9 +241,7 @@ class CapturePackageBuilder:
 
         return pursuit, opportunity, tenant
 
-    async def _load_enriched(
-        self, opportunity_id: UUID
-    ) -> OpportunityEnriched | None:
+    async def _load_enriched(self, opportunity_id: UUID) -> OpportunityEnriched | None:
         return (
             await self.session.execute(
                 select(OpportunityEnriched).where(
@@ -264,9 +250,7 @@ class CapturePackageBuilder:
             )
         ).scalar_one_or_none()
 
-    async def _load_brief(
-        self, tenant_id: UUID, opportunity_id: UUID
-    ) -> OpportunityBrief | None:
+    async def _load_brief(self, tenant_id: UUID, opportunity_id: UUID) -> OpportunityBrief | None:
         return (
             await self.session.execute(
                 select(OpportunityBrief).where(
@@ -276,9 +260,7 @@ class CapturePackageBuilder:
             )
         ).scalar_one_or_none()
 
-    async def _load_score(
-        self, tenant_id: UUID, opportunity_id: UUID
-    ) -> OpportunityScore | None:
+    async def _load_score(self, tenant_id: UUID, opportunity_id: UUID) -> OpportunityScore | None:
         return (
             await self.session.execute(
                 select(OpportunityScore).where(
@@ -306,24 +288,18 @@ class CapturePackageBuilder:
             .all()
         )
 
-    async def _load_owner_founder(
-        self, founder_id: UUID | None
-    ) -> Founder | None:
+    async def _load_owner_founder(self, founder_id: UUID | None) -> Founder | None:
         if founder_id is None:
             return None
         return (
-            await self.session.execute(
-                select(Founder).where(Founder.id == founder_id)
-            )
+            await self.session.execute(select(Founder).where(Founder.id == founder_id))
         ).scalar_one_or_none()
 
     # ------------------------------------------------------------------
     # Section builders
     # ------------------------------------------------------------------
 
-    def _build_opportunity_section(
-        self, opp: OpportunityRaw
-    ) -> OpportunitySection:
+    def _build_opportunity_section(self, opp: OpportunityRaw) -> OpportunitySection:
         excerpt: str | None = None
         if opp.description_text:
             excerpt = opp.description_text[:DESCRIPTION_EXCERPT_CHARS]
@@ -350,9 +326,7 @@ class CapturePackageBuilder:
             description_text_excerpt=excerpt,
         )
 
-    def _build_tenant_registration_section(
-        self, tenant: Tenant
-    ) -> TenantRegistrationSection:
+    def _build_tenant_registration_section(self, tenant: Tenant) -> TenantRegistrationSection:
         from datetime import date as date_t
 
         status = tenant.sam_registration_status or "unverified"
@@ -361,9 +335,7 @@ class CapturePackageBuilder:
             status = "invalid"
         days_until = None
         if tenant.sam_registration_expires_at is not None:
-            days_until = (
-                tenant.sam_registration_expires_at - date_t.today()
-            ).days
+            days_until = (tenant.sam_registration_expires_at - date_t.today()).days
 
         # Mirror the eligibility endpoint's blocker list logic without
         # circular-importing the route module. Keep wording in sync if you
@@ -386,9 +358,7 @@ class CapturePackageBuilder:
             blockers.append("SAM.gov registration could not be verified.")
             hard = True
         elif status == "active" and days_until is not None and days_until <= 30:
-            blockers.append(
-                f"SAM.gov registration expires in {days_until} day(s)."
-            )
+            blockers.append(f"SAM.gov registration expires in {days_until} day(s).")
         if not (tenant.set_aside_certifications or []):
             blockers.append("No set-aside certifications on file.")
         if tenant.sprs_score is None:
@@ -409,20 +379,22 @@ class CapturePackageBuilder:
             has_hard_blocker=hard,
         )
 
-    async def _build_solicitation_section(
-        self, opp: OpportunityRaw
-    ) -> SolicitationSection:
+    async def _build_solicitation_section(self, opp: OpportunityRaw) -> SolicitationSection:
         # V1: separate file-level ingestion not yet built (Section C of
         # CaptureOS_Requirements.md). The primary description URL is what
         # we expose today. ``detected_amendments`` carries any system-
         # detected content changes since first ingestion.
         amendment_rows = (
-            await self.session.execute(
-                select(OpportunityAmendment)
-                .where(OpportunityAmendment.opportunity_id == opp.id)
-                .order_by(OpportunityAmendment.detected_at.desc())
+            (
+                await self.session.execute(
+                    select(OpportunityAmendment)
+                    .where(OpportunityAmendment.opportunity_id == opp.id)
+                    .order_by(OpportunityAmendment.detected_at.desc())
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         detected = [
             DetectedAmendment(
                 id=str(a.id),
@@ -445,9 +417,7 @@ class CapturePackageBuilder:
         return SolicitationSection(
             primary_description_url=opp.description_url,
             primary_description_text_excerpt=(
-                opp.description_text[:DESCRIPTION_EXCERPT_CHARS]
-                if opp.description_text
-                else None
+                opp.description_text[:DESCRIPTION_EXCERPT_CHARS] if opp.description_text else None
             ),
             files=[],
             amendments=[],
@@ -496,9 +466,7 @@ class CapturePackageBuilder:
             sufficiency_notes=notes,
         )
 
-    async def _fetch_cyber_posture(
-        self, tenant: Tenant
-    ) -> CyberPostureSnapshot | None:
+    async def _fetch_cyber_posture(self, tenant: Tenant) -> CyberPostureSnapshot | None:
         if self.codex is None or not tenant.clerk_org_id:
             return None
         try:
@@ -515,7 +483,7 @@ class CapturePackageBuilder:
             sprs_source_url=getattr(posture, "source_url", None),
             cmmc_level_current=getattr(posture, "cmmc_level", None),
             source="codex",
-            snapshot_at=datetime.now(timezone.utc).isoformat(),
+            snapshot_at=datetime.now(UTC).isoformat(),
         )
 
     @staticmethod
@@ -579,10 +547,8 @@ class CapturePackageBuilder:
         # from stage so legacy pursuits (created before 0024) still produce
         # a reasonable section.
         decision: str = pursuit.bid_decision
-        if decision == "pending":
-            if pursuit.stage in ("submit", "won", "lost"):
-                decision = "bid"
-            elif pursuit.stage in ("pursue", "propose"):
+        if decision == "pending":  # noqa: SIM102
+            if pursuit.stage in ("submit", "won", "lost") or pursuit.stage in ("pursue", "propose"):
                 decision = "bid"
             # else: stay "pending"
 
@@ -624,9 +590,7 @@ class CapturePackageBuilder:
             score_breakdown=score_breakdown,
         )
 
-    def _build_qa_section(
-        self, questions: list[OpportunityQuestion]
-    ) -> QAHistorySection:
+    def _build_qa_section(self, questions: list[OpportunityQuestion]) -> QAHistorySection:
         return QAHistorySection(
             entries=[
                 QAEntry(
@@ -658,8 +622,7 @@ class CapturePackageBuilder:
                     select(PastPerformance, PursuitPastPerformance)
                     .join(
                         PursuitPastPerformance,
-                        PursuitPastPerformance.past_performance_id
-                        == PastPerformance.id,
+                        PursuitPastPerformance.past_performance_id == PastPerformance.id,
                     )
                     .where(PursuitPastPerformance.pursuit_id == pursuit_id)
                     .order_by(PursuitPastPerformance.sort_order.asc())
@@ -693,9 +656,7 @@ class CapturePackageBuilder:
     ) -> KeyPersonnelSection:
         library_size = (
             await self.session.execute(
-                select(func.count())
-                .select_from(Founder)
-                .where(Founder.tenant_id == tenant_id)
+                select(func.count()).select_from(Founder).where(Founder.tenant_id == tenant_id)
             )
         ).scalar_one()
 
@@ -725,9 +686,7 @@ class CapturePackageBuilder:
             )
             for f, link in rows
         ]
-        return KeyPersonnelSection(
-            selected=selected, library_size=int(library_size)
-        )
+        return KeyPersonnelSection(selected=selected, library_size=int(library_size))
 
     async def _load_extraction(
         self, tenant_id: UUID, opportunity_id: UUID
@@ -910,9 +869,7 @@ class CapturePackageBuilder:
             )
             for p, _link in rows
         ]
-        return TeamingPartnersSection(
-            selected=selected, library_size=int(library_size)
-        )
+        return TeamingPartnersSection(selected=selected, library_size=int(library_size))
 
     # ------------------------------------------------------------------
     # Completeness reporting
@@ -983,8 +940,7 @@ class CapturePackageBuilder:
         if requirements.status == "stale":
             partial.append("requirements_matrix")
             gaps.append(
-                "Requirements matrix is STALE — opportunity was amended "
-                "after the last extraction."
+                "Requirements matrix is STALE — opportunity was amended after the last extraction."
             )
         elif requirements.items:
             complete.append("requirements_matrix")
@@ -1042,8 +998,7 @@ class CapturePackageBuilder:
         else:
             missing.append("win_strategy")
             gaps.append(
-                "Win themes and discriminators not captured yet. Edit on "
-                "the pursuit detail page."
+                "Win themes and discriminators not captured yet. Edit on the pursuit detail page."
             )
 
         if past_performance.selected:
@@ -1081,9 +1036,7 @@ class CapturePackageBuilder:
         else:
             partial.append("teaming_partners")
 
-        if bid_decision.decision == "bid":
-            complete.append("bid_decision")
-        elif bid_decision.decision == "no_bid":
+        if bid_decision.decision == "bid" or bid_decision.decision == "no_bid":
             complete.append("bid_decision")
         else:
             partial.append("bid_decision")
@@ -1113,8 +1066,7 @@ class CapturePackageBuilder:
         elif tenant_registration.blockers:
             partial.append("tenant_registration")
             gaps.append(
-                "Tenant registration warnings: "
-                + "; ".join(tenant_registration.blockers[:3])
+                "Tenant registration warnings: " + "; ".join(tenant_registration.blockers[:3])
             )
         else:
             complete.append("tenant_registration")
@@ -1146,9 +1098,7 @@ class PursuitNotFound(Exception):
 
 class OpportunityMissing(Exception):
     def __init__(self, opportunity_id: UUID) -> None:
-        super().__init__(
-            f"pursuit references opportunity {opportunity_id} which is missing"
-        )
+        super().__init__(f"pursuit references opportunity {opportunity_id} which is missing")
         self.opportunity_id = opportunity_id
 
 
@@ -1158,9 +1108,7 @@ def _decimal_to_float(value: Decimal | None) -> float | None:
     return float(value)
 
 
-def _matrix_status(
-    extraction: SolicitationExtraction, *, has_items: bool
-) -> str:
+def _matrix_status(extraction: SolicitationExtraction, *, has_items: bool) -> str:
     """Translate a SolicitationExtraction.status + item count to the
     Capture Package matrix-section status enum.
 

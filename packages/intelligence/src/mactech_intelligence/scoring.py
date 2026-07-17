@@ -24,7 +24,7 @@ assigned founder slug if any.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -50,7 +50,7 @@ class ScoringContext:
     # Optional. When set, the scoring worker will additionally compute the
     # parallel high_moat_score. Sourced from the tenant's
     # config/mactech_tenant_defaults.yml ``high_moat_scoring`` block.
-    high_moat_config: "HighMoatConfig | None" = None
+    high_moat_config: HighMoatConfig | None = None
 
 
 @dataclass(frozen=True)
@@ -76,7 +76,7 @@ class OpportunityFacts:
     attachment_text: str | None = None
     interested_vendors_count: int | None = None
     interested_vendors_cyber_count: int | None = None
-    clause_findings: "ClauseFindings | None" = None
+    clause_findings: ClauseFindings | None = None
     agency: str | None = None
     subagency: str | None = None
     is_active: bool = True
@@ -120,7 +120,7 @@ def _component_keywords(opp: OpportunityFacts, ctx: ScoringContext) -> int:
     # Most opps will only match a handful of keywords; reward the first
     # match more than the marginal one. sqrt-curve.
     curved = fraction**0.5
-    return int(round(20 * curved))
+    return round(20 * curved)
 
 
 def _component_set_aside(opp: OpportunityFacts, ctx: ScoringContext) -> int:
@@ -183,7 +183,7 @@ def _component_founder_availability() -> int:
 def _component_freshness(opp: OpportunityFacts) -> int:
     if opp.posted_at is None:
         return 0
-    age = datetime.now(timezone.utc) - opp.posted_at
+    age = datetime.now(UTC) - opp.posted_at
     hours = age.total_seconds() / 3600
     if hours <= FRESHNESS_FULL_HOURS:
         return 5
@@ -193,7 +193,7 @@ def _component_freshness(opp: OpportunityFacts) -> int:
     # Linear decline from 5 (at 2 days) to 0 (at 30 days).
     span = FRESHNESS_ZERO_DAYS - FRESHNESS_FULL_HOURS / 24
     elapsed = days - FRESHNESS_FULL_HOURS / 24
-    return int(round(5 * (1 - elapsed / span)))
+    return round(5 * (1 - elapsed / span))
 
 
 def _component_capability_match(opp: OpportunityFacts) -> int:

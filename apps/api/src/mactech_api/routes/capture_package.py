@@ -19,8 +19,6 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-
-from mactech_api.auth import RequestContext, get_request_context
 from mactech_integrations.codex import CodexClient
 from mactech_intelligence.capture_package_builder import (
     CapturePackageBuilder,
@@ -28,6 +26,8 @@ from mactech_intelligence.capture_package_builder import (
     PursuitNotFound,
 )
 from mactech_intelligence.schemas import CapturePackage
+
+from mactech_api.auth import RequestContext, get_request_context
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["capture-package"])
@@ -46,9 +46,7 @@ async def get_capture_package(
     Always recomputes — no caching. The package reflects the live state
     of CaptureOS at request time.
     """
-    base_url = os.environ.get(
-        "CODEX_BASE_URL", "https://codex.mactechsolutionsllc.com"
-    )
+    base_url = os.environ.get("CODEX_BASE_URL", "https://codex.mactechsolutionsllc.com")
     api_token = os.environ.get("CODEX_API_TOKEN") or None
 
     async with CodexClient(base_url=base_url, api_token=api_token) as codex:

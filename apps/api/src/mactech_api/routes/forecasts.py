@@ -12,19 +12,14 @@ sees the same ranking semantics in both feeds.
 from __future__ import annotations
 
 import logging
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import Text, cast, func, or_, select, text
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
-
-from mactech_api.auth import RequestContext, get_request_context
 from mactech_db.models import (
     AwardHistory,
-    Founder,
     ForecastRaw,
+    Founder,
     IncumbentSignal,
     NaicsCode,
     SavedSearch,
@@ -34,6 +29,11 @@ from mactech_intelligence import (
     ScoringContext,
     score_opportunity,
 )
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import Text, cast, func, or_, select, text
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+
+from mactech_api.auth import RequestContext, get_request_context
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["forecasts"])
@@ -101,23 +101,29 @@ async def _build_scoring_context(ctx: RequestContext) -> ScoringContext:
         secondary: list[str] = []
     else:
         primary = (
-            await ctx.session.execute(
-                select(NaicsCode.code).where(NaicsCode.mactech_tier == "primary")
-            )
-        ).scalars().all()
-        secondary = (
-            await ctx.session.execute(
-                select(NaicsCode.code).where(
-                    NaicsCode.mactech_tier == "secondary"
+            (
+                await ctx.session.execute(
+                    select(NaicsCode.code).where(NaicsCode.mactech_tier == "primary")
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
+        secondary = (
+            (
+                await ctx.session.execute(
+                    select(NaicsCode.code).where(NaicsCode.mactech_tier == "secondary")
+                )
+            )
+            .scalars()
+            .all()
+        )
 
     searches = (
-        await ctx.session.execute(
-            select(SavedSearch).where(SavedSearch.tenant_id == tenant.id)
-        )
-    ).scalars().all()
+        (await ctx.session.execute(select(SavedSearch).where(SavedSearch.tenant_id == tenant.id)))
+        .scalars()
+        .all()
+    )
     keywords: list[str] = []
     seen: set[str] = set()
     for s in searches:
@@ -165,11 +171,7 @@ def _forecast_to_facts(fc: ForecastRaw) -> OpportunityFacts:
     # check because the verbose SDVOSB string contains "small business".
     if set_aside:
         sl = set_aside.lower()
-        if (
-            "sdvosb" in sl
-            or "service disabled veteran" in sl
-            or "service-disabled veteran" in sl
-        ):
+        if "sdvosb" in sl or "service disabled veteran" in sl or "service-disabled veteran" in sl:
             set_aside = "SDVOSBC"
         elif "vosb" in sl or "veteran owned" in sl or "veteran-owned" in sl:
             # Non-SDVOSB veteran-owned still gets the small-biz code so
@@ -280,6 +282,7 @@ def _to_out(
     # Replace base reference with adjusted result for the rest of the
     # function — keeps the existing _to_out body unchanged.
     from dataclasses import replace
+
     result = replace(base, score=final_score, breakdown=breakdown)
 
     return ForecastOut(
@@ -293,30 +296,20 @@ def _to_out(
         set_aside=fc.set_aside,
         contract_type=fc.contract_type,
         estimated_value_low=(
-            float(fc.estimated_value_low)
-            if fc.estimated_value_low is not None
-            else None
+            float(fc.estimated_value_low) if fc.estimated_value_low is not None else None
         ),
         estimated_value_high=(
-            float(fc.estimated_value_high)
-            if fc.estimated_value_high is not None
-            else None
+            float(fc.estimated_value_high) if fc.estimated_value_high is not None else None
         ),
         estimated_value_text=fc.estimated_value_text,
         expected_solicitation_date=(
-            fc.expected_solicitation_date.isoformat()
-            if fc.expected_solicitation_date
-            else None
+            fc.expected_solicitation_date.isoformat() if fc.expected_solicitation_date else None
         ),
         expected_award_date=(
-            fc.expected_award_date.isoformat()
-            if fc.expected_award_date
-            else None
+            fc.expected_award_date.isoformat() if fc.expected_award_date else None
         ),
         period_of_performance_end=(
-            fc.period_of_performance_end.isoformat()
-            if fc.period_of_performance_end
-            else None
+            fc.period_of_performance_end.isoformat() if fc.period_of_performance_end else None
         ),
         incumbent_name=fc.incumbent_name,
         incumbent_contract_number=fc.incumbent_contract_number,
@@ -336,30 +329,22 @@ def _to_out(
             founder_index.get(result.assigned_founder_slug or "", (None, None))[1]
         ),
         incumbent_total_obligations=(
-            (intel_index or {}).get(fc.incumbent_name or "", {}).get(
-                "total_obligations"
-            )
+            (intel_index or {}).get(fc.incumbent_name or "", {}).get("total_obligations")
         ),
         incumbent_award_count=(
             (intel_index or {}).get(fc.incumbent_name or "", {}).get("award_count")
         ),
         incumbent_distress_score=(
-            (intel_index or {}).get(fc.incumbent_name or "", {}).get(
-                "distress_score"
-            )
+            (intel_index or {}).get(fc.incumbent_name or "", {}).get("distress_score")
         ),
         incumbent_distress_summary=(
-            (intel_index or {}).get(fc.incumbent_name or "", {}).get(
-                "distress_summary"
-            )
+            (intel_index or {}).get(fc.incumbent_name or "", {}).get("distress_summary")
         ),
         incumbent_sec_ticker=(
             (intel_index or {}).get(fc.incumbent_name or "", {}).get("sec_ticker")
         ),
         incumbent_filings_last_90d=(
-            (intel_index or {}).get(fc.incumbent_name or "", {}).get(
-                "filings_last_90d"
-            )
+            (intel_index or {}).get(fc.incumbent_name or "", {}).get("filings_last_90d")
         ),
     )
 
@@ -397,9 +382,7 @@ def _apply_naics_filter(stmt, target_set: set[str]):
     return stmt.where(
         or_(
             ForecastRaw.naics_code.in_(target_list),
-            cast(ForecastRaw.naics_codes, JSONB).op("?|")(
-                cast(target_list, ARRAY(Text))
-            ),
+            cast(ForecastRaw.naics_codes, JSONB).op("?|")(cast(target_list, ARRAY(Text))),
         )
     )
 
@@ -453,9 +436,7 @@ async def _build_incumbent_intel_index(
             )
             .where(
                 AwardHistory.recipient_name.is_not(None),
-                func.lower(AwardHistory.recipient_name).in_(
-                    [n.lower() for n in seen.keys()]
-                ),
+                func.lower(AwardHistory.recipient_name).in_([n.lower() for n in seen]),
             )
             .group_by(AwardHistory.recipient_name)
         )
@@ -470,15 +451,17 @@ async def _build_incumbent_intel_index(
     # EDGAR signals — match on normalized_name.
     normalized_set = set(seen.values())
     signals_rows = (
-        await ctx.session.execute(
-            select(IncumbentSignal).where(
-                IncumbentSignal.normalized_name.in_(list(normalized_set))
+        (
+            await ctx.session.execute(
+                select(IncumbentSignal).where(
+                    IncumbentSignal.normalized_name.in_(list(normalized_set))
+                )
             )
         )
-    ).scalars().all()
-    signals_lookup: dict[str, IncumbentSignal] = {
-        s.normalized_name: s for s in signals_rows
-    }
+        .scalars()
+        .all()
+    )
+    signals_lookup: dict[str, IncumbentSignal] = {s.normalized_name: s for s in signals_rows}
 
     out: dict[str, dict] = {}
     for original, normalized in seen.items():
@@ -518,9 +501,7 @@ _SET_ASIDE_SCOPE_TO_NORMALIZED = {
 }
 
 
-def _matches_set_aside_scope(
-    fc: ForecastRaw, scope: str, normalized_lookup
-) -> bool:
+def _matches_set_aside_scope(fc: ForecastRaw, scope: str, normalized_lookup) -> bool:
     """Filter forecasts by the requested set-aside scope. We re-run the
     same normalization the scorer uses so the scope filter is consistent
     with how rows are scored."""
@@ -576,9 +557,7 @@ async def list_forecasts(
         )
         for r in rows
     ]
-    items.sort(
-        key=lambda x: (-x.score, x.expected_solicitation_date or "9999")
-    )
+    items.sort(key=lambda x: (-x.score, x.expected_solicitation_date or "9999"))
     return ForecastsResponse(
         total=len(items),
         items=items,
@@ -616,9 +595,7 @@ async def list_recompetes(
     ] = None,
     mine_only: Annotated[
         bool,
-        Query(
-            description="When true, restrict to the calling founder's NAICS lane"
-        ),
+        Query(description="When true, restrict to the calling founder's NAICS lane"),
     ] = False,
 ) -> ForecastsResponse:
     """Forecasts with a named incumbent — the recompete watchlist.
@@ -652,6 +629,7 @@ async def list_recompetes(
         stmt = stmt.where(ForecastRaw.agency == agency.upper())
     if pop_window_months is not None:
         from datetime import timedelta as _td
+
         end_max = datetime.now(UTC).date() + _td(days=pop_window_months * 30)
         stmt = stmt.where(
             ForecastRaw.period_of_performance_end.is_not(None),
@@ -683,16 +661,11 @@ async def list_recompetes(
     # codes instead of raw verbose strings).
     allowed = _SET_ASIDE_SCOPE_TO_NORMALIZED.get(set_aside_scope.lower())
     if allowed is not None:
-        items = [
-            i for i in items
-            if _forecast_to_facts_set_aside(i.set_aside) in allowed
-        ]
+        items = [i for i in items if _forecast_to_facts_set_aside(i.set_aside) in allowed]
 
     # Founder filter — assigned_founder is the result of NAICS routing.
     if assigned_founder:
-        items = [
-            i for i in items if i.assigned_founder_slug == assigned_founder
-        ]
+        items = [i for i in items if i.assigned_founder_slug == assigned_founder]
 
     # Recompetes ordered by score first, then high estimated value, then
     # nearest expiry — in that order of intent ("high-fit, expensive,
@@ -718,11 +691,7 @@ def _forecast_to_facts_set_aside(raw: str | None) -> str | None:
     if not raw:
         return None
     sl = raw.lower()
-    if (
-        "sdvosb" in sl
-        or "service disabled veteran" in sl
-        or "service-disabled veteran" in sl
-    ):
+    if "sdvosb" in sl or "service disabled veteran" in sl or "service-disabled veteran" in sl:
         return "SDVOSBC"
     if "vosb" in sl or "veteran owned" in sl or "veteran-owned" in sl:
         return "VSA"

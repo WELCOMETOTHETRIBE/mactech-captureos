@@ -162,9 +162,7 @@ class UsaSpendingClient:
         if naics_codes:
             f["naics_codes"] = list(naics_codes)
         if awarding_agency_name:
-            f["agencies"] = [
-                {"type": "awarding", "tier": "toptier", "name": awarding_agency_name}
-            ]
+            f["agencies"] = [{"type": "awarding", "tier": "toptier", "name": awarding_agency_name}]
         if time_period_start and time_period_end:
             f["time_period"] = [
                 {

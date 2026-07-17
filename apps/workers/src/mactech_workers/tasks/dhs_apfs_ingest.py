@@ -32,10 +32,10 @@ from decimal import Decimal
 from typing import Any
 
 import httpx
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-
 from mactech_db import unscoped_session
 from mactech_db.models import ForecastRaw
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+
 from mactech_workers.celery_app import celery_app
 
 log = logging.getLogger(__name__)
@@ -90,20 +90,16 @@ async def _ingest() -> ApfsIngestStats:
                     upserted=0,
                     skipped=0,
                     error=f"APFS API returned {resp.status_code}",
-                    duration_ms=int(
-                        (datetime.now(UTC) - started).total_seconds() * 1000
-                    ),
+                    duration_ms=int((datetime.now(UTC) - started).total_seconds() * 1000),
                 )
             payload = resp.json()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return ApfsIngestStats(
             fetched=0,
             upserted=0,
             skipped=0,
             error=f"APFS fetch failed: {exc.__class__.__name__}: {exc}",
-            duration_ms=int(
-                (datetime.now(UTC) - started).total_seconds() * 1000
-            ),
+            duration_ms=int((datetime.now(UTC) - started).total_seconds() * 1000),
         )
 
     if not isinstance(payload, list):
@@ -112,9 +108,7 @@ async def _ingest() -> ApfsIngestStats:
             upserted=0,
             skipped=0,
             error=f"APFS API returned non-list ({type(payload).__name__})",
-            duration_ms=int(
-                (datetime.now(UTC) - started).total_seconds() * 1000
-            ),
+            duration_ms=int((datetime.now(UTC) - started).total_seconds() * 1000),
         )
 
     fetched = len(payload)
@@ -185,7 +179,7 @@ def _to_row(item: dict[str, Any]) -> dict[str, Any] | None:
             naics_code = m.group(1)
 
     dr = item.get("dollar_range") or {}
-    dr_text = (dr.get("display_name") if isinstance(dr, dict) else None)
+    dr_text = dr.get("display_name") if isinstance(dr, dict) else None
     val_low: Decimal | None = None
     val_high: Decimal | None = None
     if dr_text:
@@ -205,37 +199,29 @@ def _to_row(item: dict[str, Any]) -> dict[str, Any] | None:
     place_state = _str_or_none(item.get("place_of_performance_state"))
     if place_city or place_state:
         loc = ", ".join(p for p in [place_city, place_state] if p)
-        contracting_office = (
-            f"{contracting_office} ({loc})" if contracting_office else loc
-        )
+        contracting_office = f"{contracting_office} ({loc})" if contracting_office else loc
 
     return {
         "source_url": source_url[:2000],
         "source_host": "apfs-cloud.dhs.gov",
         "source_run_id": None,
         "agency": "DHS",
-        "contracting_office": contracting_office[:512]
-        if contracting_office
-        else None,
+        "contracting_office": contracting_office[:512] if contracting_office else None,
         "title": title[:1000],
         "description": _str_or_none(item.get("requirement")),
         "naics_code": naics_code,
         "naics_codes": [naics_code] if naics_code else None,
         "set_aside": _str_or_none(
-            item.get("small_business_set_aside")
-            or item.get("small_business_program")
+            item.get("small_business_set_aside") or item.get("small_business_program")
         ),
         "contract_type": _str_or_none(item.get("contract_type")),
         "estimated_value_low": val_low,
         "estimated_value_high": val_high,
         "estimated_value_text": dr_text,
         "expected_solicitation_date": _parse_apfs_date(
-            item.get("estimated_solicitation_release_date")
-            or item.get("estimated_release_date")
+            item.get("estimated_solicitation_release_date") or item.get("estimated_release_date")
         ),
-        "expected_award_date": _parse_apfs_date(
-            item.get("anticipated_award_date")
-        ),
+        "expected_award_date": _parse_apfs_date(item.get("anticipated_award_date")),
         "period_of_performance_start": _parse_apfs_date(
             item.get("estimated_period_of_performance_start")
         ),

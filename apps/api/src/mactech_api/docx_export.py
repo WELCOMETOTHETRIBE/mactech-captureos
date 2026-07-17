@@ -22,7 +22,6 @@ from dataclasses import dataclass
 from docx import Document  # type: ignore[import-untyped]
 from docx.shared import Pt  # type: ignore[import-untyped]
 
-
 _HEADING_RE = re.compile(r"^(#{1,3})\s+(.+?)\s*$")
 _BULLET_RE = re.compile(r"^\s*[-*]\s+(.+?)\s*$")
 _INLINE_RE = re.compile(r"(\*\*[^*]+\*\*|\*[^*]+\*)")

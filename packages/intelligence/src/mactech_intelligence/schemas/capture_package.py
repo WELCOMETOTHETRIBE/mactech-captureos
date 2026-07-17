@@ -333,9 +333,7 @@ class TeamingPartnerRef(_Base):
     set_aside_certifications: list[str] = Field(default_factory=list)
     contact_name: str | None = None
     contact_email: str | None = None
-    governance_doc_state: GovernanceDocState = Field(
-        default_factory=GovernanceDocState
-    )
+    governance_doc_state: GovernanceDocState = Field(default_factory=GovernanceDocState)
 
 
 class TeamingPartnersSection(_Base):
@@ -397,9 +395,7 @@ class TenantRegistrationSection(_Base):
 
     uei: str | None = None
     cage_code: str | None = None
-    sam_registration_status: Literal[
-        "active", "expired", "invalid", "unverified"
-    ] = "unverified"
+    sam_registration_status: Literal["active", "expired", "invalid", "unverified"] = "unverified"
     sam_registration_date: str | None = None
     sam_registration_expires_at: str | None = None
     sam_days_until_expiration: int | None = None
@@ -473,25 +469,17 @@ class CapturePackage(_Base):
 
     opportunity: OpportunitySection
     solicitation: SolicitationSection = Field(default_factory=SolicitationSection)
-    compliance_matrix: ComplianceMatrixSection = Field(
-        default_factory=ComplianceMatrixSection
-    )
+    compliance_matrix: ComplianceMatrixSection = Field(default_factory=ComplianceMatrixSection)
     requirements_matrix: RequirementsMatrixSection = Field(
         default_factory=RequirementsMatrixSection
     )
     evaluation: EvaluationSection = Field(default_factory=EvaluationSection)
     cyber: CyberSection = Field(default_factory=CyberSection)
-    capture_strategy: CaptureStrategySection = Field(
-        default_factory=CaptureStrategySection
-    )
+    capture_strategy: CaptureStrategySection = Field(default_factory=CaptureStrategySection)
     win_strategy: WinStrategySection = Field(default_factory=WinStrategySection)
-    past_performance: PastPerformanceSection = Field(
-        default_factory=PastPerformanceSection
-    )
+    past_performance: PastPerformanceSection = Field(default_factory=PastPerformanceSection)
     key_personnel: KeyPersonnelSection = Field(default_factory=KeyPersonnelSection)
-    teaming_partners: TeamingPartnersSection = Field(
-        default_factory=TeamingPartnersSection
-    )
+    teaming_partners: TeamingPartnersSection = Field(default_factory=TeamingPartnersSection)
     bid_decision: BidDecisionSection = Field(default_factory=BidDecisionSection)
     governance_readiness: GovernanceReadinessSection = Field(
         default_factory=GovernanceReadinessSection

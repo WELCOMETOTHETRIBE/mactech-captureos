@@ -32,9 +32,6 @@ from uuid import UUID
 
 import fitz  # type: ignore[import-untyped]
 import pytesseract  # type: ignore[import-untyped]
-from PIL import Image
-from sqlalchemy import select
-
 from mactech_db import scoped_session
 from mactech_db.models import (
     CapabilityStatement,
@@ -48,6 +45,9 @@ from mactech_intelligence import (
     extract_capability_statement,
     extract_past_performance,
 )
+from PIL import Image
+from sqlalchemy import select
+
 from mactech_workers.celery_app import celery_app
 
 log = logging.getLogger(__name__)
@@ -118,15 +118,11 @@ async def _process_job(job_id: UUID) -> ImportJobResult:
 
         async with unscoped_session() as session:
             job = (
-                await session.execute(
-                    select(LibraryImportJob).where(LibraryImportJob.id == job_id)
-                )
+                await session.execute(select(LibraryImportJob).where(LibraryImportJob.id == job_id))
             ).scalar_one_or_none()
             if job is not None:
                 job.status = "failed"
-                job.error_message = (
-                    "ANTHROPIC_API_KEY not configured on the worker"
-                )
+                job.error_message = "ANTHROPIC_API_KEY not configured on the worker"
                 job.completed_at = datetime.now(UTC)
                 await session.flush()
                 return ImportJobResult(
@@ -149,9 +145,7 @@ async def _process_job(job_id: UUID) -> ImportJobResult:
 
     async with unscoped_session() as session:
         job = (
-            await session.execute(
-                select(LibraryImportJob).where(LibraryImportJob.id == job_id)
-            )
+            await session.execute(select(LibraryImportJob).where(LibraryImportJob.id == job_id))
         ).scalar_one_or_none()
         if job is None:
             return ImportJobResult(
@@ -182,9 +176,7 @@ async def _process_job(job_id: UUID) -> ImportJobResult:
     if len(text) < 30:
         async with unscoped_session() as session:
             job = (
-                await session.execute(
-                    select(LibraryImportJob).where(LibraryImportJob.id == job_id)
-                )
+                await session.execute(select(LibraryImportJob).where(LibraryImportJob.id == job_id))
             ).scalar_one()
             job.status = "failed"
             job.text_chars = len(text)
@@ -219,9 +211,7 @@ async def _process_job(job_id: UUID) -> ImportJobResult:
     except (PastPerformanceExtractionError, CapabilityExtractionError) as exc:
         async with unscoped_session() as session:
             job = (
-                await session.execute(
-                    select(LibraryImportJob).where(LibraryImportJob.id == job_id)
-                )
+                await session.execute(select(LibraryImportJob).where(LibraryImportJob.id == job_id))
             ).scalar_one()
             job.status = "failed"
             job.text_chars = len(text)
@@ -235,13 +225,11 @@ async def _process_job(job_id: UUID) -> ImportJobResult:
             text_chars=len(text),
             error_message=str(exc),
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.exception("library_import: unexpected extraction failure")
         async with unscoped_session() as session:
             job = (
-                await session.execute(
-                    select(LibraryImportJob).where(LibraryImportJob.id == job_id)
-                )
+                await session.execute(select(LibraryImportJob).where(LibraryImportJob.id == job_id))
             ).scalar_one()
             job.status = "failed"
             job.text_chars = len(text)
@@ -270,9 +258,7 @@ async def _process_job(job_id: UUID) -> ImportJobResult:
                 period_start=ext.period_start or None,
                 period_end=ext.period_end or None,
                 contract_value=(
-                    Decimal(str(ext.contract_value))
-                    if ext.contract_value is not None
-                    else None
+                    Decimal(str(ext.contract_value)) if ext.contract_value is not None else None
                 ),
                 naics_code=ext.naics_code,
                 summary=ext.summary,
@@ -295,9 +281,7 @@ async def _process_job(job_id: UUID) -> ImportJobResult:
                     period_start=ext.period_start or None,
                     period_end=ext.period_end or None,
                     contract_value=(
-                        Decimal(str(ext.contract_value))
-                        if ext.contract_value is not None
-                        else None
+                        Decimal(str(ext.contract_value)) if ext.contract_value is not None else None
                     ),
                     naics_code=ext.naics_code,
                     summary=ext.summary,
@@ -313,9 +297,7 @@ async def _process_job(job_id: UUID) -> ImportJobResult:
         else:
             related_founders_payload: list[dict[str, str]] | None = None
             if ext.related_founder_slugs:
-                related_founders_payload = [
-                    {"slug": s} for s in ext.related_founder_slugs
-                ]
+                related_founders_payload = [{"slug": s} for s in ext.related_founder_slugs]
             cs = CapabilityStatement(
                 tenant_id=tenant_id,
                 title=ext.title,
@@ -351,9 +333,7 @@ async def _process_job(job_id: UUID) -> ImportJobResult:
             result_id = cs.id
 
         job = (
-            await session.execute(
-                select(LibraryImportJob).where(LibraryImportJob.id == job_id)
-            )
+            await session.execute(select(LibraryImportJob).where(LibraryImportJob.id == job_id))
         ).scalar_one()
         job.status = "done"
         job.result_id = result_id

@@ -32,14 +32,28 @@ PAYLOAD = {
     "TextBody": "You are invited to bid...",
     "HtmlBody": "<p>You are invited to bid...</p>",
     "Date": "Mon, 13 Jul 2026 09:00:00 -0400",
-    "Attachments": [
-        {"Name": "specs.pdf", "ContentType": "application/pdf", "ContentLength": 4096}
-    ],
+    "Attachments": [{"Name": "specs.pdf", "ContentType": "application/pdf", "ContentLength": 4096}],
 }
 
 
+def _mounted_paths() -> set[str]:
+    # FastAPI version-robust: newer versions keep included routers nested rather
+    # than flattening their paths into app.routes. Combine the OpenAPI schema
+    # paths with a recursive walk of the route tree (covers include_in_schema
+    # =False routes like the webhook too).
+    paths: set[str] = set(app.openapi().get("paths", {}))
+    stack = list(app.routes)
+    while stack:
+        r = stack.pop()
+        p = getattr(r, "path", None)
+        if isinstance(p, str):
+            paths.add(p)
+        stack.extend(getattr(r, "routes", []) or [])
+    return paths
+
+
 def test_router_mounted() -> None:
-    routes = [r.path for r in app.routes]  # type: ignore[attr-defined]
+    routes = _mounted_paths()
     assert "/webhooks/postmark/inbound" in routes
     assert "/bid-invites" in routes
     assert "/bid-invites/{invite_id}" in routes
@@ -49,9 +63,7 @@ def test_router_mounted() -> None:
 
 def test_pursue_requires_auth() -> None:
     client = TestClient(app)
-    res = client.post(
-        "/bid-invites/00000000-0000-0000-0000-000000000000/pursue", json={}
-    )
+    res = client.post("/bid-invites/00000000-0000-0000-0000-000000000000/pursue", json={})
     assert res.status_code == 401
 
 

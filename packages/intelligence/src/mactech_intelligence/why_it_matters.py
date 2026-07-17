@@ -40,18 +40,14 @@ class WhyItMattersInput:
 def _load_prompt() -> tuple[str, str]:
     raw = PROMPT_PATH.read_text()
     if SYSTEM_MARKER not in raw or USER_MARKER not in raw:
-        raise RuntimeError(
-            f"prompt file {PROMPT_PATH} missing required markers"
-        )
+        raise RuntimeError(f"prompt file {PROMPT_PATH} missing required markers")
     _, rest = raw.split(SYSTEM_MARKER, 1)
     system, user = rest.split(USER_MARKER, 1)
     # Strip leading/trailing blank lines and # comment lines.
     system_clean = "\n".join(
         line for line in system.strip().splitlines() if not line.startswith("#")
     )
-    user_clean = "\n".join(
-        line for line in user.strip().splitlines() if not line.startswith("#")
-    )
+    user_clean = "\n".join(line for line in user.strip().splitlines() if not line.startswith("#"))
     return system_clean, user_clean
 
 
@@ -89,9 +85,7 @@ async def generate_why_it_matters(
         notice_type=inp.notice_type or "(not specified)",
         posted_at=inp.posted_at.isoformat() if inp.posted_at else "(not specified)",
         response_deadline=(
-            inp.response_deadline.isoformat()
-            if inp.response_deadline
-            else "(not specified)"
+            inp.response_deadline.isoformat() if inp.response_deadline else "(not specified)"
         ),
         description=(inp.description or "(not provided)")[:1500],
         incumbent_block=_format_incumbent(inp),

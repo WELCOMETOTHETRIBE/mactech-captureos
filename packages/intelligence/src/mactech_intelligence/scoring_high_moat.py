@@ -127,9 +127,7 @@ def _component_ufgs_clause(findings: ClauseFindings, w: dict[str, int]) -> int:
 
 # Clause families that contribute to the adjacent OT/ICS bucket (i.e. anything
 # in the configured clause_patterns OTHER than the three UFGS 25 buckets).
-_UFGS_FAMILIES: frozenset[str] = frozenset(
-    {"ufgs_25_05_11", "ufgs_25_08_11", "ufgs_25_other"}
-)
+_UFGS_FAMILIES: frozenset[str] = frozenset({"ufgs_25_05_11", "ufgs_25_08_11", "ufgs_25_other"})
 
 
 def _component_adjacent_ot(findings: ClauseFindings, w: dict[str, int]) -> int:
@@ -150,9 +148,7 @@ def _component_set_aside(facts: HighMoatFacts, w: dict[str, int]) -> int:
     return 0
 
 
-def _component_agency(
-    facts: HighMoatFacts, cfg: HighMoatConfig, w: dict[str, int]
-) -> int:
+def _component_agency(facts: HighMoatFacts, cfg: HighMoatConfig, w: dict[str, int]) -> int:
     blob = _agency_blob(facts.agency, facts.subagency)
     if not blob:
         return 0
@@ -190,9 +186,7 @@ def _component_clearance(findings: ClauseFindings, w: dict[str, int]) -> int:
 def _prime_likely_construction(facts: HighMoatFacts, cfg: HighMoatConfig) -> bool:
     if facts.naics_code and facts.naics_code in cfg.traditional_construction_naics:
         return True
-    if facts.title and _CONSTRUCTION_TITLE_RE.search(facts.title):
-        return True
-    return False
+    return bool(facts.title and _CONSTRUCTION_TITLE_RE.search(facts.title))
 
 
 def _why_it_matters_seed(
@@ -200,31 +194,21 @@ def _why_it_matters_seed(
 ) -> str:
     parts: list[str] = []
     if findings.has_ufgs_25_exact:
-        clause = (
-            "25 05 11"
-            if "ufgs_25_05_11" in findings.clause_hits
-            else "25 08 11"
-        )
+        clause = "25 05 11" if "ufgs_25_05_11" in findings.clause_hits else "25 08 11"
         parts.append(f"UFGS {clause} cyber clause cited")
     elif findings.has_ufgs_25_division:
         parts.append("UFGS Division 25 referenced")
     adjacent = [h for h in findings.clause_hits if h not in _UFGS_FAMILIES]
     if adjacent:
-        parts.append(
-            "adjacent OT/ICS signals: " + ", ".join(sorted(adjacent)[:4])
-        )
+        parts.append("adjacent OT/ICS signals: " + ", ".join(sorted(adjacent)[:4]))
     if facts.agency:
         parts.append(f"agency: {facts.agency}")
     if findings.role_hits:
-        parts.append(
-            "roles called out: " + ", ".join(sorted(findings.role_hits)[:3])
-        )
+        parts.append("roles called out: " + ", ".join(sorted(findings.role_hits)[:3]))
     if findings.top_clearance != "NONE":
         parts.append(f"clearance: {findings.top_clearance.replace('_', '/')}")
     if sweet_spot:
-        parts.append(
-            "construction prime — cyber sub gap (high-probability easy win)"
-        )
+        parts.append("construction prime — cyber sub gap (high-probability easy win)")
     return " · ".join(parts)
 
 

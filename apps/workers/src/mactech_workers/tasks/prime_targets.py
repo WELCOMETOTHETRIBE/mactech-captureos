@@ -76,9 +76,7 @@ async def _upsert_prime_target(session, cand) -> UUID:
         )
     )
     return (
-        await session.execute(
-            select(PrimeTarget.id).where(PrimeTarget.dedupe_key == key)
-        )
+        await session.execute(select(PrimeTarget.id).where(PrimeTarget.dedupe_key == key))
     ).scalar_one()
 
 
@@ -158,9 +156,10 @@ async def find_batch(tenant_slug: str, *, limit: int = 30) -> dict[str, Any]:
         if tenant is None:
             return {"status": "error", "reason": "tenant_not_found"}
         rows = (
-            await session.execute(
-                text(
-                    """
+            (
+                await session.execute(
+                    text(
+                        """
                     select o.id
                     from opportunity_decision_vectors dv
                     join opportunities_raw o on o.id = dv.opportunity_id
@@ -172,10 +171,13 @@ async def find_batch(tenant_slug: str, *, limit: int = 30) -> dict[str, Any]:
                     group by o.id
                     limit :n
                     """
-                ),
-                {"t": str(tenant.id), "n": limit},
+                    ),
+                    {"t": str(tenant.id), "n": limit},
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
     processed = 0
     total_found = 0
@@ -189,9 +191,7 @@ async def find_batch(tenant_slug: str, *, limit: int = 30) -> dict[str, Any]:
             processed += 1
             total_found += res.get("found", 0)
             # Recompute the decision so the lane can flip to IDENTIFIED.
-            celery_app.send_task(
-                "mactech.decision.compute_one", args=[tenant_slug, str(opp_id)]
-            )
+            celery_app.send_task("mactech.decision.compute_one", args=[tenant_slug, str(opp_id)])
         except Exception as exc:
             log.warning("prime_targets find failed for %s: %s", opp_id, exc)
     return {"status": "ok", "opportunities": processed, "prime_targets_found": total_found}

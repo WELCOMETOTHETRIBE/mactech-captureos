@@ -147,11 +147,7 @@ def _build_blockers(
         )
 
     days_left = _days_until(expires_at)
-    if (
-        sam_status == "active"
-        and days_left is not None
-        and days_left <= EXPIRATION_WARNING_DAYS
-    ):
+    if sam_status == "active" and days_left is not None and days_left <= EXPIRATION_WARNING_DAYS:
         blockers.append(
             f"SAM.gov registration expires in {days_left} day(s) "
             f"({expires_at.isoformat() if expires_at else '?'}). Renew now "
@@ -188,14 +184,10 @@ async def get_tenant_eligibility(
     sam_block = SamRegistrationOut(
         status=sam_status,
         registration_date=(
-            t.sam_registration_date.isoformat()
-            if t.sam_registration_date
-            else None
+            t.sam_registration_date.isoformat() if t.sam_registration_date else None
         ),
         expires_at=(
-            t.sam_registration_expires_at.isoformat()
-            if t.sam_registration_expires_at
-            else None
+            t.sam_registration_expires_at.isoformat() if t.sam_registration_expires_at else None
         ),
         days_until_expiration=_days_until(t.sam_registration_expires_at),
         last_checked_at=(
@@ -208,22 +200,16 @@ async def get_tenant_eligibility(
         is_excluded=t.is_excluded,
         record_count=t.exclusions_record_count,
         last_checked_at=(
-            t.exclusions_last_checked_at.isoformat()
-            if t.exclusions_last_checked_at
-            else None
+            t.exclusions_last_checked_at.isoformat() if t.exclusions_last_checked_at else None
         ),
     )
     cyber_block = CyberPostureBlock(
         sprs_score=t.sprs_score,
         sprs_max=t.sprs_max or 110,
         sprs_assessment_date=(
-            t.sprs_assessment_date.isoformat()
-            if t.sprs_assessment_date
-            else None
+            t.sprs_assessment_date.isoformat() if t.sprs_assessment_date else None
         ),
-        sprs_synced_at=(
-            t.sprs_synced_at.isoformat() if t.sprs_synced_at else None
-        ),
+        sprs_synced_at=(t.sprs_synced_at.isoformat() if t.sprs_synced_at else None),
     )
 
     set_asides = list(t.set_aside_certifications or [])

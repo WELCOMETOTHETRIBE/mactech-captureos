@@ -17,24 +17,24 @@ Behaviour:
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from statistics import median
 from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
-
-from mactech_api.auth import RequestContext, get_request_context
 from mactech_db.models import AgencyNaicsIntel, OpportunityRaw
 from mactech_integrations.usaspending import UsaSpendingClient
 from mactech_integrations.usaspending.client import (
     UsaSpendingError,
     UsaSpendingRateLimitError,
 )
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+
+from mactech_api.auth import RequestContext, get_request_context
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["agency-intel"])
@@ -98,7 +98,7 @@ async def _fetch_from_usaspending(
     agency_name: str, naics_code: str, lookback_days: int
 ) -> tuple[list[dict[str, Any]], int]:
     """Returns (rows, sample_size_pulled). Each row is a flat dict."""
-    end = datetime.now(timezone.utc).date()
+    end = datetime.now(UTC).date()
     start = end - timedelta(days=lookback_days)
     rows: list[dict[str, Any]] = []
     async with UsaSpendingClient() as client:
@@ -163,11 +163,9 @@ def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _to_out(row: AgencyNaicsIntel) -> AgencyIntelOut:
-    age = datetime.now(timezone.utc) - row.refreshed_at
+    age = datetime.now(UTC) - row.refreshed_at
     age_hours = age.total_seconds() / 3600
-    fresh_threshold = (
-        FAILURE_TTL_DAYS * 24 if row.lookup_failed else CACHE_TTL_DAYS * 24
-    )
+    fresh_threshold = FAILURE_TTL_DAYS * 24 if row.lookup_failed else CACHE_TTL_DAYS * 24
     is_fresh = age_hours <= fresh_threshold
     top: list[TopRecipient] = []
     if row.top_recipients:
@@ -213,9 +211,7 @@ async def get_agency_intel(
     ctx: Annotated[RequestContext, Depends(get_request_context)],
 ) -> AgencyIntelOut:
     opp = (
-        await ctx.session.execute(
-            select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id)
-        )
+        await ctx.session.execute(select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id))
     ).scalar_one_or_none()
     if opp is None:
         raise HTTPException(status_code=404, detail="opportunity not found")
@@ -226,8 +222,7 @@ async def get_agency_intel(
         raise HTTPException(
             status_code=409,
             detail=(
-                "this opportunity is missing agency name or NAICS code; "
-                "agency intel needs both."
+                "this opportunity is missing agency name or NAICS code; agency intel needs both."
             ),
         )
 
@@ -249,9 +244,7 @@ async def get_agency_intel(
 
     # Fetch fresh.
     try:
-        rows, sample_size = await _fetch_from_usaspending(
-            agency_name, naics, LOOKBACK_DAYS
-        )
+        rows, sample_size = await _fetch_from_usaspending(agency_name, naics, LOOKBACK_DAYS)
         agg = _aggregate(rows)
         failure_note = None
         lookup_failed = False
@@ -291,14 +284,10 @@ async def get_agency_intel(
             lookback_days=LOOKBACK_DAYS,
             award_count=agg["award_count"],
             total_obligated=(
-                Decimal(str(agg["total_obligated"]))
-                if agg["total_obligated"] is not None
-                else None
+                Decimal(str(agg["total_obligated"])) if agg["total_obligated"] is not None else None
             ),
             avg_award_value=(
-                Decimal(str(agg["avg_award_value"]))
-                if agg["avg_award_value"] is not None
-                else None
+                Decimal(str(agg["avg_award_value"])) if agg["avg_award_value"] is not None else None
             ),
             median_award_value=(
                 Decimal(str(agg["median_award_value"]))
@@ -309,7 +298,7 @@ async def get_agency_intel(
             sample_size=sample_size,
             lookup_failed=lookup_failed,
             failure_note=failure_note,
-            refreshed_at=datetime.now(timezone.utc),
+            refreshed_at=datetime.now(UTC),
         )
         ctx.session.add(row)
         try:
@@ -329,14 +318,10 @@ async def get_agency_intel(
     else:
         cached.award_count = agg["award_count"]
         cached.total_obligated = (
-            Decimal(str(agg["total_obligated"]))
-            if agg["total_obligated"] is not None
-            else None
+            Decimal(str(agg["total_obligated"])) if agg["total_obligated"] is not None else None
         )
         cached.avg_award_value = (
-            Decimal(str(agg["avg_award_value"]))
-            if agg["avg_award_value"] is not None
-            else None
+            Decimal(str(agg["avg_award_value"])) if agg["avg_award_value"] is not None else None
         )
         cached.median_award_value = (
             Decimal(str(agg["median_award_value"]))
@@ -347,7 +332,7 @@ async def get_agency_intel(
         cached.sample_size = sample_size
         cached.lookup_failed = lookup_failed
         cached.failure_note = failure_note
-        cached.refreshed_at = datetime.now(timezone.utc)
+        cached.refreshed_at = datetime.now(UTC)
         await ctx.session.flush()
         row = cached
 

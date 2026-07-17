@@ -101,9 +101,7 @@ def _filename_from(url: str, headers: httpx.Headers | None) -> str:
     return base or "attachment"
 
 
-async def _download_one(
-    client: httpx.AsyncClient, url: str
-) -> tuple[bytes, str] | None:
+async def _download_one(client: httpx.AsyncClient, url: str) -> tuple[bytes, str] | None:
     """Return (bytes, filename) or None. Accepts any content type under the size
     ceiling — format is sniffed from the bytes downstream."""
     try:
@@ -131,9 +129,7 @@ async def _download_one(
         return None
 
 
-async def _gather_files(
-    links: list[str], *, sam_key: str
-) -> tuple[list[_DownloadedFile], int]:
+async def _gather_files(links: list[str], *, sam_key: str) -> tuple[list[_DownloadedFile], int]:
     """Download every link, expanding archives. Returns (files, attempted)."""
     headers = {"User-Agent": "mactech-captureos/attachment-fetcher"}
     files: list[_DownloadedFile] = []
@@ -163,9 +159,7 @@ async def _gather_files(
                     log.warning("unsafe/invalid archive %s: %s", filename, exc)
                     continue
             else:
-                files.append(
-                    _DownloadedFile(filename=filename, source_url=url, data=blob)
-                )
+                files.append(_DownloadedFile(filename=filename, source_url=url, data=blob))
     return files, attempted
 
 
@@ -227,7 +221,9 @@ async def persist_documents(
             status = "parsed"
             if extracted.text:
                 text_pieces.append(extracted.text)
-        elif extracted.format == "unknown" or (extracted.error and "unsupported" in extracted.error):
+        elif extracted.format == "unknown" or (
+            extracted.error and "unsupported" in extracted.error
+        ):
             status = "unsupported"
             failed += 1
         else:
@@ -283,9 +279,7 @@ async def _fetch_for_opportunity(opportunity_id: UUID) -> AttachmentFetchResult:
     session_factory = async_session_factory()
     async with session_factory() as session:
         opp = (
-            await session.execute(
-                select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id)
-            )
+            await session.execute(select(OpportunityRaw).where(OpportunityRaw.id == opportunity_id))
         ).scalar_one_or_none()
         if opp is None:
             return AttachmentFetchResult(
@@ -354,9 +348,7 @@ async def _fetch_for_opportunity(opportunity_id: UUID) -> AttachmentFetchResult:
         if combined:
             values["attachment_text"] = combined
         await session.execute(
-            update(OpportunityRaw)
-            .where(OpportunityRaw.id == opportunity_id)
-            .values(**values)
+            update(OpportunityRaw).where(OpportunityRaw.id == opportunity_id).values(**values)
         )
 
     if combined:
@@ -367,7 +359,9 @@ async def _fetch_for_opportunity(opportunity_id: UUID) -> AttachmentFetchResult:
             try:
                 celery_app.send_task(task, args=[str(opportunity_id)], kwargs=kwargs)
             except Exception as exc:
-                log.warning("attachment_fetcher: enqueue %s failed for %s: %s", task, opportunity_id, exc)
+                log.warning(
+                    "attachment_fetcher: enqueue %s failed for %s: %s", task, opportunity_id, exc
+                )
 
     status = "ok" if combined else "no_text"
     return AttachmentFetchResult(

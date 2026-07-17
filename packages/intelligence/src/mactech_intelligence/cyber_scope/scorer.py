@@ -10,7 +10,6 @@ from mactech_intelligence.cyber_scope.schemas import (
     DetectionResult,
     PursuitModel,
 )
-from mactech_intelligence.cyber_scope.ufgs_tiers import check_center_of_gravity
 
 PARSER_VERSION = "1.0.0"
 
@@ -67,7 +66,7 @@ def compute_score(
 
     for hits in dict_hits.values():
         for h in hits:
-            if h.category == "rmf_ato_emass" and h.normalized_term == "ATO":
+            if h.category == "rmf_ato_emass" and h.normalized_term == "ATO":  # noqa: SIM102
                 if not re.search(
                     r"\b(ICS|RMF|FRCS|UFGS|cyber|control\s+system|DoD)\b",
                     " ".join(x.surrounding_text for x in hits),
@@ -110,9 +109,7 @@ def recommend_pursuit_model(
     has_250511 = any(h.normalized_term == "25 05 11" for h in analysis.detected_categories.ufgs)
     has_frcs = bool(analysis.detected_categories.ufc_frcs)
     has_rmf = bool(analysis.detected_categories.rmf_ato_emass)
-    has_pds = any(
-        h.normalized_term == "27 05 29.00 10" for h in analysis.detected_categories.ufgs
-    )
+    has_pds = any(h.normalized_term == "27 05 29.00 10" for h in analysis.detected_categories.ufgs)
     hidden = bool(analysis.hidden_scope_indicators)
     milcon = bool(
         re.search(r"\b(MILCON|construction|facilities)\b", (title or ""), re.I)
@@ -133,10 +130,7 @@ def recommend_pursuit_model(
     if has_rmf and milcon:
         return "CYBER_SUPPORT_ONLY"
 
-    tier2_only = (
-        any(h.ufgs_tier == 2 for h in analysis.detected_categories.ufgs)
-        and not tier1
-    )
+    tier2_only = any(h.ufgs_tier == 2 for h in analysis.detected_categories.ufgs) and not tier1
     if tier2_only or hidden:
         return "CLARIFICATION_REQUIRED"
 
@@ -171,5 +165,7 @@ def missing_likely_requirements(analysis: CyberScopeAnalysis) -> list[str]:
     if has_tier1 and not has_rmf:
         missing.append("RMF/ATO deliverables (SSP, SAR, eMASS) likely required under DoDI 8510.01.")
     if analysis.hidden_scope_indicators and not has_tier1:
-        missing.append("Hidden control-system scope — request explicit UFC 4-010-06 / UFGS 25 05 11 flowdown.")
+        missing.append(
+            "Hidden control-system scope — request explicit UFC 4-010-06 / UFGS 25 05 11 flowdown."
+        )
     return missing

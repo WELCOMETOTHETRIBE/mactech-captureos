@@ -27,9 +27,7 @@ def test_pack_dictionary_matches_legacy_yaml():
 def test_construction_signals_match_legacy():
     import yaml
 
-    legacy = tuple(
-        yaml.safe_load(_DICT_YAML.read_text(encoding="utf-8"))["construction_signals"]
-    )
+    legacy = tuple(yaml.safe_load(_DICT_YAML.read_text(encoding="utf-8"))["construction_signals"])
     assert load_construction_signals() == legacy
 
 

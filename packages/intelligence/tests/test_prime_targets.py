@@ -7,8 +7,12 @@ from mactech_intelligence.prime_targets import AwardRow, rank_prime_targets
 
 def _a(name, uei, amt, agency="Department of Defense", naics="236220", award_id=None):
     return AwardRow(
-        recipient_name=name, recipient_uei=uei, award_id=award_id or f"{name}-{amt}",
-        award_amount=amt, awarding_agency=agency, naics_code=naics,
+        recipient_name=name,
+        recipient_uei=uei,
+        award_id=award_id or f"{name}-{amt}",
+        award_amount=amt,
+        awarding_agency=agency,
+        naics_code=naics,
     )
 
 

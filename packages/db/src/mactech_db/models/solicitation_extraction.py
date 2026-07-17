@@ -17,9 +17,8 @@ the latest extraction run.
 """
 
 from datetime import datetime
-from uuid import UUID
-
 from decimal import Decimal
+from uuid import UUID
 
 from sqlalchemy import (
     TIMESTAMP,
@@ -37,7 +36,6 @@ from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mactech_db.base import Base
-
 
 # Allowed extraction statuses. Persisted as String(16).
 EXTRACTION_STATUSES = ("pending", "running", "complete", "failed")
@@ -87,15 +85,9 @@ class SolicitationExtraction(Base):
     source_text_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     description_chars: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    compliance_count: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="0"
-    )
-    requirements_count: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="0"
-    )
-    evaluation_count: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="0"
-    )
+    compliance_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    requirements_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    evaluation_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
     # Provenance + cost tracking — mirrors OpportunityBrief.
     model: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -150,13 +142,9 @@ class ComplianceMatrixItem(Base):
     item_id: Mapped[str] = mapped_column(String(32), nullable=False)
     statement: Mapped[str] = mapped_column(Text, nullable=False)
     section_l_citation: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    pass_fail: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("false")
-    )
+    pass_fail: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    sort_order: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="0"
-    )
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
@@ -195,9 +183,7 @@ class EvaluationPassFailItem(Base):
 
     statement: Mapped[str] = mapped_column(Text, nullable=False)
     source_citation: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    sort_order: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="0"
-    )
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
@@ -239,9 +225,7 @@ class EvaluationScoredFactor(Base):
     weight: Mapped[Decimal | None] = mapped_column(Numeric(6, 3), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_citation: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    sort_order: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="0"
-    )
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
@@ -278,12 +262,8 @@ class RequirementMatrixItem(Base):
     item_id: Mapped[str] = mapped_column(String(32), nullable=False)
     statement: Mapped[str] = mapped_column(Text, nullable=False)
     source_citation: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    category: Mapped[str] = mapped_column(
-        String(32), nullable=False, server_default="other"
-    )
-    sort_order: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="0"
-    )
+    category: Mapped[str] = mapped_column(String(32), nullable=False, server_default="other")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()

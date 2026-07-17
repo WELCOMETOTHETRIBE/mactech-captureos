@@ -1,8 +1,8 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from mactech_api.routes.opportunities import classify_ingest
 
-NOW = datetime(2026, 7, 15, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 15, 12, 0, tzinfo=UTC)
 FRESH = NOW - timedelta(hours=1)
 STALE = NOW - timedelta(days=19)
 

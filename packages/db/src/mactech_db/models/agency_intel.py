@@ -28,7 +28,8 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mactech_db.base import Base
@@ -62,15 +63,9 @@ class AgencyNaicsIntel(Base):
 
     # Aggregates over the last `lookback_days` for this (agency, naics).
     award_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    total_obligated: Mapped[float | None] = mapped_column(
-        Numeric(16, 2), nullable=True
-    )
-    avg_award_value: Mapped[float | None] = mapped_column(
-        Numeric(14, 2), nullable=True
-    )
-    median_award_value: Mapped[float | None] = mapped_column(
-        Numeric(14, 2), nullable=True
-    )
+    total_obligated: Mapped[float | None] = mapped_column(Numeric(16, 2), nullable=True)
+    avg_award_value: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    median_award_value: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
 
     # Top recipients by total $: list of {name, uei, total, award_count}.
     top_recipients: Mapped[list | None] = mapped_column(JSONB, nullable=True)

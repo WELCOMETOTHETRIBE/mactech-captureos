@@ -61,9 +61,7 @@ def generate_suggested_actions(analysis: CyberScopeAnalysis) -> list[SuggestedAc
             )
         )
 
-    tier8 = any(
-        h.ufgs_tier == 8 for h in analysis.detected_categories.ufgs
-    )
+    tier8 = any(h.ufgs_tier == 8 for h in analysis.detected_categories.ufgs)
     if tier8 and not analysis.ufgs_tier_1_hit:
         actions.append(
             SuggestedAction(

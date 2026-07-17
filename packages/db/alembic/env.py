@@ -29,8 +29,8 @@ for _env_file in _env_candidates:
             os.environ.setdefault(key.strip(), value.strip())
         break
 
-from mactech_db.base import Base  # noqa: E402
 from mactech_db import models  # noqa: E402, F401  -- register models with metadata
+from mactech_db.base import Base  # noqa: E402
 from mactech_db.url import to_asyncpg_url  # noqa: E402
 
 config = context.config

@@ -20,8 +20,16 @@ _DEFAULT_OWNER = "patrick-caruso"
 # Route an action to a founder by keywords in the action text.
 _OWNER_ROUTES: list[tuple[tuple[str, ...], str]] = [
     (("nda", "teaming", "legal", "approve", "posture"), "john-milso"),
-    (("capability brief", "capability statement", "past performance", "past-performance",
-      "quality"), "brian-macdonald"),
+    (
+        (
+            "capability brief",
+            "capability statement",
+            "past performance",
+            "past-performance",
+            "quality",
+        ),
+        "brian-macdonald",
+    ),
     (("network", "infrastructure", "architecture"), "james-adams"),
 ]
 
@@ -120,8 +128,10 @@ def build_pursuit_plan(inp: PlanInputs) -> PursuitPlan:
     next_actions: list[PursuitAction] = []
     for i, text in enumerate(actions_text):
         action = text
-        if prime_names and ("prime target" in text.lower() or ("contact" in text.lower()
-                            and "liaison" in text.lower())):
+        if prime_names and (
+            "prime target" in text.lower()
+            or ("contact" in text.lower() and "liaison" in text.lower())
+        ):
             action = f"{text} — top targets: {', '.join(prime_names[:3])}"
         next_actions.append(
             PursuitAction(

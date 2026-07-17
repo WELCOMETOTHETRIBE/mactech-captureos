@@ -113,24 +113,16 @@ class SerpApiClient:
         async for attempt in AsyncRetrying(
             wait=wait_random_exponential(multiplier=1, max=20),
             stop=stop_after_attempt(3),
-            retry=retry_if_exception_type(
-                (httpx.TransportError, SerpApiRateLimitError)
-            ),
+            retry=retry_if_exception_type((httpx.TransportError, SerpApiRateLimitError)),
             reraise=True,
         ):
             with attempt:
-                resp = await self._http.get(
-                    f"{self._base_url}/search.json", params=params
-                )
+                resp = await self._http.get(f"{self._base_url}/search.json", params=params)
                 if resp.status_code == 429:
-                    raise SerpApiRateLimitError(
-                        "SerpAPI 429 — exceeded plan rate; back off"
-                    )
+                    raise SerpApiRateLimitError("SerpAPI 429 — exceeded plan rate; back off")
                 if resp.status_code >= 400:
                     body_preview = resp.text[:300]
-                    raise SerpApiError(
-                        f"SerpAPI returned {resp.status_code}: {body_preview}"
-                    )
+                    raise SerpApiError(f"SerpAPI returned {resp.status_code}: {body_preview}")
                 payload = resp.json()
                 if "error" in payload:
                     raise SerpApiError(f"SerpAPI error: {payload['error']!s}")
@@ -140,9 +132,7 @@ class SerpApiClient:
         raise SerpApiError("SerpAPI: retry loop exited unexpectedly")
 
 
-def _parse_response(
-    query: str, engine: str, payload: dict
-) -> SerpApiSearchResponse:
+def _parse_response(query: str, engine: str, payload: dict) -> SerpApiSearchResponse:
     organic_raw = payload.get("organic_results") or []
     organic = [
         SerpApiOrganicResult(

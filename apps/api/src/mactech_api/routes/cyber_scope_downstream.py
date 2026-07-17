@@ -6,11 +6,6 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
-
-from mactech_api.auth import RequestContext, get_request_context
 from mactech_db.audit import record_event
 from mactech_db.models import (
     EVENT_CYBER_SCOPE_ADDED_TO_PIPELINE,
@@ -27,15 +22,20 @@ from mactech_db.models import (
     ProposalOutline,
     Pursuit,
 )
+from mactech_intelligence.cyber_scope.db_adapter import schema_from_persisted
 from mactech_intelligence.cyber_scope.downstream import (
     build_bid_no_bid_review,
     build_clause_risk_entries,
     build_proposal_outline,
 )
-from mactech_intelligence.cyber_scope.db_adapter import schema_from_persisted
 from mactech_intelligence.cyber_scope.schemas import (
     CyberScopeAnalysis as CyberScopeAnalysisSchema,
 )
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+
+from mactech_api.auth import RequestContext, get_request_context
 
 router = APIRouter(tags=["cyber-scope"])
 
@@ -159,9 +159,7 @@ async def _load_analysis(
     return row, _row_to_schema(row), opp
 
 
-async def downstream_links(
-    ctx: RequestContext, analysis_id: UUID
-) -> DownstreamLinksOut:
+async def downstream_links(ctx: RequestContext, analysis_id: UUID) -> DownstreamLinksOut:
     tenant_id = ctx.tenant.id
     log = (
         await ctx.session.execute(
@@ -210,7 +208,9 @@ async def downstream_links(
         clause_risk_log_id=str(log) if log else None,
         bid_no_bid_review_id=str(review[0]) if review else None,
         proposal_outline_id=str(outline) if outline else None,
-        pursuit_id=str(pursuit_id) if pursuit_id else (str(review[1]) if review and review[1] else None),
+        pursuit_id=str(pursuit_id)
+        if pursuit_id
+        else (str(review[1]) if review and review[1] else None),
     )
 
 
@@ -265,12 +265,16 @@ async def create_clause_risk_log(
     ).scalar_one_or_none()
     if existing:
         entries = (
-            await ctx.session.execute(
-                select(ClauseRiskLogEntry)
-                .where(ClauseRiskLogEntry.log_id == existing.id)
-                .order_by(ClauseRiskLogEntry.sort_order)
+            (
+                await ctx.session.execute(
+                    select(ClauseRiskLogEntry)
+                    .where(ClauseRiskLogEntry.log_id == existing.id)
+                    .order_by(ClauseRiskLogEntry.sort_order)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         return _log_to_out(existing, list(entries))
 
     title = f"Clause risk log — {(opp.title if opp else 'Opportunity')[:200]}"
@@ -317,12 +321,16 @@ async def create_clause_risk_log(
     await ctx.session.commit()
 
     entries = (
-        await ctx.session.execute(
-            select(ClauseRiskLogEntry)
-            .where(ClauseRiskLogEntry.log_id == log.id)
-            .order_by(ClauseRiskLogEntry.sort_order)
+        (
+            await ctx.session.execute(
+                select(ClauseRiskLogEntry)
+                .where(ClauseRiskLogEntry.log_id == log.id)
+                .order_by(ClauseRiskLogEntry.sort_order)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return _log_to_out(log, list(entries))
 
 
@@ -345,12 +353,16 @@ async def get_clause_risk_log(
     if log is None:
         raise HTTPException(status_code=404, detail="Clause risk log not found")
     entries = (
-        await ctx.session.execute(
-            select(ClauseRiskLogEntry)
-            .where(ClauseRiskLogEntry.log_id == log.id)
-            .order_by(ClauseRiskLogEntry.sort_order)
+        (
+            await ctx.session.execute(
+                select(ClauseRiskLogEntry)
+                .where(ClauseRiskLogEntry.log_id == log.id)
+                .order_by(ClauseRiskLogEntry.sort_order)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return _log_to_out(log, list(entries))
 
 
@@ -473,9 +485,7 @@ async def create_proposal_outline(
     if existing:
         return _outline_to_out(existing)
 
-    prefill = build_proposal_outline(
-        schema, opportunity_title=opp.title if opp else None
-    )
+    prefill = build_proposal_outline(schema, opportunity_title=opp.title if opp else None)
     outline = ProposalOutline(
         tenant_id=ctx.tenant.id,
         opportunity_id=row.opportunity_id,
@@ -557,7 +567,9 @@ async def add_to_pipeline(
 ) -> AddToPipelineOut:
     row, schema, opp = await _load_analysis(ctx, analysis_id)
     if row.opportunity_id is None:
-        raise HTTPException(status_code=400, detail="Pipeline add requires a SAM-linked opportunity")
+        raise HTTPException(
+            status_code=400, detail="Pipeline add requires a SAM-linked opportunity"
+        )
 
     tenant_id = ctx.tenant.id
     opp_id = row.opportunity_id

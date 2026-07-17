@@ -8,18 +8,17 @@ the endpoint so the UI doesn't 404.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from mactech_db.models import CapabilityStatement, Founder
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from mactech_api.auth import RequestContext, get_request_context
 from mactech_api.embed_helpers import embed_capability_inline
-from mactech_db.models import CapabilityStatement, Founder
 
 router = APIRouter(tags=["library"])
 
@@ -59,28 +58,30 @@ async def list_capability_statements(
     tenant_id = ctx.tenant.id
 
     rows = (
-        await session.execute(
-            select(CapabilityStatement)
-            .where(CapabilityStatement.tenant_id == tenant_id)
-            .order_by(CapabilityStatement.title)
+        (
+            await session.execute(
+                select(CapabilityStatement)
+                .where(CapabilityStatement.tenant_id == tenant_id)
+                .order_by(CapabilityStatement.title)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     # Pull founders once for the related_founders join.
     founders_by_id: dict[UUID, Founder] = {
         f.id: f
-        for f in (
-            await session.execute(
-                select(Founder).where(Founder.tenant_id == tenant_id)
-            )
-        ).scalars().all()
+        for f in (await session.execute(select(Founder).where(Founder.tenant_id == tenant_id)))
+        .scalars()
+        .all()
     }
     founders_by_slug: dict[str, Founder] = {f.slug: f for f in founders_by_id.values()}
 
     items: list[CapabilityStatementOut] = []
     # Detect embedding presence with a single follow-up query rather than
     # bringing the giant vector column into the ORM.
-    has_emb_rows = await session.execute(
+    await session.execute(
         select(CapabilityStatement.id).where(
             CapabilityStatement.tenant_id == tenant_id,
             # `embedding is not null` via raw text fragment
@@ -88,6 +89,7 @@ async def list_capability_statements(
     )
     embedded_ids = set()
     from sqlalchemy import text as _text
+
     embedded_rows = await session.execute(
         _text(
             "select id::text from capability_statements "
@@ -108,9 +110,7 @@ async def list_capability_statements(
             if slug and slug in founders_by_slug:
                 f = founders_by_slug[slug]
                 related.append(
-                    CapabilityFounderRef(
-                        slug=f.slug, full_name=f.full_name, pillar=f.pillar
-                    )
+                    CapabilityFounderRef(slug=f.slug, full_name=f.full_name, pillar=f.pillar)
                 )
         items.append(
             CapabilityStatementOut(
@@ -154,23 +154,23 @@ async def _resolve_founder_refs(
     if not slugs:
         return []
     founders = (
-        await session.execute(
-            select(Founder).where(
-                Founder.tenant_id == tenant_id,
-                Founder.slug.in_(slugs),
+        (
+            await session.execute(
+                select(Founder).where(
+                    Founder.tenant_id == tenant_id,
+                    Founder.slug.in_(slugs),
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     by_slug = {f.slug: f for f in founders}
     out: list[CapabilityFounderRef] = []
     for slug in slugs:
         f = by_slug.get(slug)
         if f is not None:
-            out.append(
-                CapabilityFounderRef(
-                    slug=f.slug, full_name=f.full_name, pillar=f.pillar
-                )
-            )
+            out.append(CapabilityFounderRef(slug=f.slug, full_name=f.full_name, pillar=f.pillar))
     return out
 
 
@@ -193,8 +193,7 @@ async def _to_out(
         embed_check = (
             await session.execute(
                 _text(
-                    "select 1 from capability_statements "
-                    "where id = :id and embedding is not null"
+                    "select 1 from capability_statements where id = :id and embedding is not null"
                 ),
                 {"id": str(cs.id)},
             )
@@ -283,9 +282,7 @@ async def create_capability_statement(
     return await _to_out(cs, ctx.session, has_embedding=has_embedding)
 
 
-@router.patch(
-    "/capability-statements/{cs_id}", response_model=CapabilityStatementOut
-)
+@router.patch("/capability-statements/{cs_id}", response_model=CapabilityStatementOut)
 async def update_capability_statement(
     cs_id: UUID,
     body: UpdateCapabilityStatementRequest,
@@ -335,10 +332,7 @@ async def update_capability_statement(
         from sqlalchemy import text as _text
 
         await ctx.session.execute(
-            _text(
-                "update capability_statements set embedding = null "
-                "where id = :id"
-            ),
+            _text("update capability_statements set embedding = null where id = :id"),
             {"id": str(cs.id)},
         )
         await embed_capability_inline(
@@ -350,9 +344,7 @@ async def update_capability_statement(
     return await _to_out(cs, ctx.session)
 
 
-@router.delete(
-    "/capability-statements/{cs_id}", status_code=status.HTTP_204_NO_CONTENT
-)
+@router.delete("/capability-statements/{cs_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_capability_statement(
     cs_id: UUID,
     ctx: Annotated[RequestContext, Depends(get_request_context)],

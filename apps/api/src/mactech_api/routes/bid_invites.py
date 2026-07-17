@@ -15,16 +15,12 @@ side:
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime, time as dt_time
+from datetime import UTC, datetime
+from datetime import time as dt_time
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
-
-from mactech_api.auth import RequestContext, get_request_context
 from mactech_db.audit import record_event
 from mactech_db.models import (
     BID_INVITE_STATUSES,
@@ -39,6 +35,11 @@ from mactech_intelligence.bid_invite_routing import (
     project_group_key,
     suggest_founder,
 )
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+
+from mactech_api.auth import RequestContext, get_request_context
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["bid-invites"])
@@ -149,9 +150,7 @@ def _to_item(
         suggestion_reason=reason,
     )
     if cls is BidInviteDetail:
-        return BidInviteDetail(
-            **common, text_body=inv.text_body, html_body=inv.html_body
-        )
+        return BidInviteDetail(**common, text_body=inv.text_body, html_body=inv.html_body)
     return cls(**common)
 
 
@@ -193,11 +192,7 @@ async def list_bid_invites(
     counts["unseen"] = await unseen_count(ctx)
 
     rows = (
-        (
-            await ctx.session.execute(
-                base.order_by(BidInvite.arrived_at.desc()).limit(limit)
-            )
-        )
+        (await ctx.session.execute(base.order_by(BidInvite.arrived_at.desc()).limit(limit)))
         .scalars()
         .all()
     )
@@ -206,9 +201,7 @@ async def list_bid_invites(
         # Statuses only — "unseen" overlaps 'new' and would double-count.
         total=sum(counts[s] for s in BID_INVITE_STATUSES),
         counts=counts,
-        items=[
-            _to_item(r, founder_names=founder_names, seen_at=seen_at) for r in rows
-        ],
+        items=[_to_item(r, founder_names=founder_names, seen_at=seen_at) for r in rows],
     )
 
 
@@ -237,9 +230,7 @@ async def unseen_count(ctx: RequestContext) -> int:
 async def _founder_names(ctx: RequestContext) -> dict[str, str]:
     rows = (
         await ctx.session.execute(
-            select(Founder.slug, Founder.full_name).where(
-                Founder.tenant_id == ctx.tenant.id
-            )
+            select(Founder.slug, Founder.full_name).where(Founder.tenant_id == ctx.tenant.id)
         )
     ).all()
     return {slug: name for slug, name in rows}
@@ -311,9 +302,7 @@ async def update_bid_invite_status(
         )
     inv = await _get_owned(invite_id, ctx)
     inv.status = body.status
-    return _to_item(
-        inv, seen_at=ctx.founder.bid_invites_seen_at if ctx.founder else None
-    )
+    return _to_item(inv, seen_at=ctx.founder.bid_invites_seen_at if ctx.founder else None)
 
 
 class PursueRequest(BaseModel):
@@ -345,9 +334,7 @@ async def pursue_bid_invite(
     second call returns the existing pursuit.
     """
     if body.stage not in ("lead", "qualify", "pursue"):
-        raise HTTPException(
-            status_code=422, detail="stage must be lead, qualify, or pursue"
-        )
+        raise HTTPException(status_code=422, detail="stage must be lead, qualify, or pursue")
     inv = await _get_owned(invite_id, ctx)
     session = ctx.session
     group_key = inv.group_key or project_group_key(inv.project_name, inv.subject)
@@ -369,9 +356,7 @@ async def pursue_bid_invite(
     if inv.bid_package:
         title = f"{title}: {inv.bid_package}"
     deadline = (
-        datetime.combine(inv.bid_due_on, dt_time(17, 0), tzinfo=UTC)
-        if inv.bid_due_on
-        else None
+        datetime.combine(inv.bid_due_on, dt_time(17, 0), tzinfo=UTC) if inv.bid_due_on else None
     )
 
     opp = (
@@ -393,9 +378,7 @@ async def pursue_bid_invite(
             agency=inv.gc_company,
             response_deadline=deadline,
             posted_at=inv.sent_at or inv.received_at,
-            place_of_performance=(
-                {"raw": inv.location} if inv.location else None
-            ),
+            place_of_performance=({"raw": inv.location} if inv.location else None),
             raw_payload={
                 "origin": "bid_invite",
                 "bid_invite_id": str(inv.id),
@@ -422,9 +405,7 @@ async def pursue_bid_invite(
     owner_slug = body.owner_founder_slug
     if created:
         if owner_slug is None:
-            suggestion = suggest_founder(
-                inv.bid_package, inv.project_name, inv.subject
-            )
+            suggestion = suggest_founder(inv.bid_package, inv.project_name, inv.subject)
             owner_slug = suggestion[0] if suggestion else None
         owner_id = None
         if owner_slug:
@@ -456,9 +437,7 @@ async def pursue_bid_invite(
         try:
             await session.flush()
         except IntegrityError:
-            raise HTTPException(
-                status_code=409, detail="pursuit already exists"
-            ) from None
+            raise HTTPException(status_code=409, detail="pursuit already exists") from None
         await record_event(
             session,
             tenant_id=ctx.tenant.id,
@@ -512,11 +491,7 @@ async def reparse_bid_invites(
     and after parser improvements.
     """
     rows = (
-        (
-            await ctx.session.execute(
-                select(BidInvite).where(BidInvite.tenant_id == ctx.tenant.id)
-            )
-        )
+        (await ctx.session.execute(select(BidInvite).where(BidInvite.tenant_id == ctx.tenant.id)))
         .scalars()
         .all()
     )

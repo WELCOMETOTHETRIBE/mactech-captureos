@@ -104,9 +104,7 @@ class ApifyClient:
         async for attempt in AsyncRetrying(
             wait=wait_random_exponential(multiplier=1, max=20),
             stop=stop_after_attempt(3),
-            retry=retry_if_exception_type(
-                (httpx.TransportError, ApifyRateLimitError)
-            ),
+            retry=retry_if_exception_type((httpx.TransportError, ApifyRateLimitError)),
             reraise=True,
         ):
             with attempt:
@@ -114,15 +112,10 @@ class ApifyClient:
                     method, f"{self._base_url}{path}", json=json, params=params
                 )
                 if resp.status_code == 429:
-                    raise ApifyRateLimitError(
-                        f"Apify 429 on {method} {path} — backing off"
-                    )
+                    raise ApifyRateLimitError(f"Apify 429 on {method} {path} — backing off")
                 if resp.status_code >= 400:
                     body_preview = resp.text[:300]
-                    raise ApifyError(
-                        f"Apify {resp.status_code} on {method} {path}: "
-                        f"{body_preview}"
-                    )
+                    raise ApifyError(f"Apify {resp.status_code} on {method} {path}: {body_preview}")
                 return resp.json()
         raise ApifyError("retry loop exited unexpectedly")
 
@@ -222,29 +215,21 @@ class ApifyClient:
         async for attempt in AsyncRetrying(
             wait=wait_random_exponential(multiplier=1, max=20),
             stop=stop_after_attempt(3),
-            retry=retry_if_exception_type(
-                (httpx.TransportError, ApifyRateLimitError)
-            ),
+            retry=retry_if_exception_type((httpx.TransportError, ApifyRateLimitError)),
             reraise=True,
         ):
             with attempt:
-                resp = await self._http.get(
-                    f"{self._base_url}{path}", params=params
-                )
+                resp = await self._http.get(f"{self._base_url}{path}", params=params)
                 if resp.status_code == 429:
-                    raise ApifyRateLimitError(
-                        "Apify 429 on dataset_items — backing off"
-                    )
+                    raise ApifyRateLimitError("Apify 429 on dataset_items — backing off")
                 if resp.status_code >= 400:
                     raise ApifyError(
-                        f"Apify {resp.status_code} on dataset_items: "
-                        f"{resp.text[:300]}"
+                        f"Apify {resp.status_code} on dataset_items: {resp.text[:300]}"
                     )
                 items = resp.json()
                 if not isinstance(items, list):
                     raise ApifyError(
-                        f"Apify dataset_items returned non-list: "
-                        f"{type(items).__name__}"
+                        f"Apify dataset_items returned non-list: {type(items).__name__}"
                     )
                 return [ApifyDatasetItem(payload=i) for i in items]
         raise ApifyError("dataset_items retry loop exited unexpectedly")
@@ -269,9 +254,7 @@ def _quote_actor_id(actor_id: str) -> str:
     return actor_id.replace("/", "~")
 
 
-def verify_webhook_signature(
-    body: bytes, signature: str | None, secret: str
-) -> bool:
+def verify_webhook_signature(body: bytes, signature: str | None, secret: str) -> bool:
     """Constant-time HMAC-SHA256 verification of an Apify webhook.
 
     Apify lets you set a per-webhook secret which it sends in the
@@ -288,7 +271,5 @@ def verify_webhook_signature(
         return False
     if scheme.lower() != "sha256":
         return False
-    expected = hmac.new(
-        secret.encode("utf-8"), body, hashlib.sha256
-    ).hexdigest()
+    expected = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, sent_hex.strip())

@@ -42,7 +42,10 @@ def evaluate_gates(inp: DecisionInputs) -> list[Gate]:
     if inp.response_deadline is not None and inp.response_deadline < as_of:
         gates.append(
             Gate(
-                "EXPIRED", "fail", "hard", reason_code="EXPIRED",
+                "EXPIRED",
+                "fail",
+                "hard",
+                reason_code="EXPIRED",
                 detail=f"response deadline {inp.response_deadline} < {as_of}",
             )
         )
@@ -52,14 +55,20 @@ def evaluate_gates(inp: DecisionInputs) -> list[Gate]:
         if inp.has_sub_work_package:
             gates.append(
                 Gate(
-                    "INELIGIBLE_SET_ASIDE", "fail", "soft", reason_code="INELIGIBLE_SET_ASIDE",
+                    "INELIGIBLE_SET_ASIDE",
+                    "fail",
+                    "soft",
+                    reason_code="INELIGIBLE_SET_ASIDE",
                     detail=f"set-aside {inp.set_aside!r} blocks prime; sub path remains",
                 )
             )
         else:
             gates.append(
                 Gate(
-                    "INELIGIBLE_SET_ASIDE", "fail", "hard", reason_code="INELIGIBLE_SET_ASIDE",
+                    "INELIGIBLE_SET_ASIDE",
+                    "fail",
+                    "hard",
+                    reason_code="INELIGIBLE_SET_ASIDE",
                     detail=f"set-aside {inp.set_aside!r} ineligible, no sub path",
                 )
             )
@@ -68,7 +77,10 @@ def evaluate_gates(inp: DecisionInputs) -> list[Gate]:
     if not inp.has_any_relevant_scope:
         gates.append(
             Gate(
-                "NO_REAL_MACTECH_SCOPE", "fail", "hard", reason_code="NO_REAL_MACTECH_SCOPE",
+                "NO_REAL_MACTECH_SCOPE",
+                "fail",
+                "hard",
+                reason_code="NO_REAL_MACTECH_SCOPE",
                 detail="no direct-cyber, FRCS/OT, training, or facility-adjacency signal",
             )
         )
@@ -79,15 +91,30 @@ def evaluate_gates(inp: DecisionInputs) -> list[Gate]:
         # suppresses PRIME_NOW (recorded soft, engine routes to sub).
         no_sub = not inp.has_sub_work_package
         if code == "VEHICLE_UNAVAILABLE" and no_sub:
-            gates.append(Gate(code, "fail", "hard", reason_code=code, detail="mandatory vehicle, no sub path"))
+            gates.append(
+                Gate(
+                    code, "fail", "hard", reason_code=code, detail="mandatory vehicle, no sub path"
+                )
+            )
         else:
-            gates.append(Gate(code, "fail", "soft", reason_code=code, detail="prime suppressed; sub path evaluated"))
+            gates.append(
+                Gate(
+                    code,
+                    "fail",
+                    "soft",
+                    reason_code=code,
+                    detail="prime suppressed; sub path evaluated",
+                )
+            )
 
     # 5. Construction self-performance dominates → suppress PRIME_NOW, go SUB.
     if inp.naics_is_construction and inp.has_construction_context and not inp.has_direct_cyber:
         gates.append(
             Gate(
-                "CONSTRUCTION_SELF_PERFORM", "fail", "soft", reason_code="SCOPE_TOO_LARGE",
+                "CONSTRUCTION_SELF_PERFORM",
+                "fail",
+                "soft",
+                reason_code="SCOPE_TOO_LARGE",
                 detail="construction-dominant scope; prime suppressed, sub path evaluated",
             )
         )
@@ -99,7 +126,10 @@ def evaluate_gates(inp: DecisionInputs) -> list[Gate]:
     ):
         gates.append(
             Gate(
-                "SCOPE_TOO_LARGE", "fail", "soft", reason_code="SCOPE_TOO_LARGE",
+                "SCOPE_TOO_LARGE",
+                "fail",
+                "soft",
+                reason_code="SCOPE_TOO_LARGE",
                 detail=f"est. value {inp.estimated_value_high:,.0f} > prime max "
                 f"{inp.capacity.prime_value_max:,.0f}",
             )
@@ -111,7 +141,10 @@ def evaluate_gates(inp: DecisionInputs) -> list[Gate]:
     if inp.incumbent_excluded is True:
         gates.append(
             Gate(
-                "INCUMBENT_EXCLUDED", "fail", "soft", reason_code=None,
+                "INCUMBENT_EXCLUDED",
+                "fail",
+                "soft",
+                reason_code=None,
                 detail="incumbent is on the SAM exclusions list — strong recompete signal",
                 source="exclusions_cache",
             )
@@ -122,7 +155,10 @@ def evaluate_gates(inp: DecisionInputs) -> list[Gate]:
     if inp.completeness in ("metadata_only", "description_only"):
         gates.append(
             Gate(
-                "INCOMPLETE_PACKAGE", "unknown", "soft", reason_code=None,
+                "INCOMPLETE_PACKAGE",
+                "unknown",
+                "soft",
+                reason_code=None,
                 detail=f"analysis based on {inp.completeness}; attachments not fully parsed",
             )
         )
@@ -137,9 +173,5 @@ def has_hard_fail(gates: list[Gate]) -> bool:
 def prime_suppressed(gates: list[Gate]) -> bool:
     codes = {g.gate_code for g in gates if g.status == "fail"}
     return bool(
-        codes
-        & (
-            PRIME_BLOCKING_BARRIERS
-            | {"CONSTRUCTION_SELF_PERFORM", "SCOPE_TOO_LARGE"}
-        )
+        codes & (PRIME_BLOCKING_BARRIERS | {"CONSTRUCTION_SELF_PERFORM", "SCOPE_TOO_LARGE"})
     )

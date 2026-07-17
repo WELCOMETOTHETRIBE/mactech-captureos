@@ -11,12 +11,12 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
-    Text,
     UniqueConstraint,
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mactech_db.base import Base
@@ -82,9 +82,7 @@ class CyberScopeAnalysis(Base):
     ufgs_center_of_gravity: Mapped[bool] = mapped_column(
         nullable=False, server_default=text("false")
     )
-    ufgs_tier_1_hit: Mapped[bool] = mapped_column(
-        nullable=False, server_default=text("false")
-    )
+    ufgs_tier_1_hit: Mapped[bool] = mapped_column(nullable=False, server_default=text("false"))
     created_by_id: Mapped[UUID | None] = mapped_column(
         PgUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),

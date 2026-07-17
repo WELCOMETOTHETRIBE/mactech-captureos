@@ -30,13 +30,13 @@ from datetime import UTC, date, datetime
 from typing import Any
 from urllib.parse import urlparse
 
+from mactech_db import unscoped_session
+from mactech_db.models import AgencyEvent, ApifyRun
+from mactech_integrations.apify import ApifyClient, ApifyError
+from mactech_intelligence import AnthropicLLMClient
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from mactech_db import unscoped_session
-from mactech_db.models import AgencyEvent, ApifyRun
-from mactech_intelligence import AnthropicLLMClient
-from mactech_integrations.apify import ApifyClient, ApifyError
 from mactech_workers.celery_app import celery_app
 
 log = logging.getLogger(__name__)
@@ -169,9 +169,7 @@ async def _kick_and_ingest() -> dict[str, Any]:
     # "Future attached to a different loop" cross-task bug.
     api_token = os.environ.get("APIFY_API_TOKEN", "")
     if not api_token:
-        log.warning(
-            "APIFY_API_TOKEN not set; skipping industry-days kick"
-        )
+        log.warning("APIFY_API_TOKEN not set; skipping industry-days kick")
         await _record_skipped_run(
             capability="industry_days",
             actor_id=WEBSITE_CONTENT_CRAWLER_ACTOR,
@@ -190,8 +188,7 @@ async def _kick_and_ingest() -> dict[str, Any]:
         "saveHtml": False,
         "saveMarkdown": True,
         "removeElementsCssSelector": (
-            "nav, footer, header, .ads, .menu, .skip-link, .breadcrumbs, "
-            "form, aside, .sidebar"
+            "nav, footer, header, .ads, .menu, .skip-link, .breadcrumbs, form, aside, .sidebar"
         ),
         "keepUrlFragments": False,
     }
@@ -338,17 +335,11 @@ async def _record_synthetic_audit(
 
 
 @celery_app.task(name="mactech.apify.ingest_industry_days")
-def ingest_industry_days_task(
-    audit_id: str, dataset_id: str, apify_run_id: str
-) -> dict[str, Any]:
-    return asdict(
-        asyncio.run(_ingest(audit_id, dataset_id, apify_run_id))
-    )
+def ingest_industry_days_task(audit_id: str, dataset_id: str, apify_run_id: str) -> dict[str, Any]:
+    return asdict(asyncio.run(_ingest(audit_id, dataset_id, apify_run_id)))
 
 
-async def _ingest(
-    audit_id: str, dataset_id: str, apify_run_id: str
-) -> IndustryDayIngestStats:
+async def _ingest(audit_id: str, dataset_id: str, apify_run_id: str) -> IndustryDayIngestStats:
     api_token = os.environ.get("APIFY_API_TOKEN", "")
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
 
@@ -367,9 +358,7 @@ async def _ingest(
         try:
             offset = 0
             while True:
-                page = await client.dataset_items(
-                    dataset_id, limit=200, offset=offset, clean=True
-                )
+                page = await client.dataset_items(dataset_id, limit=200, offset=offset, clean=True)
                 if not page:
                     break
                 items.extend(p.payload for p in page)
@@ -394,14 +383,11 @@ async def _ingest(
 
     if not anthropic_key:
         log.warning(
-            "ANTHROPIC_API_KEY not set; skipping LLM extraction "
-            "for run=%s (saw %d crawl items)",
+            "ANTHROPIC_API_KEY not set; skipping LLM extraction for run=%s (saw %d crawl items)",
             apify_run_id,
             len(items),
         )
-        await _mark_audit_processed(
-            audit_id, error="ANTHROPIC_API_KEY not configured"
-        )
+        await _mark_audit_processed(audit_id, error="ANTHROPIC_API_KEY not configured")
         return IndustryDayIngestStats(
             audit_id=audit_id,
             apify_run_id=apify_run_id,
@@ -432,7 +418,7 @@ async def _ingest(
                 continue
             try:
                 events = await _extract_events(llm, url, text)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 failures += 1
                 log.info(
                     "industry-days extract failed for %s: %s",
@@ -455,9 +441,7 @@ async def _ingest(
                         starts_at=_parse_dt(ev.get("starts_at")),
                         ends_at=_parse_dt(ev.get("ends_at")),
                         location=_str_or_none(ev.get("location")),
-                        registration_url=_str_or_none(
-                            ev.get("registration_url")
-                        ),
+                        registration_url=_str_or_none(ev.get("registration_url")),
                         naics_codes=ev.get("naics_codes") or None,
                         summary=_str_or_none(ev.get("summary")),
                         apify_run_id=apify_run_id,
@@ -471,9 +455,7 @@ async def _ingest(
                             "starts_at": _parse_dt(ev.get("starts_at")),
                             "ends_at": _parse_dt(ev.get("ends_at")),
                             "location": _str_or_none(ev.get("location")),
-                            "registration_url": _str_or_none(
-                                ev.get("registration_url")
-                            ),
+                            "registration_url": _str_or_none(ev.get("registration_url")),
                             "naics_codes": ev.get("naics_codes") or None,
                             "summary": _str_or_none(ev.get("summary")),
                             "last_seen_at": datetime.now(UTC),
@@ -488,8 +470,7 @@ async def _ingest(
     await _mark_audit_processed(audit_id)
 
     log.info(
-        "industry-days ingest: run=%s items=%d skipped=%d "
-        "upserted=%d failures=%d",
+        "industry-days ingest: run=%s items=%d skipped=%d upserted=%d failures=%d",
         apify_run_id,
         len(items),
         skipped_low_signal,
@@ -506,9 +487,7 @@ async def _ingest(
     )
 
 
-async def _extract_events(
-    llm: AnthropicLLMClient, url: str, text: str
-) -> list[dict[str, Any]]:
+async def _extract_events(llm: AnthropicLLMClient, url: str, text: str) -> list[dict[str, Any]]:
     """Extract structured events from one crawled page. Returns [] when
     the page has none. We cap text at ~12k chars — the model's job is
     to find dates and titles, not to read a novel."""
@@ -542,14 +521,10 @@ async def _extract_events(
     return [e for e in events if isinstance(e, dict)]
 
 
-async def _mark_audit_processed(
-    audit_id: str, *, error: str | None = None
-) -> None:
+async def _mark_audit_processed(audit_id: str, *, error: str | None = None) -> None:
     async with unscoped_session() as session:
         row = (
-            await session.execute(
-                select(ApifyRun).where(ApifyRun.id == audit_id)
-            )
+            await session.execute(select(ApifyRun).where(ApifyRun.id == audit_id))
         ).scalar_one_or_none()
         if row is None:
             return
@@ -562,14 +537,32 @@ async def _mark_audit_processed(
 # worth running through the LLM. Tuned conservatively — false negatives
 # just mean we miss an event tomorrow.
 _EVENT_URL_HINTS = (
-    "event", "industry-day", "industry_day", "industryday",
-    "calendar", "symposium", "conference", "meet-the-buyer",
-    "meet_the_buyer", "outreach", "lcid", "summit", "expo",
+    "event",
+    "industry-day",
+    "industry_day",
+    "industryday",
+    "calendar",
+    "symposium",
+    "conference",
+    "meet-the-buyer",
+    "meet_the_buyer",
+    "outreach",
+    "lcid",
+    "summit",
+    "expo",
 )
 _EVENT_TEXT_HINTS = (
-    "industry day", "register", "registration", "save the date",
-    "agenda", "schedule of events", "rsvp", "attendees",
-    "convention center", "symposium", "conference",
+    "industry day",
+    "register",
+    "registration",
+    "save the date",
+    "agenda",
+    "schedule of events",
+    "rsvp",
+    "attendees",
+    "convention center",
+    "symposium",
+    "conference",
 )
 
 
@@ -591,7 +584,7 @@ def _str_or_none(v: Any) -> str | None:
 def _host_of(url: str) -> str | None:
     try:
         return urlparse(url).netloc or None
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None
 
 

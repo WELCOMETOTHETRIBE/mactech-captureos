@@ -12,7 +12,9 @@ from mactech_intelligence.cyber_scope.schemas import CyberScopeAnalysis, Suggest
 from mactech_intelligence.llm import AnthropicLLMClient, LLMResponse
 
 PROMPT_SUMMARY = Path(__file__).parent.parent / "prompts" / "cyber_scope_summary.md"
-PROMPT_CLARIFICATION = Path(__file__).parent.parent / "prompts" / "cyber_scope_clarification_email.md"
+PROMPT_CLARIFICATION = (
+    Path(__file__).parent.parent / "prompts" / "cyber_scope_clarification_email.md"
+)
 PROMPT_PRIME = Path(__file__).parent.parent / "prompts" / "cyber_scope_prime_outreach.md"
 
 SUMMARY_VERSION = "v1"
@@ -41,9 +43,7 @@ def _load_prompt(path: Path) -> tuple[str, str]:
     system_clean = "\n".join(
         line for line in system.strip().splitlines() if not line.startswith("#")
     )
-    user_clean = "\n".join(
-        line for line in user.strip().splitlines() if not line.startswith("#")
-    )
+    user_clean = "\n".join(line for line in user.strip().splitlines() if not line.startswith("#"))
     return system_clean, user_clean
 
 
@@ -98,9 +98,7 @@ def deterministic_summary(
             "confirm FRCS/RMF applicability with CO/COR before commit."
         )
     if analysis.missing_but_likely_requirements:
-        lines.append(
-            f"• Gap to verify: {analysis.missing_but_likely_requirements[0]}"
-        )
+        lines.append(f"• Gap to verify: {analysis.missing_but_likely_requirements[0]}")
     return "\n".join(lines)
 
 

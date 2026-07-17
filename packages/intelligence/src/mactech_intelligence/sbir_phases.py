@@ -209,9 +209,7 @@ def build_intake_user_message(input_summary: str) -> str:
     )
 
 
-def build_topic_extract_user_message(
-    input_summary: str, topic_payload: str
-) -> str:
+def build_topic_extract_user_message(input_summary: str, topic_payload: str) -> str:
     return (
         "PHASE 1 — TOPIC ANALYSIS.\n\n"
         "Extract the topic facts per the engine spec and produce the COMPLETE "
@@ -306,12 +304,8 @@ def build_consistency_user_message(generated_files_payload: str) -> str:
     )
 
 
-def build_preflight_user_message(
-    input_summary: str, verify_flags: list[str]
-) -> str:
-    flag_block = (
-        "\n".join(f"- {f}" for f in verify_flags) if verify_flags else "(none)"
-    )
+def build_preflight_user_message(input_summary: str, verify_flags: list[str]) -> str:
+    flag_block = "\n".join(f"- {f}" for f in verify_flags) if verify_flags else "(none)"
     return (
         "PHASE 7 — PRE-FLIGHT CHECKLIST.\n\n"
         "Produce the COMPLETE contents of `preflight.md` covering the items "

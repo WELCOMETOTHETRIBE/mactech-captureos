@@ -32,9 +32,7 @@ from mactech_db.base import Base
 
 class PrimeTarget(Base):
     __tablename__ = "prime_targets"
-    __table_args__ = (
-        UniqueConstraint("dedupe_key", name="uq_prime_targets_dedupe_key"),
-    )
+    __table_args__ = (UniqueConstraint("dedupe_key", name="uq_prime_targets_dedupe_key"),)
 
     id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
@@ -54,9 +52,7 @@ class PrimeTarget(Base):
     recent_award_ids: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )
-    total_recent_award_amount: Mapped[float | None] = mapped_column(
-        Numeric, nullable=True
-    )
+    total_recent_award_amount: Mapped[float | None] = mapped_column(Numeric, nullable=True)
     award_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     contact: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     source: Mapped[str] = mapped_column(
@@ -75,7 +71,9 @@ class OpportunityPrimeTarget(Base):
     __tablename__ = "opportunity_prime_targets"
     __table_args__ = (
         UniqueConstraint(
-            "tenant_id", "opportunity_id", "prime_target_id",
+            "tenant_id",
+            "opportunity_id",
+            "prime_target_id",
             name="uq_opp_prime_targets_link",
         ),
     )

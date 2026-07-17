@@ -3,7 +3,8 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import TIMESTAMP, ForeignKey, Integer, String, func, text
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mactech_db.base import Base
@@ -27,7 +28,9 @@ class SavedSearch(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     filters: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     alert_threshold: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("70"))
-    alert_cadence: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'daily'"))
+    alert_cadence: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=text("'daily'")
+    )
     alert_channels: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'[\"email\"]'::jsonb")
     )

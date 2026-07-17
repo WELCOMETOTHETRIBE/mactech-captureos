@@ -89,9 +89,7 @@ async def apify_webhook(
     ] = None,
 ) -> ApifyWebhookAck:
     if capability not in KNOWN_CAPABILITIES:
-        raise HTTPException(
-            status_code=404, detail=f"unknown capability: {capability}"
-        )
+        raise HTTPException(status_code=404, detail=f"unknown capability: {capability}")
     if not settings.apify_webhook_secret:
         log.error("APIFY_WEBHOOK_SECRET not configured; rejecting webhook")
         raise HTTPException(
@@ -100,9 +98,7 @@ async def apify_webhook(
         )
 
     body = await request.body()
-    if not verify_webhook_signature(
-        body, x_apify_webhook_signature, settings.apify_webhook_secret
-    ):
+    if not verify_webhook_signature(body, x_apify_webhook_signature, settings.apify_webhook_secret):
         log.warning(
             "rejected apify webhook with bad/missing signature for capability=%s",
             capability,
@@ -114,29 +110,15 @@ async def apify_webhook(
     event_type = str(payload.get("eventType") or "").strip() or "UNKNOWN"
     event_data: dict[str, Any] = payload.get("eventData") or {}
     resource: dict[str, Any] = payload.get("resource") or {}
-    apify_run_id = str(
-        event_data.get("actorRunId") or resource.get("id") or ""
-    )
-    apify_actor_id = str(
-        event_data.get("actorId") or resource.get("actId") or ""
-    )
-    apify_status = (
-        str(resource.get("status")) if resource.get("status") else None
-    )
-    dataset_id = (
-        str(resource.get("defaultDatasetId"))
-        if resource.get("defaultDatasetId")
-        else None
-    )
+    apify_run_id = str(event_data.get("actorRunId") or resource.get("id") or "")
+    apify_actor_id = str(event_data.get("actorId") or resource.get("actId") or "")
+    apify_status = str(resource.get("status")) if resource.get("status") else None
+    dataset_id = str(resource.get("defaultDatasetId")) if resource.get("defaultDatasetId") else None
     items_count_val = (resource.get("stats") or {}).get("requestsFinished")
-    items_count = (
-        int(items_count_val) if isinstance(items_count_val, int) else None
-    )
+    items_count = int(items_count_val) if isinstance(items_count_val, int) else None
 
     if not apify_run_id:
-        raise HTTPException(
-            status_code=400, detail="missing actorRunId / resource.id"
-        )
+        raise HTTPException(status_code=400, detail="missing actorRunId / resource.id")
 
     async with unscoped_session() as session:
         stmt = (
@@ -189,9 +171,7 @@ async def _parse_json(body: bytes) -> dict[str, Any]:
     try:
         decoded = json.loads(body or b"{}")
     except json.JSONDecodeError as exc:
-        raise HTTPException(
-            status_code=400, detail=f"invalid JSON body: {exc}"
-        ) from exc
+        raise HTTPException(status_code=400, detail=f"invalid JSON body: {exc}") from exc
     if not isinstance(decoded, dict):
         raise HTTPException(
             status_code=400,
@@ -321,9 +301,7 @@ async def codex_sprs_webhook(
 
     async with unscoped_session() as session:
         tenant = (
-            await session.execute(
-                select(Tenant).where(Tenant.clerk_org_id == body.clerk_org_id)
-            )
+            await session.execute(select(Tenant).where(Tenant.clerk_org_id == body.clerk_org_id))
         ).scalar_one_or_none()
 
         if tenant is None:
@@ -345,9 +323,7 @@ async def codex_sprs_webhook(
         tenant.sprs_score = body.score
         tenant.sprs_max = body.max
         tenant.sprs_assessment_date = (
-            date.fromisoformat(body.assessment_date)
-            if body.assessment_date
-            else None
+            date.fromisoformat(body.assessment_date) if body.assessment_date else None
         )
         if body.source_url:
             tenant.sprs_source_url = body.source_url
@@ -409,9 +385,7 @@ class PostmarkInboundBody(BaseModel):
     text_body: str | None = Field(default=None, alias="TextBody")
     html_body: str | None = Field(default=None, alias="HtmlBody")
     date: str | None = Field(default=None, alias="Date")
-    attachments: list[PostmarkAttachment] = Field(
-        default_factory=list, alias="Attachments"
-    )
+    attachments: list[PostmarkAttachment] = Field(default_factory=list, alias="Attachments")
 
 
 class PostmarkInboundAck(BaseModel):
@@ -464,9 +438,7 @@ async def postmark_inbound_webhook(
         raise HTTPException(status_code=401, detail="bad basic auth")
 
     subject = (body.subject or "").strip()
-    from_email = (
-        (body.from_full.email or "").strip().lower() if body.from_full else ""
-    )
+    from_email = (body.from_full.email or "").strip().lower() if body.from_full else ""
     if from_email in IGNORED_SENDERS:
         log.info(
             "postmark inbound: ignoring plumbing mail from %s (%r)",
@@ -493,9 +465,7 @@ async def postmark_inbound_webhook(
 
     async with unscoped_session() as session:
         tenant = (
-            await session.execute(
-                select(Tenant).where(Tenant.slug == settings.mactech_tenant_slug)
-            )
+            await session.execute(select(Tenant).where(Tenant.slug == settings.mactech_tenant_slug))
         ).scalar_one_or_none()
         if tenant is None:
             log.error(
@@ -558,9 +528,7 @@ async def postmark_inbound_webhook(
         subject[:120],
         body.from_full.email if body.from_full else "unknown",
     )
-    return PostmarkInboundAck(
-        stored=True, reason="stored", bid_invite_id=str(new_id)
-    )
+    return PostmarkInboundAck(stored=True, reason="stored", bid_invite_id=str(new_id))
 
 
 async def _link_to_pipeline(
@@ -594,22 +562,16 @@ async def _link_to_pipeline(
         return
 
     invite = (
-        await session.execute(
-            select(BidInvite).where(BidInvite.id == invite_id)
-        )
+        await session.execute(select(BidInvite).where(BidInvite.id == invite_id))
     ).scalar_one()
     invite.opportunity_id = sibling_opp_id
 
     if bid_due_on is not None:
         opp = (
-            await session.execute(
-                select(OpportunityRaw).where(OpportunityRaw.id == sibling_opp_id)
-            )
+            await session.execute(select(OpportunityRaw).where(OpportunityRaw.id == sibling_opp_id))
         ).scalar_one_or_none()
         if opp is not None:
-            opp.response_deadline = datetime.combine(
-                bid_due_on, dt_time(17, 0), tzinfo=UTC
-            )
+            opp.response_deadline = datetime.combine(bid_due_on, dt_time(17, 0), tzinfo=UTC)
             log.info(
                 "bid invite %s refreshed deadline of opportunity %s to %s",
                 invite_id,

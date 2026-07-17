@@ -13,11 +13,6 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import func, select, text
-
-from mactech_api.auth import RequestContext, get_request_context
-from mactech_api.routes.bid_invites import unseen_count
 from mactech_db.models import (
     Founder,
     OpportunityBrief,
@@ -27,6 +22,11 @@ from mactech_db.models import (
     ProposalDraft,
     Pursuit,
 )
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import func, select, text
+
+from mactech_api.auth import RequestContext, get_request_context
+from mactech_api.routes.bid_invites import unseen_count
 
 router = APIRouter(tags=["me"])
 
@@ -158,9 +158,7 @@ async def me(
             plan=ctx.tenant.plan,
             uei=ctx.tenant.uei,
             cage_code=ctx.tenant.cage_code,
-            set_aside_certifications=list(
-                ctx.tenant.set_aside_certifications or []
-            ),
+            set_aside_certifications=list(ctx.tenant.set_aside_certifications or []),
             target_naics=list(ctx.tenant.target_naics or []),
             onboarding_completed_at=(
                 ctx.tenant.onboarding_completed_at.isoformat()
@@ -176,9 +174,7 @@ async def me(
             ),
             sprs_source_url=ctx.tenant.sprs_source_url,
             sprs_synced_at=(
-                ctx.tenant.sprs_synced_at.isoformat()
-                if ctx.tenant.sprs_synced_at
-                else None
+                ctx.tenant.sprs_synced_at.isoformat() if ctx.tenant.sprs_synced_at else None
             ),
         ),
     )
@@ -205,9 +201,7 @@ async def dashboard(
                     OpportunityEnriched,
                     OpportunityBrief.scope_one_sentence,
                 )
-                .join(
-                    OpportunityRaw, OpportunityRaw.id == OpportunityScore.opportunity_id
-                )
+                .join(OpportunityRaw, OpportunityRaw.id == OpportunityScore.opportunity_id)
                 .outerjoin(
                     OpportunityEnriched,
                     OpportunityEnriched.opportunity_id == OpportunityRaw.id,
@@ -239,9 +233,7 @@ async def dashboard(
                     agency_short=_short_agency(opp.agency),
                     posted_at=opp.posted_at.isoformat() if opp.posted_at else None,
                     response_deadline=(
-                        opp.response_deadline.isoformat()
-                        if opp.response_deadline
-                        else None
+                        opp.response_deadline.isoformat() if opp.response_deadline else None
                     ),
                     score=sc.score,
                     why_it_matters=sc.why_it_matters,
@@ -254,21 +246,21 @@ async def dashboard(
                     sam_link=payload.get("uiLink"),
                     detail_url=f"/opportunities/{opp.id}",
                     high_moat_score=sc.high_moat_score,
-                    is_sweet_spot=bool(
-                        hm_flags.get("is_high_probability_easy_win")
-                    ),
+                    is_sweet_spot=bool(hm_flags.get("is_high_probability_easy_win")),
                     scope_one_sentence=scope_one_sentence,
                 )
             )
 
     # Pillar cards — one per founder with their high-score count.
     founders = (
-        await session.execute(
-            select(Founder)
-            .where(Founder.tenant_id == tenant_id)
-            .order_by(Founder.full_name)
+        (
+            await session.execute(
+                select(Founder).where(Founder.tenant_id == tenant_id).order_by(Founder.full_name)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     pillar_cards: list[FounderCard] = []
     for f in founders:
         n = (
@@ -339,9 +331,7 @@ async def dashboard(
                         OpportunityScore.assigned_founder_id == ctx.founder.id,
                         OpportunityScore.score >= 60,
                         ~OpportunityScore.opportunity_id.in_(
-                            select(Pursuit.opportunity_id).where(
-                                Pursuit.tenant_id == tenant_id
-                            )
+                            select(Pursuit.opportunity_id).where(Pursuit.tenant_id == tenant_id)
                         ),
                     )
                 )

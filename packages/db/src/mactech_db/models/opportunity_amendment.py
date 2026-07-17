@@ -23,7 +23,8 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mactech_db.base import Base
@@ -53,9 +54,7 @@ class OpportunityAmendment(Base):
     )
     previous_title: Mapped[str | None] = mapped_column(Text, nullable=True)
     new_title: Mapped[str | None] = mapped_column(Text, nullable=True)
-    diff_summary: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONB, nullable=False
-    )
+    diff_summary: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
 
     detected_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()

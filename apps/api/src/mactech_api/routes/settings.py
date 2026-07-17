@@ -110,22 +110,26 @@ async def get_settings(
     tenant_id = ctx.tenant.id
 
     founders = (
-        await session.execute(
-            select(Founder)
-            .where(Founder.tenant_id == tenant_id)
-            .order_by(Founder.full_name)
+        (
+            await session.execute(
+                select(Founder).where(Founder.tenant_id == tenant_id).order_by(Founder.full_name)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     founders_by_id = {f.id: f for f in founders}
 
     naics_rows = (
-        await session.execute(
-            select(NaicsCode).order_by(NaicsCode.mactech_tier.desc(), NaicsCode.code)
+        (
+            await session.execute(
+                select(NaicsCode).order_by(NaicsCode.mactech_tier.desc(), NaicsCode.code)
+            )
         )
-    ).scalars().all()
-    matrix_rows = (
-        await session.execute(select(FounderNaicsMatrix))
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
+    matrix_rows = (await session.execute(select(FounderNaicsMatrix))).scalars().all()
     naics_to_founder_slugs: dict[str, list[str]] = {}
     for m in matrix_rows:
         slug = founders_by_id.get(m.founder_id)
@@ -165,12 +169,16 @@ async def get_settings(
     )
 
     saved = (
-        await session.execute(
-            select(SavedSearch)
-            .where(SavedSearch.tenant_id == tenant_id)
-            .order_by(SavedSearch.name)
+        (
+            await session.execute(
+                select(SavedSearch)
+                .where(SavedSearch.tenant_id == tenant_id)
+                .order_by(SavedSearch.name)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     saved_out: list[SavedSearchOut] = []
     for s in saved:
@@ -213,9 +221,7 @@ async def get_settings(
             ),
             sprs_source_url=ctx.tenant.sprs_source_url,
             sprs_synced_at=(
-                ctx.tenant.sprs_synced_at.isoformat()
-                if ctx.tenant.sprs_synced_at
-                else None
+                ctx.tenant.sprs_synced_at.isoformat() if ctx.tenant.sprs_synced_at else None
             ),
         ),
         founders=[
@@ -273,7 +279,7 @@ async def patch_sprs(
                     detail=f"sprs_assessment_date must be YYYY-MM-DD: {exc}",
                 ) from exc
     if body.sprs_source_url is not None:
-        tenant.sprs_source_url = (body.sprs_source_url.strip() or None)
+        tenant.sprs_source_url = body.sprs_source_url.strip() or None
     tenant.sprs_synced_at = datetime.now(UTC)
     await ctx.session.flush()
     return TenantOut(
@@ -286,14 +292,8 @@ async def patch_sprs(
         sprs_score=tenant.sprs_score,
         sprs_max=tenant.sprs_max or 110,
         sprs_assessment_date=(
-            tenant.sprs_assessment_date.isoformat()
-            if tenant.sprs_assessment_date
-            else None
+            tenant.sprs_assessment_date.isoformat() if tenant.sprs_assessment_date else None
         ),
         sprs_source_url=tenant.sprs_source_url,
-        sprs_synced_at=(
-            tenant.sprs_synced_at.isoformat()
-            if tenant.sprs_synced_at
-            else None
-        ),
+        sprs_synced_at=(tenant.sprs_synced_at.isoformat() if tenant.sprs_synced_at else None),
     )

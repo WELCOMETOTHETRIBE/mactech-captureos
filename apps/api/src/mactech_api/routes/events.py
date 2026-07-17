@@ -14,11 +14,11 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
+from mactech_db.models import AgencyEvent
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
 
 from mactech_api.auth import RequestContext, get_request_context
-from mactech_db.models import AgencyEvent
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["events"])
@@ -106,15 +106,11 @@ async def list_events(
         # Keep events with no starts_at OR starts_at strictly in the future.
         # Tighter than v1 (was >= now) so events that started today but
         # ended yesterday don't surface.
-        stmt = stmt.where(
-            (AgencyEvent.starts_at >= now) | (AgencyEvent.starts_at.is_(None))
-        )
+        stmt = stmt.where((AgencyEvent.starts_at >= now) | (AgencyEvent.starts_at.is_(None)))
 
     stmt = stmt.order_by(
         AgencyEvent.starts_at.asc().nulls_last(),
         AgencyEvent.last_seen_at.desc(),
     ).limit(limit)
     rows = (await ctx.session.execute(stmt)).scalars().all()
-    return AgencyEventsResponse(
-        total=len(rows), items=[_to_out(r) for r in rows]
-    )
+    return AgencyEventsResponse(total=len(rows), items=[_to_out(r) for r in rows])

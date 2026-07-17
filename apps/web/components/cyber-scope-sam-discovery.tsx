@@ -38,7 +38,14 @@ export async function CyberScopeSamDiscovery() {
             opportunities, and enqueues cyber scope scans.
           </p>
         </div>
-        <form action={runCyberScopeSamSearch}>
+        <form
+          action={async () => {
+            "use server";
+            // The action returns a status object; a form `action` must resolve
+            // to void, so await it and discard the result.
+            await runCyberScopeSamSearch();
+          }}
+        >
           <button
             type="submit"
             className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent"

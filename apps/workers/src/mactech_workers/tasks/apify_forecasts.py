@@ -33,13 +33,13 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.parse import urlparse
 
+from mactech_db import unscoped_session
+from mactech_db.models import ApifyRun, ForecastRaw
+from mactech_integrations.apify import ApifyClient, ApifyError
+from mactech_intelligence import AnthropicLLMClient
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from mactech_db import unscoped_session
-from mactech_db.models import ApifyRun, ForecastRaw
-from mactech_intelligence import AnthropicLLMClient
-from mactech_integrations.apify import ApifyClient, ApifyError
 from mactech_workers.celery_app import celery_app
 
 log = logging.getLogger(__name__)
@@ -166,14 +166,32 @@ class ForecastIngestStats:
 
 
 _FORECAST_URL_HINTS = (
-    "forecast", "acquisition", "opportunity", "opportunities",
-    "smart-guide", "smart_guide", "fco", "apfs", "vie",
-    "small-business", "smallbusiness", "osbp",
+    "forecast",
+    "acquisition",
+    "opportunity",
+    "opportunities",
+    "smart-guide",
+    "smart_guide",
+    "fco",
+    "apfs",
+    "vie",
+    "small-business",
+    "smallbusiness",
+    "osbp",
 )
 _FORECAST_TEXT_HINTS = (
-    "naics", "set-aside", "set aside", "solicitation", "anticipated award",
-    "expected award", "estimated value", "contract type",
-    "period of performance", "forecast", "fy2026", "fy 2026",
+    "naics",
+    "set-aside",
+    "set aside",
+    "solicitation",
+    "anticipated award",
+    "expected award",
+    "estimated value",
+    "contract type",
+    "period of performance",
+    "forecast",
+    "fy2026",
+    "fy 2026",
 )
 
 
@@ -209,8 +227,7 @@ async def _kick_and_ingest() -> dict[str, Any]:
         "saveHtml": False,
         "saveMarkdown": True,
         "removeElementsCssSelector": (
-            "nav, footer, header, .ads, .menu, .skip-link, .breadcrumbs, "
-            "form, aside, .sidebar"
+            "nav, footer, header, .ads, .menu, .skip-link, .breadcrumbs, form, aside, .sidebar"
         ),
         "keepUrlFragments": False,
     }
@@ -346,15 +363,11 @@ async def _record_synthetic_audit(
 
 
 @celery_app.task(name="mactech.apify.ingest_forecasts")
-def ingest_forecasts_task(
-    audit_id: str, dataset_id: str, apify_run_id: str
-) -> dict[str, Any]:
+def ingest_forecasts_task(audit_id: str, dataset_id: str, apify_run_id: str) -> dict[str, Any]:
     return asdict(asyncio.run(_ingest(audit_id, dataset_id, apify_run_id)))
 
 
-async def _ingest(
-    audit_id: str, dataset_id: str, apify_run_id: str
-) -> ForecastIngestStats:
+async def _ingest(audit_id: str, dataset_id: str, apify_run_id: str) -> ForecastIngestStats:
     api_token = os.environ.get("APIFY_API_TOKEN", "")
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
 
@@ -374,9 +387,7 @@ async def _ingest(
         try:
             offset = 0
             while True:
-                page = await client.dataset_items(
-                    dataset_id, limit=200, offset=offset, clean=True
-                )
+                page = await client.dataset_items(dataset_id, limit=200, offset=offset, clean=True)
                 if not page:
                     break
                 items.extend(p.payload for p in page)
@@ -418,11 +429,9 @@ async def _ingest(
 
             try:
                 forecasts = await _extract_forecasts(llm, url, text)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 failures += 1
-                log.info(
-                    "forecasts extract failed for %s: %s", url, exc
-                )
+                log.info("forecasts extract failed for %s: %s", url, exc)
                 continue
 
             for fc in forecasts:
@@ -436,40 +445,26 @@ async def _ingest(
                         source_host=_host_of(url),
                         source_run_id=apify_run_id,
                         agency=_str_or_none(fc.get("agency")),
-                        contracting_office=_str_or_none(
-                            fc.get("contracting_office")
-                        ),
+                        contracting_office=_str_or_none(fc.get("contracting_office")),
                         title=title,
                         description=_str_or_none(fc.get("description")),
                         naics_code=_naics_or_none(fc.get("naics_code")),
                         naics_codes=fc.get("naics_codes") or None,
                         set_aside=_str_or_none(fc.get("set_aside")),
                         contract_type=_str_or_none(fc.get("contract_type")),
-                        estimated_value_low=_money_or_none(
-                            fc.get("estimated_value_low")
-                        ),
-                        estimated_value_high=_money_or_none(
-                            fc.get("estimated_value_high")
-                        ),
-                        estimated_value_text=_str_or_none(
-                            fc.get("estimated_value_text")
-                        ),
+                        estimated_value_low=_money_or_none(fc.get("estimated_value_low")),
+                        estimated_value_high=_money_or_none(fc.get("estimated_value_high")),
+                        estimated_value_text=_str_or_none(fc.get("estimated_value_text")),
                         expected_solicitation_date=_parse_date(
                             fc.get("expected_solicitation_date")
                         ),
-                        expected_award_date=_parse_date(
-                            fc.get("expected_award_date")
-                        ),
+                        expected_award_date=_parse_date(fc.get("expected_award_date")),
                         period_of_performance_start=_parse_date(
                             fc.get("period_of_performance_start")
                         ),
-                        period_of_performance_end=_parse_date(
-                            fc.get("period_of_performance_end")
-                        ),
+                        period_of_performance_end=_parse_date(fc.get("period_of_performance_end")),
                         incumbent_name=_str_or_none(fc.get("incumbent_name")),
-                        incumbent_contract_number=_str_or_none(
-                            fc.get("incumbent_contract_number")
-                        ),
+                        incumbent_contract_number=_str_or_none(fc.get("incumbent_contract_number")),
                         poc_name=_str_or_none(fc.get("poc_name")),
                         poc_email=_str_or_none(fc.get("poc_email")),
                         forecast_id=_str_or_none(fc.get("forecast_id")),
@@ -480,40 +475,26 @@ async def _ingest(
                         set_={
                             "source_run_id": apify_run_id,
                             "agency": _str_or_none(fc.get("agency")),
-                            "contracting_office": _str_or_none(
-                                fc.get("contracting_office")
-                            ),
+                            "contracting_office": _str_or_none(fc.get("contracting_office")),
                             "description": _str_or_none(fc.get("description")),
                             "naics_code": _naics_or_none(fc.get("naics_code")),
                             "naics_codes": fc.get("naics_codes") or None,
                             "set_aside": _str_or_none(fc.get("set_aside")),
-                            "contract_type": _str_or_none(
-                                fc.get("contract_type")
-                            ),
-                            "estimated_value_low": _money_or_none(
-                                fc.get("estimated_value_low")
-                            ),
-                            "estimated_value_high": _money_or_none(
-                                fc.get("estimated_value_high")
-                            ),
-                            "estimated_value_text": _str_or_none(
-                                fc.get("estimated_value_text")
-                            ),
+                            "contract_type": _str_or_none(fc.get("contract_type")),
+                            "estimated_value_low": _money_or_none(fc.get("estimated_value_low")),
+                            "estimated_value_high": _money_or_none(fc.get("estimated_value_high")),
+                            "estimated_value_text": _str_or_none(fc.get("estimated_value_text")),
                             "expected_solicitation_date": _parse_date(
                                 fc.get("expected_solicitation_date")
                             ),
-                            "expected_award_date": _parse_date(
-                                fc.get("expected_award_date")
-                            ),
+                            "expected_award_date": _parse_date(fc.get("expected_award_date")),
                             "period_of_performance_start": _parse_date(
                                 fc.get("period_of_performance_start")
                             ),
                             "period_of_performance_end": _parse_date(
                                 fc.get("period_of_performance_end")
                             ),
-                            "incumbent_name": _str_or_none(
-                                fc.get("incumbent_name")
-                            ),
+                            "incumbent_name": _str_or_none(fc.get("incumbent_name")),
                             "incumbent_contract_number": _str_or_none(
                                 fc.get("incumbent_contract_number")
                             ),
@@ -548,9 +529,7 @@ async def _ingest(
     )
 
 
-async def _extract_forecasts(
-    llm: AnthropicLLMClient, url: str, text: str
-) -> list[dict[str, Any]]:
+async def _extract_forecasts(llm: AnthropicLLMClient, url: str, text: str) -> list[dict[str, Any]]:
     excerpt = text[:14_000]
     today = datetime.now(UTC).date().isoformat()
     user_prompt = (
@@ -579,14 +558,10 @@ async def _extract_forecasts(
     return [f for f in forecasts if isinstance(f, dict)]
 
 
-async def _mark_audit_processed(
-    audit_id: str, *, error: str | None = None
-) -> None:
+async def _mark_audit_processed(audit_id: str, *, error: str | None = None) -> None:
     async with unscoped_session() as session:
         row = (
-            await session.execute(
-                select(ApifyRun).where(ApifyRun.id == audit_id)
-            )
+            await session.execute(select(ApifyRun).where(ApifyRun.id == audit_id))
         ).scalar_one_or_none()
         if row is None:
             return
@@ -605,7 +580,7 @@ def _str_or_none(v: Any) -> str | None:
 def _host_of(url: str) -> str | None:
     try:
         return urlparse(url).netloc or None
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None
 
 

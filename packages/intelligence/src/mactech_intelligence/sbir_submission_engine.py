@@ -139,11 +139,7 @@ def _format_input_summary(inp: SBIRInput) -> str:
         if inp.sister_proposals
         else "  (none disclosed)"
     )
-    links = (
-        "\n".join(f"  - {u}" for u in inp.resource_links)
-        if inp.resource_links
-        else "  (none)"
-    )
+    links = "\n".join(f"  - {u}" for u in inp.resource_links) if inp.resource_links else "  (none)"
     attachments = (
         "\n".join(f"  - {a.name} ({len(a.text)} chars)" for a in inp.attachments)
         if inp.attachments
@@ -291,7 +287,9 @@ async def run_sbir_submission(
     # mutable dict the outer caller reads after the inner generator ends.
     _state: dict[str, str] = {"last_body": ""}
 
-    async def _drive(phase_key: str, label: str, user_message: str, relpath: str, max_tokens: int) -> str:
+    async def _drive(
+        phase_key: str, label: str, user_message: str, relpath: str, max_tokens: int
+    ) -> str:
         async for evt in _stream_phase_to_file(phase_key, label, user_message, relpath, max_tokens):
             yield evt
         # `_state["last_body"]` is now populated.
@@ -336,9 +334,7 @@ async def run_sbir_submission(
         return
 
     # ---- Phase 1: topic analysis ----
-    topic_payload_block = (
-        f"{inp.topic_payload}\n\n--- USER ATTACHMENTS ---\n{attachments_block}"
-    )
+    topic_payload_block = f"{inp.topic_payload}\n\n--- USER ATTACHMENTS ---\n{attachments_block}"
     topic_extract = ""
     async for evt in _drive(
         "topic_analysis",
@@ -355,10 +351,7 @@ async def run_sbir_submission(
         for spec in VOLUME_SPECS:
             if spec.key not in SCAFFOLD_VOLUME_KEYS:
                 continue
-            context = (
-                f"--- INPUTS ---\n{input_summary}\n\n"
-                f"--- TOPIC EXTRACT ---\n{topic_extract}\n"
-            )
+            context = f"--- INPUTS ---\n{input_summary}\n\n--- TOPIC EXTRACT ---\n{topic_extract}\n"
             async for evt in _drive(
                 f"phase5:{spec.key}",
                 f"Phase 5 — {spec.label}",
@@ -404,9 +397,7 @@ async def run_sbir_submission(
     async for evt in _drive(
         "overclaim",
         "Phase 4 — Overclaim audit",
-        build_overclaim_user_message(
-            input_summary, topic_extract, synergy_assessment, strategy
-        ),
+        build_overclaim_user_message(input_summary, topic_extract, synergy_assessment, strategy),
         "overclaim-audit.md",
         DEFAULT_MAX_TOKENS_SHORT,
     ):
@@ -421,9 +412,7 @@ async def run_sbir_submission(
         "overclaim-audit.md": overclaim,
     }
     for spec in VOLUME_SPECS:
-        context = _build_volume_context(
-            input_summary, generated_bodies, inp.attachments, spec
-        )
+        context = _build_volume_context(input_summary, generated_bodies, inp.attachments, spec)
         max_tokens = (
             DEFAULT_MAX_TOKENS_LONG
             if spec.key in {"volume_2", "volume_3"}

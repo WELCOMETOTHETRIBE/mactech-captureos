@@ -21,14 +21,14 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
+from mactech_db.models import ApifyRun
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 
 from mactech_api.auth import RequestContext, get_request_context
-from mactech_db.models import ApifyRun
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["integrations"])
@@ -88,9 +88,7 @@ CAPABILITY_DEFS = (
 )
 
 
-async def _last_run_for_capability(
-    session, capability: str
-) -> IntegrationRunOut | None:
+async def _last_run_for_capability(session, capability: str) -> IntegrationRunOut | None:
     row = (
         await session.execute(
             select(ApifyRun)
@@ -155,7 +153,7 @@ def _enqueue_task(name: str) -> tuple[bool, str | None, str | None]:
         celery_app = Celery(broker=broker_url, backend=broker_url)
         result = celery_app.send_task(name)
         return True, result.id, None
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning("integrations trigger failed for %s: %s", name, exc)
         return False, None, str(exc)[:300]
 
@@ -179,9 +177,7 @@ async def trigger_forecasts(
             status_code=503,
             detail=f"could not enqueue kick task: {error}",
         )
-    return TriggerOut(
-        capability="forecasts", queued=True, task_id=task_id, error=None
-    )
+    return TriggerOut(capability="forecasts", queued=True, task_id=task_id, error=None)
 
 
 @router.post(
@@ -198,6 +194,4 @@ async def trigger_industry_days(
             status_code=503,
             detail=f"could not enqueue kick task: {error}",
         )
-    return TriggerOut(
-        capability="industry_days", queued=True, task_id=task_id, error=None
-    )
+    return TriggerOut(capability="industry_days", queued=True, task_id=task_id, error=None)

@@ -40,9 +40,7 @@ def query_families() -> tuple[QueryFamily, ...]:
                 label=str(f.get("label", f["key"])),
                 pipeline=str(f.get("pipeline", "AB")),
                 naics=tuple(str(n) for n in f.get("naics", []) if str(n).strip()),
-                title_queries=tuple(
-                    str(t) for t in f.get("title_queries", []) if str(t).strip()
-                ),
+                title_queries=tuple(str(t) for t in f.get("title_queries", []) if str(t).strip()),
             )
         )
     return tuple(families)

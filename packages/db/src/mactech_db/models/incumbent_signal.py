@@ -19,7 +19,8 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mactech_db.base import Base
@@ -44,24 +45,12 @@ class IncumbentSignal(Base):
     cik: Mapped[str | None] = mapped_column(String(16), nullable=True)
     sec_ticker: Mapped[str | None] = mapped_column(String(16), nullable=True)
     sec_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    filings_last_90d_count: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0
-    )
-    filings_last_365d_count: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0
-    )
-    most_recent_filing_form: Mapped[str | None] = mapped_column(
-        String(16), nullable=True
-    )
-    most_recent_filing_date: Mapped[date | None] = mapped_column(
-        Date, nullable=True
-    )
-    most_recent_8k_items: Mapped[list[str] | None] = mapped_column(
-        JSONB, nullable=True
-    )
-    distress_score: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0
-    )
+    filings_last_90d_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    filings_last_365d_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    most_recent_filing_form: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    most_recent_filing_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    most_recent_8k_items: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    distress_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     distress_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     filings: Mapped[list[dict] | None] = mapped_column(JSONB, nullable=True)
 

@@ -65,8 +65,7 @@ def schema_from_persisted(
         detected_categories=categories,
         top_signals=[DetectionResult.model_validate(x) for x in (top_signals_json or [])],
         hidden_scope_indicators=[
-            DetectionResult.model_validate(x)
-            for x in (hidden_scope_indicators_json or [])
+            DetectionResult.model_validate(x) for x in (hidden_scope_indicators_json or [])
         ],
         missing_but_likely_requirements=missing_requirements_json or [],
         suggested_actions=[
