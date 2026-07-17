@@ -1,0 +1,140 @@
+# Construction / facility-system signal family.
+#
+# Slice 1: preserves the `construction_signals` list from
+# data/cyber_scope_dictionary.yml (read by cyber_scope.dictionary
+# load_construction_signals — used by hidden-scope detection). The
+# facility-adjacency CONCEPT vocabulary (HVAC controls, microgrid, electronic
+# security, fire alarm …) is added in Slice 3 under the non-legacy
+# `facility_adjacency` evidence category so it does not alter the Slice 1
+# detector.
+
+family: construction_systems
+version: "2026.07.0"
+effective_date: 2026-07-01
+
+# Consumed by cyber_scope.dictionary.load_construction_signals(). Order and
+# membership preserved exactly from the legacy dictionary for parity.
+construction_signals:
+  - HVAC
+  - building automation
+  - MILCON
+  - construction
+  - facilities modernization
+  - electrical
+  - microgrid
+  - commissioning
+
+concepts:
+  # --- facility_adjacency (Slice 3; non-legacy category) ---
+  # These systems, when networked, imply an embedded control-system cyber scope
+  # even when no explicit cyber phrase appears — the "hidden scope" the brief
+  # wants surfaced, not discarded.
+  - id: hvac_controls
+    canonical_name: HVAC Controls
+    normalized_term: hvac_controls
+    evidence_category: facility_adjacency
+    aliases: ["HVAC control system", "direct digital control", "DDC"]
+    regex: '/HVAC\s+controls?|direct\s+digital\s+control|\bDDC\b/i'
+    related_concepts: [bas, bacnet]
+    positive_weight: 10
+    enabled: true
+  - id: energy_management
+    canonical_name: Energy Management and Control System
+    normalized_term: energy_management
+    evidence_category: facility_adjacency
+    aliases: ["EMCS", "energy management system", "EMS"]
+    regex: '/energy\s+management\s+(and\s+control\s+)?system|\bEMCS\b/i'
+    positive_weight: 10
+    enabled: true
+  - id: microgrid
+    canonical_name: Microgrid
+    normalized_term: microgrid
+    evidence_category: facility_adjacency
+    aliases: ["microgrid controls", "generator controls", "energy resilience"]
+    regex: '/microgrid|generator\s+controls?/i'
+    positive_weight: 12
+    enabled: true
+  - id: substation_automation
+    canonical_name: Substation Automation
+    normalized_term: substation_automation
+    evidence_category: facility_adjacency
+    aliases: ["electrical power monitoring", "power monitoring system", "EPMS"]
+    regex: '/substation\s+automation|electrical\s+power\s+monitoring|\bEPMS\b/i'
+    positive_weight: 10
+    enabled: true
+  - id: water_wastewater_controls
+    canonical_name: Water / Wastewater Controls
+    normalized_term: water_wastewater_controls
+    evidence_category: facility_adjacency
+    aliases: ["pump controls", "lift station controls", "wastewater controls"]
+    regex: '/(waste)?water\s+controls?|pump\s+controls?|lift\s+station/i'
+    positive_weight: 10
+    enabled: true
+  - id: central_plant_controls
+    canonical_name: Central Plant Controls
+    normalized_term: central_plant_controls
+    evidence_category: facility_adjacency
+    aliases: ["chiller plant controls", "boiler plant controls", "central utility plant"]
+    regex: '/central\s+(utility\s+)?plant|chiller\s+plant|boiler\s+plant/i'
+    positive_weight: 10
+    enabled: true
+  - id: fire_alarm
+    canonical_name: Fire Alarm / Mass Notification
+    normalized_term: fire_alarm
+    evidence_category: facility_adjacency
+    aliases: ["mass notification", "fire alarm system", "MNS"]
+    regex: '/fire\s+alarm|mass\s+notification/i'
+    positive_weight: 8
+    enabled: true
+  - id: electronic_security
+    canonical_name: Electronic Security System
+    normalized_term: electronic_security
+    evidence_category: facility_adjacency
+    aliases: ["access control", "intrusion detection", "CCTV", "video surveillance", "ESS"]
+    regex: '/electronic\s+security|access\s+control|intrusion\s+detection|\bCCTV\b|video\s+surveillance/i'
+    positive_weight: 10
+    enabled: true
+  - id: building_management_system
+    canonical_name: Building Management System
+    normalized_term: building_management_system
+    evidence_category: facility_adjacency
+    aliases: ["BMS", "building management", "lighting controls", "metering"]
+    regex: '/building\s+management\s+system|\bBMS\b|lighting\s+controls?/i'
+    positive_weight: 8
+    enabled: true
+
+  # --- acquisition_context (Slice 3; non-legacy category) ---
+  - id: design_build
+    canonical_name: Design-Build
+    normalized_term: design_build
+    evidence_category: acquisition_context
+    aliases: ["design build", "design-bid-build", "DBB", "design/build"]
+    regex: '/design[\s/-]build|design[\s-]bid[\s-]build/i'
+    positive_weight: 8
+    enabled: true
+  - id: multiple_award_vehicle
+    canonical_name: Multiple-Award Construction Vehicle
+    normalized_term: multiple_award_vehicle
+    evidence_category: acquisition_context
+    aliases: ["MATOC", "SATOC", "MACC", "IDIQ", "JOC", "task order", "multiple award task order"]
+    regex: '/\bMATOC\b|\bSATOC\b|\bMACC\b|\bIDIQ\b|\bJOC\b|task\s+order/i'
+    positive_weight: 8
+    enabled: true
+  - id: subcontracting_plan
+    canonical_name: Subcontracting Plan
+    normalized_term: subcontracting_plan
+    evidence_category: acquisition_context
+    aliases: ["small business subcontracting plan", "subcontracting goals"]
+    regex: '/subcontract(ing)?\s+plan|subcontracting\s+goals/i'
+    related_concepts: [design_build]
+    positive_weight: 10
+    source_ref: "FAR 19.7 / 52.219-9"
+    enabled: true
+  - id: controls_integrator
+    canonical_name: Controls Integrator
+    normalized_term: controls_integrator
+    evidence_category: acquisition_context
+    aliases: ["systems integrator", "commissioning agent", "electrical contractor", "specialty subcontractor"]
+    regex: '/controls?\s+integrator|systems?\s+integrator|commissioning\s+agent/i'
+    positive_weight: 10
+    enabled: true

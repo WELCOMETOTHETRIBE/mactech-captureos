@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { CaptureQueues } from "@/components/capture-queues";
 import { KeyboardList } from "@/components/keyboard-list";
 import { TenantEligibilityCard } from "@/components/tenant-eligibility-card";
 import { TermPopover } from "@/components/term-popover";
@@ -9,6 +10,7 @@ import {
   type AgencyEventOut,
   type AgencyEventsResponse,
   type BidInvitesResponse,
+  type CaptureQueues as CaptureQueuesData,
   type DashboardResponse,
   type ForecastOut,
   type ForecastsResponse,
@@ -36,7 +38,7 @@ export const dynamic = "force-dynamic";
 const HOW_IT_WORKS_COOKIE = "mactech.dismiss.howitworks";
 
 export default async function DashboardPage() {
-  const [data, me, ck, events, myRecompetes, sdvosbRecompetes, topForecasts, eligibility, bidInvites] = await Promise.all([
+  const [data, me, ck, events, myRecompetes, sdvosbRecompetes, topForecasts, eligibility, bidInvites, captureQueues] = await Promise.all([
     apiFetch<DashboardResponse>("/me/dashboard"),
     apiFetch<MeResponse>("/me"),
     cookies(),
@@ -86,6 +88,9 @@ export default async function DashboardPage() {
           counts: { new: 0, reviewed: 0, archived: 0, unseen: 0 },
           items: []
         }) as BidInvitesResponse
+    ),
+    apiFetch<CaptureQueuesData>("/capture/queues").catch(
+      () => null as CaptureQueuesData | null
     )
   ]);
 
@@ -146,6 +151,13 @@ export default async function DashboardPage() {
           </LinkButton>
         }
       />
+
+      {captureQueues &&
+        (captureQueues.pursue_as_prime.length > 0 ||
+          captureQueues.team_as_sub.length > 0 ||
+          captureQueues.shape_early.length > 0) && (
+          <CaptureQueues data={captureQueues} />
+        )}
 
       {onboardingIncomplete && (
         <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/40 bg-warning/10 p-4">

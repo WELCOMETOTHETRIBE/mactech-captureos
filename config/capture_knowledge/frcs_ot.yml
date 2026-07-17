@@ -1,0 +1,167 @@
+# FRCS / OT cyber signal family.
+#
+# Slice 1: these concepts are a faithful relocation of the ufc_frcs,
+# ot_ics_scada_pit, branch_specific, and contract_location_triggers terms from
+# data/cyber_scope_dictionary.yml. They carry LEGACY evidence_category values so
+# cyber_scope.dictionary projects them into the legacy detector unchanged
+# (see tests/knowledge/test_dictionary_adapter_parity.py). The vocabulary is
+# EXPANDED in Slice 3, not here.
+#
+# UFGS section tiers still live in data/cyber_scope_ufgs_tiers.yml and are read
+# by cyber_scope.ufgs_tiers; that loader is folded into the pack in Slice 3.
+
+family: frcs_ot
+version: "2026.07.0"
+effective_date: 2026-07-01
+
+concepts:
+  # --- ufc_frcs ---
+  - id: ufc_4_010_06
+    canonical_name: UFC 4-010-06
+    normalized_term: UFC 4-010-06
+    evidence_category: ufc_frcs
+    aliases: ["UFC 4 010 06", "Cybersecurity of Facility-Related Control Systems"]
+    regex: '/UFC\s*4[-\s]?010[-\s]?06/i'
+    related_concepts: [frcs, ufgs_25_05_11]
+    positive_weight: 30
+    source_ref: "UFC 4-010-06"
+    enabled: true
+  - id: frcs
+    canonical_name: FRCS
+    normalized_term: FRCS
+    evidence_category: ufc_frcs
+    aliases: ["Facility-Related Control Systems", "Facility Related Control Systems", "FRCS Cybersecurity", "FRCS Master List"]
+    regex: '/\bFRCS\b/i'
+    related_concepts: [ufc_4_010_06, ot, umcs]
+    positive_weight: 22
+    source_ref: "UFC 4-010-06"
+    enabled: true
+  - id: cybersecurity_design_checklist
+    canonical_name: Cybersecurity Design Checklist
+    normalized_term: Cybersecurity Design Checklist
+    evidence_category: ufc_frcs
+    aliases: ["Cybersecurity Design Checklists", "Appendix G"]
+    positive_weight: 18
+    source_ref: "UFC 4-010-06 Appendix G"
+    enabled: true
+  - id: cci
+    canonical_name: CCI
+    normalized_term: CCI
+    evidence_category: ufc_frcs
+    aliases: ["Control Correlation Identifier", "Control Correlation Identifiers", "CCI Tables"]
+    regex: '/\bCCI[-\s]?\d{6}\b/i'
+    positive_weight: 15
+    enabled: true
+
+  # --- ot_ics_scada_pit ---
+  - id: ot
+    canonical_name: Operational Technology
+    normalized_term: OT
+    evidence_category: ot_ics_scada_pit
+    aliases: ["OT"]
+    regex: '/Operational\s+Technology|\bOT\b/i'
+    positive_weight: 12
+    enabled: true
+  - id: ics
+    canonical_name: Industrial Control Systems
+    normalized_term: ICS
+    evidence_category: ot_ics_scada_pit
+    aliases: ["ICS", "SCADA"]
+    regex: '/Industrial\s+Control\s+Systems?|\bICS\b|SCADA/i'
+    positive_weight: 14
+    enabled: true
+  - id: pit
+    canonical_name: Platform Information Technology
+    normalized_term: PIT
+    evidence_category: ot_ics_scada_pit
+    aliases: ["PIT System", "PIT Systems"]
+    # Tightened from a bare \bPIT\b (which false-matched physical "pits" —
+    # e.g. "steam pit", "valve pit" in facility construction). Require the full
+    # phrase or PIT followed by a technical qualifier.
+    regex: '/Platform\s+Information\s+Technology|\bPIT\s+(System|Systems|Cyber|Determination|Assessment)/i'
+    positive_weight: 16
+    enabled: true
+  - id: umcs
+    canonical_name: UMCS
+    normalized_term: UMCS
+    evidence_category: ot_ics_scada_pit
+    aliases: ["Utility Monitoring and Control System"]
+    regex: '/Utility\s+Monitoring\s+and\s+Control|\bUMCS\b/i'
+    positive_weight: 14
+    enabled: true
+  - id: bacnet
+    canonical_name: BACnet
+    normalized_term: BACnet
+    evidence_category: ot_ics_scada_pit
+    positive_weight: 12
+    enabled: true
+  - id: crn
+    canonical_name: Closed Restricted Network
+    normalized_term: CRN
+    evidence_category: ot_ics_scada_pit
+    aliases: ["CRN"]
+    regex: '/Closed\s+Restricted\s+Network|\bCRN\b/i'
+    positive_weight: 14
+    enabled: true
+  - id: bas
+    canonical_name: Building Automation System
+    normalized_term: BAS
+    evidence_category: ot_ics_scada_pit
+    aliases: ["BAS", "EMCS"]
+    regex: '/Building\s+Automation|\bBAS\b/i'
+    positive_weight: 10
+    enabled: true
+
+  # --- branch_specific ---
+  - id: navfac
+    canonical_name: NAVFAC
+    normalized_term: NAVFAC
+    evidence_category: branch_specific
+    regex: '/\bNAVFAC\b/i'
+    positive_weight: 8
+    enabled: true
+  - id: usace
+    canonical_name: USACE
+    normalized_term: USACE
+    evidence_category: branch_specific
+    aliases: ["U.S. Army Corps of Engineers", "Army Corps"]
+    regex: '/\bUSACE\b|Army\s+Corps\s+of\s+Engineers/i'
+    positive_weight: 8
+    enabled: true
+  - id: afcec
+    canonical_name: AFCEC
+    normalized_term: AFCEC
+    evidence_category: branch_specific
+    aliases: ["Air Force Civil Engineer Center"]
+    regex: '/\bAFCEC\b/i'
+    positive_weight: 8
+    enabled: true
+  - id: milcon
+    canonical_name: MILCON
+    normalized_term: MILCON
+    evidence_category: branch_specific
+    regex: '/\bMILCON\b/i'
+    positive_weight: 6
+    enabled: true
+
+  # --- contract_location_triggers ---
+  - id: pws
+    canonical_name: Performance Work Statement
+    normalized_term: PWS
+    evidence_category: contract_location_triggers
+    aliases: ["PWS", "Statement of Work", "SOW", "Specifications"]
+    positive_weight: 4
+    enabled: true
+  - id: division_25
+    canonical_name: Division 25
+    normalized_term: Division 25
+    evidence_category: contract_location_triggers
+    aliases: ["UFGS Division 25"]
+    positive_weight: 8
+    enabled: true
+  - id: cybersecurity_testing
+    canonical_name: Cybersecurity Testing
+    normalized_term: Cybersecurity Testing
+    evidence_category: contract_location_triggers
+    positive_weight: 10
+    enabled: true

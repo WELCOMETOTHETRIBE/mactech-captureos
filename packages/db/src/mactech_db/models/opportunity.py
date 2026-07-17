@@ -48,6 +48,10 @@ class OpportunityRaw(Base):
     attachments_fetched_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
+    # Package-completeness summary (Slice 2): {completeness, discovered,
+    # downloaded, parsed, failed, restricted, unsupported}. completeness is one
+    # of PACKAGE_COMPLETENESS. None until the generalized fetcher has run.
+    documents_status: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     # Counts from SAM.gov Interested Vendors List endpoint. cyber_count is
     # the subset of vendors whose NAICS profile intersects MacTech's cyber
     # codes. None = list endpoint never called for this opportunity.
@@ -87,6 +91,10 @@ class IngestionState(Base):
     ingested_count_lifetime: Mapped[int] = mapped_column(
         BigInteger, nullable=False, server_default=text("0")
     )
+    # Per-run retrieval metrics (Slice 1). One state row per query-family job;
+    # last run's {examined, matched, inserted, updated, pages, posted_from,
+    # posted_to}. Observational only — nothing keys on it.
+    metrics: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

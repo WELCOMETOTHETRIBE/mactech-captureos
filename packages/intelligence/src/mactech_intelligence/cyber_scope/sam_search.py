@@ -47,6 +47,23 @@ SAM_QUERY_GROUPS: dict[str, list[str]] = {
 _TITLE_MAX_LEN = 80
 
 
+def all_query_groups() -> dict[str, list[str]]:
+    """Static groups plus the knowledge-pack query families (Slice 1).
+
+    Static groups keep priority on any key collision. Falls back to the static
+    dict alone if the pack is unavailable, so this stays import-safe.
+    """
+    merged = dict(SAM_QUERY_GROUPS)
+    try:
+        from mactech_intelligence.knowledge.query_families import query_family_groups
+
+        for key, titles in query_family_groups().items():
+            merged.setdefault(key, titles)
+    except Exception:  # pragma: no cover - pack optional; never break retrieval
+        pass
+    return merged
+
+
 @dataclass(frozen=True)
 class SamCyberSearchJob:
     """One SAM API search unit (rate-limit budget = 1+ pages per job)."""
@@ -92,15 +109,17 @@ def title_queries_for_filters(filters: dict[str, Any]) -> list[str]:
     if explicit:
         return [t[:_TITLE_MAX_LEN] for t in explicit]
 
+    registry = all_query_groups()
+
     group = (filters.get("sam_query_group") or "").strip()
-    if group and group in SAM_QUERY_GROUPS:
-        return [t[:_TITLE_MAX_LEN] for t in SAM_QUERY_GROUPS[group]]
+    if group and group in registry:
+        return [t[:_TITLE_MAX_LEN] for t in registry[group]]
 
     groups = filters.get("sam_query_groups") or []
     out: list[str] = []
     for g in groups:
-        if isinstance(g, str) and g in SAM_QUERY_GROUPS:
-            out.extend(SAM_QUERY_GROUPS[g])
+        if isinstance(g, str) and g in registry:
+            out.extend(registry[g])
     return [t[:_TITLE_MAX_LEN] for t in dict.fromkeys(out)]
 
 

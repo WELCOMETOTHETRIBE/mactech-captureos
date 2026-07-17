@@ -54,6 +54,25 @@ from mactech_db.models.library_import_job import (
 from mactech_db.models.naics import NaicsCode
 from mactech_db.models.opportunity import IngestionState, OpportunityRaw
 from mactech_db.models.opportunity_amendment import OpportunityAmendment
+from mactech_db.models.opportunity_document import (
+    DOCUMENT_STATUSES,
+    PACKAGE_COMPLETENESS,
+    DocumentSection,
+    OpportunityDocument,
+)
+from mactech_db.models.decision import (
+    GATE_SEVERITIES,
+    GATE_STATUSES,
+    OpportunityDecisionVector,
+    OpportunityGate,
+)
+from mactech_db.models.prime_target import OpportunityPrimeTarget, PrimeTarget
+from mactech_db.models.pursuit_plan import (
+    PURSUIT_ACTION_STATUSES,
+    PursuitAction,
+    PursuitRecommendation,
+)
+from mactech_db.models.work_package import OpportunityWorkPackage
 from mactech_db.models.opportunity_brief import OpportunityBrief
 from mactech_db.models.opportunity_question import OpportunityQuestion
 from mactech_db.models.pursuit import BID_DECISIONS, PURSUIT_STAGES, Pursuit
@@ -148,6 +167,20 @@ __all__ = [
     "LibraryImportJob",
     "NaicsCode",
     "OpportunityAmendment",
+    "OpportunityDocument",
+    "DocumentSection",
+    "DOCUMENT_STATUSES",
+    "PACKAGE_COMPLETENESS",
+    "OpportunityDecisionVector",
+    "OpportunityGate",
+    "GATE_STATUSES",
+    "GATE_SEVERITIES",
+    "PrimeTarget",
+    "OpportunityPrimeTarget",
+    "PursuitRecommendation",
+    "PursuitAction",
+    "PURSUIT_ACTION_STATUSES",
+    "OpportunityWorkPackage",
     "OpportunityBrief",
     "OpportunityEnriched",
     "OpportunityQuestion",

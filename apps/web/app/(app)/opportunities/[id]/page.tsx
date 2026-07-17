@@ -20,6 +20,8 @@ import { AskStreamingPanel } from "@/components/ask-streaming";
 import { AnnotatedProse } from "@/components/annotated-prose";
 import { CyberFitCard } from "@/components/cyber-posture-card";
 import { CyberScopeStrip } from "@/components/cyber-scope-strip";
+import { DecisionPanel } from "@/components/decision-panel";
+import { PursuitPlanPanel } from "@/components/pursuit-plan-panel";
 import { StreamingDraftButton } from "@/components/draft-streaming";
 import { generateOpportunityBrief } from "@/lib/brief";
 import {
@@ -208,6 +210,15 @@ export default async function OpportunityDetailPage({
           </div>
         }
       />
+
+      {/* Decision panel — authoritative pursuit lane + decision vector + gates.
+          Leads the page when the decision engine has run. */}
+      {data.decision && <DecisionPanel decision={data.decision} />}
+
+      {/* Pursuit plan — work package, target primes, dated next actions. */}
+      {(data.pursuit_plan || data.prime_targets.length > 0) && (
+        <PursuitPlanPanel plan={data.pursuit_plan} primeTargets={data.prime_targets} />
+      )}
 
       {/* Meta strip — moved out of the header so PageHeader stays
           focused on title + chips + CTA. */}

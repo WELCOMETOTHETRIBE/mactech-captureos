@@ -1,159 +1,286 @@
-"""Fetch a solicitation's PDF attachments and extract text for high-moat scoring.
+"""Acquire and parse a solicitation's full procurement package (Slice 2).
 
-Reuses the PyMuPDF + Tesseract OCR pattern from library_import.py — the
-fast path is PyMuPDF text extraction; if a PDF returns < 80 chars (i.e. a
-scanned image), we fall through to Tesseract. Capped at OCR_MAX_PAGES per
-document to bound worst-case latency on dense scanned RFPs.
+Generalized from the PDF-only, single-blob fetcher. For each opportunity it:
+  1. downloads every publicly accessible ``resourceLinks`` file,
+  2. preserves the original binary in the object store (content-hash keyed),
+  3. safely expands ZIPs (bomb/traversal protected),
+  4. extracts text across formats (PDF/DOCX/XLSX/CSV/TXT/HTML; OCR only when a
+     PDF has no embedded text),
+  5. classifies each document and records page/section provenance,
+  6. writes ``opportunity_documents`` + ``document_sections`` rows, reprocessing
+     only when a file's content hash changed, and
+  7. summarizes package completeness on ``opportunities_raw.documents_status``.
 
-Gating lives in sam_ingest (and in the scoring worker, for re-scoring):
-this task only runs for opportunities where the title regex matches an
-OT/ICS clause/clearance/role pattern OR the base score is already >= 50.
-Bounded fetch volume keeps the worker pool from being pinned by Tesseract.
-
-After persisting attachment_text, the task re-enqueues mactech.score.one
-so the high_moat_score is recomputed with the new text in scope.
+It still writes the legacy concatenated ``attachment_text`` blob and re-enqueues
+scoring + cyber-scope so downstream detection is unchanged during the
+transition. Enqueue gating (which opportunities get here) is unchanged and still
+lives in ``sam_ingest`` / ``cyber_scope_sam_search``.
 """
 
 from __future__ import annotations
 
 import asyncio
-import io
+import hashlib
 import logging
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from urllib.parse import unquote, urlparse
 from uuid import UUID
 
-import fitz  # type: ignore[import-untyped]
 import httpx
-import pytesseract  # type: ignore[import-untyped]
 from mactech_db import async_session_factory
-from mactech_db.models import OpportunityRaw
-from PIL import Image
+from mactech_db.models import DocumentSection, OpportunityDocument, OpportunityRaw
 from sqlalchemy import select, update
 
 from mactech_workers.celery_app import celery_app
+from mactech_workers.documents import (
+    ArchiveError,
+    build_sections,
+    classify_document,
+    expand_archive,
+    extract_text,
+    get_document_store,
+    storage_key_for,
+)
+from mactech_workers.documents.archive import is_zip
 
 log = logging.getLogger(__name__)
 
-# Tunables — mirror library_import.py constants so behaviour stays uniform.
-OCR_FALLBACK_THRESHOLD = 80
-OCR_RENDER_DPI = 220
-OCR_MAX_PAGES = 12
-MAX_TEXT_CHARS = 25_000
-MAX_PDF_BYTES = 25 * 1024 * 1024  # 25 MB — skip anything bigger
-MAX_ATTACHMENTS_PER_OPP = 8
+MAX_TEXT_CHARS = 25_000  # legacy attachment_text cap (unchanged)
+MAX_DOC_BYTES = 40 * 1024 * 1024  # per-download ceiling
+MAX_ATTACHMENTS_PER_OPP = 12
 HTTP_TIMEOUT = httpx.Timeout(45.0, connect=10.0)
+
+
+@dataclass
+class _DownloadedFile:
+    filename: str
+    source_url: str
+    data: bytes
+    archived_from: str | None = None
 
 
 @dataclass
 class AttachmentFetchResult:
     opportunity_id: str
     attachments_attempted: int
-    attachments_fetched: int
+    documents_written: int
+    documents_reused: int
+    documents_failed: int
     text_chars: int
+    completeness: str
     status: str  # "ok" | "no_attachments" | "no_text" | "error"
     error_message: str | None = None
-
-
-def _ocr_pdf(blob: bytes) -> str:
-    pages: list[str] = []
-    try:
-        with fitz.open(stream=blob, filetype="pdf") as doc:
-            for i, page in enumerate(doc):
-                if i >= OCR_MAX_PAGES:
-                    break
-                pix = page.get_pixmap(dpi=OCR_RENDER_DPI, alpha=False)
-                img_bytes = pix.tobytes("png")
-                with Image.open(io.BytesIO(img_bytes)) as img:
-                    text = pytesseract.image_to_string(img, lang="eng")
-                if text.strip():
-                    pages.append(text.strip())
-    except pytesseract.TesseractNotFoundError as exc:
-        log.warning("tesseract binary not found at runtime: %s", exc)
-        return ""
-    except Exception as exc:
-        log.warning("OCR fall-through errored: %s", exc)
-        return ""
-    return "\n\n".join(pages).strip()
-
-
-def _pdf_to_text(blob: bytes) -> str:
-    try:
-        with fitz.open(stream=blob, filetype="pdf") as doc:
-            pages = [page.get_text("text") for page in doc[:OCR_MAX_PAGES]]
-        embedded = "\n\n".join(pages).strip()
-    except (fitz.FileDataError, RuntimeError) as exc:
-        log.warning("PyMuPDF could not parse PDF: %s", exc)
-        return ""
-    if len(embedded) >= OCR_FALLBACK_THRESHOLD:
-        return embedded
-    log.info(
-        "attachment_fetcher: PyMuPDF returned %d chars, OCR fall-through",
-        len(embedded),
-    )
-    ocr_text = _ocr_pdf(blob)
-    return ocr_text if len(ocr_text) > len(embedded) else embedded
+    per_document: list[dict] = field(default_factory=list)
 
 
 def _candidate_links(opp: OpportunityRaw) -> list[str]:
-    """Return up to MAX_ATTACHMENTS_PER_OPP candidate URLs from the raw
-    payload's resourceLinks. SAM's noticedesc HTML link (opp.description)
-    is intentionally NOT included here — that's handled by the existing
-    sam_descriptions worker."""
     payload = opp.raw_payload or {}
     raw = payload.get("resourceLinks") or []
     if not isinstance(raw, list):
         return []
     out: list[str] = []
     for item in raw:
-        if not isinstance(item, str) or not item.strip():
-            continue
-        out.append(item.strip())
+        if isinstance(item, str) and item.strip():
+            out.append(item.strip())
         if len(out) >= MAX_ATTACHMENTS_PER_OPP:
             break
     return out
 
 
-async def _download_one(client: httpx.AsyncClient, url: str) -> bytes | None:
+def _filename_from(url: str, headers: httpx.Headers | None) -> str:
+    if headers is not None:
+        disp = headers.get("content-disposition", "")
+        if "filename=" in disp:
+            name = disp.split("filename=", 1)[1].strip().strip('"; ')
+            if name:
+                return unquote(name)
+    path = urlparse(url).path
+    base = unquote(path.rsplit("/", 1)[-1]) if path else ""
+    return base or "attachment"
+
+
+async def _download_one(
+    client: httpx.AsyncClient, url: str
+) -> tuple[bytes, str] | None:
+    """Return (bytes, filename) or None. Accepts any content type under the size
+    ceiling — format is sniffed from the bytes downstream."""
     try:
         head = await client.head(url, follow_redirects=True)
-        # Some SAM hosts respond to HEAD with 405; fall through to GET.
-        if head.status_code not in (200, 405):
-            log.info("attachment HEAD %s for %s — skipping", head.status_code, url)
-            return None
         if head.status_code == 200:
-            ctype = head.headers.get("content-type", "").lower()
             length = int(head.headers.get("content-length") or 0)
-            if length and length > MAX_PDF_BYTES:
+            if length and length > MAX_DOC_BYTES:
                 log.info("attachment too large (%d bytes): %s", length, url)
                 return None
-            if ctype and "pdf" not in ctype and "octet-stream" not in ctype:
-                # Skip HTML / image / zip mid-attachments; we only parse PDFs.
-                log.info("attachment ctype %s skipped: %s", ctype, url)
-                return None
+        elif head.status_code not in (403, 405, 501):
+            # 403/405/501 often just mean "no HEAD" — fall through to GET.
+            log.info("attachment HEAD %s for %s — skipping", head.status_code, url)
+            return None
         resp = await client.get(url, follow_redirects=True)
         if resp.status_code >= 400:
             log.info("attachment GET %s for %s", resp.status_code, url)
             return None
         blob = resp.content
-        if len(blob) > MAX_PDF_BYTES:
+        if len(blob) > MAX_DOC_BYTES:
             log.info("attachment GET returned %d bytes — discarding", len(blob))
             return None
-        # Quick magic-bytes check; if it's not a PDF, skip.
-        if not blob.startswith(b"%PDF"):
-            return None
-        return blob
+        return blob, _filename_from(url, resp.headers)
     except httpx.HTTPError as exc:
         log.warning("attachment fetch failed for %s: %s", url, exc)
         return None
 
 
-async def _fetch_for_opportunity(opportunity_id: UUID) -> AttachmentFetchResult:
-    started = datetime.now(UTC)
-    session_factory = async_session_factory()
+async def _gather_files(
+    links: list[str], *, sam_key: str
+) -> tuple[list[_DownloadedFile], int]:
+    """Download every link, expanding archives. Returns (files, attempted)."""
+    headers = {"User-Agent": "mactech-captureos/attachment-fetcher"}
+    files: list[_DownloadedFile] = []
+    attempted = 0
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, headers=headers) as client:
+        for url in links:
+            attempted += 1
+            signed = url
+            if "api.sam.gov" in url and sam_key and "api_key=" not in url:
+                signed = url + ("&" if "?" in url else "?") + f"api_key={sam_key}"
+            got = await _download_one(client, signed)
+            if got is None:
+                continue
+            blob, filename = got
+            if is_zip(blob) and not filename.lower().endswith((".docx", ".xlsx", ".xlsm")):
+                try:
+                    for member in expand_archive(blob, source_name=filename):
+                        files.append(
+                            _DownloadedFile(
+                                filename=member.filename,
+                                source_url=url,
+                                data=member.data,
+                                archived_from=member.archived_from,
+                            )
+                        )
+                except ArchiveError as exc:
+                    log.warning("unsafe/invalid archive %s: %s", filename, exc)
+                    continue
+            else:
+                files.append(
+                    _DownloadedFile(filename=filename, source_url=url, data=blob)
+                )
+    return files, attempted
 
+
+def _completeness(*, links: int, description: bool, parsed: int, failed: int) -> str:
+    if links == 0:
+        return "description_only" if description else "metadata_only"
+    if parsed == 0:
+        return "description_only" if description else "metadata_only"
+    if failed == 0:
+        return "all_accessible"
+    return "partial_attachments"
+
+
+async def persist_documents(
+    session, opportunity_id: UUID, files: list[_DownloadedFile]
+) -> tuple[list[dict], str, int, int, int]:
+    """Store binaries + write document/section rows, reprocessing only changed
+    hashes. Returns (per_document summaries, combined_text, written, reused,
+    failed). Caller owns the transaction."""
+    store = get_document_store()
+    per_doc: list[dict] = []
+    text_pieces: list[str] = []
+    written = reused = failed = 0
+
+    existing_hashes = set(
+        (
+            await session.execute(
+                select(OpportunityDocument.content_hash).where(
+                    OpportunityDocument.opportunity_id == opportunity_id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    now = datetime.now(UTC)
+    for f in files:
+        content_hash = hashlib.sha256(f.data).hexdigest()
+        summary = {"filename": f.filename, "hash": content_hash[:12]}
+        if content_hash in existing_hashes:
+            reused += 1
+            summary["status"] = "reused"
+            per_doc.append(summary)
+            continue
+        existing_hashes.add(content_hash)
+
+        extracted = extract_text(f.filename, f.data)
+        doc_class = classify_document(f.filename, extracted.text)
+        try:
+            storage_key = store.put(
+                storage_key_for(str(opportunity_id), content_hash, f.filename), f.data
+            )
+        except Exception as exc:  # storage failure is non-fatal to parsing
+            log.warning("document store put failed for %s: %s", f.filename, exc)
+            storage_key = None
+
+        if extracted.ok:
+            status = "parsed"
+            if extracted.text:
+                text_pieces.append(extracted.text)
+        elif extracted.format == "unknown" or (extracted.error and "unsupported" in extracted.error):
+            status = "unsupported"
+            failed += 1
+        else:
+            status = "partially_parsed"
+
+        doc = OpportunityDocument(
+            opportunity_id=opportunity_id,
+            source_url=f.source_url[:2048],
+            filename=f.filename[:512],
+            doc_class=doc_class,
+            content_hash=content_hash,
+            storage_key=storage_key,
+            mime_type=extracted.mime_type,
+            doc_format=extracted.format,
+            byte_size=len(f.data),
+            page_count=extracted.page_count,
+            extracted_char_count=len(extracted.text),
+            ocr_used=extracted.ocr_used,
+            archived_from=(f.archived_from or None),
+            status=status,
+            error=(extracted.error or None),
+            fetched_at=now,
+        )
+        session.add(doc)
+        await session.flush()  # get doc.id
+
+        sections = build_sections(extracted.pages or ([extracted.text] if extracted.text else []))
+        for s in sections:
+            session.add(
+                DocumentSection(
+                    document_id=doc.id,
+                    opportunity_id=opportunity_id,
+                    ordinal=s.ordinal,
+                    page_number=s.page_number,
+                    section_heading=s.section_heading,
+                    section_path=s.section_path,
+                    char_start=s.char_start,
+                    char_end=s.char_end,
+                    text=s.text,
+                )
+            )
+        written += 1
+        summary["status"] = status
+        summary["doc_class"] = doc_class
+        summary["format"] = extracted.format
+        per_doc.append(summary)
+
+    combined = "\n\n---\n\n".join(text_pieces)[:MAX_TEXT_CHARS] if text_pieces else ""
+    return per_doc, combined, written, reused, failed
+
+
+async def _fetch_for_opportunity(opportunity_id: UUID) -> AttachmentFetchResult:
+    session_factory = async_session_factory()
     async with session_factory() as session:
         opp = (
             await session.execute(
@@ -164,99 +291,98 @@ async def _fetch_for_opportunity(opportunity_id: UUID) -> AttachmentFetchResult:
             return AttachmentFetchResult(
                 opportunity_id=str(opportunity_id),
                 attachments_attempted=0,
-                attachments_fetched=0,
+                documents_written=0,
+                documents_reused=0,
+                documents_failed=0,
                 text_chars=0,
+                completeness="metadata_only",
                 status="error",
                 error_message="opportunity not found",
             )
         links = _candidate_links(opp)
-        if not links:
-            # Stamp the timestamp anyway so we don't re-enqueue this opp.
-            async with session.begin():
-                await session.execute(
-                    update(OpportunityRaw)
-                    .where(OpportunityRaw.id == opportunity_id)
-                    .values(attachments_fetched_at=started)
+        has_description = bool(opp.description_text and opp.description_text.strip())
+
+    if not links:
+        completeness = _completeness(links=0, description=has_description, parsed=0, failed=0)
+        async with session_factory() as session, session.begin():
+            await session.execute(
+                update(OpportunityRaw)
+                .where(OpportunityRaw.id == opportunity_id)
+                .values(
+                    attachments_fetched_at=datetime.now(UTC),
+                    documents_status={
+                        "completeness": completeness,
+                        "discovered": 0,
+                        "parsed": 0,
+                        "failed": 0,
+                    },
                 )
-            return AttachmentFetchResult(
-                opportunity_id=str(opportunity_id),
-                attachments_attempted=0,
-                attachments_fetched=0,
-                text_chars=0,
-                status="no_attachments",
             )
+        return AttachmentFetchResult(
+            opportunity_id=str(opportunity_id),
+            attachments_attempted=0,
+            documents_written=0,
+            documents_reused=0,
+            documents_failed=0,
+            text_chars=0,
+            completeness=completeness,
+            status="no_attachments",
+        )
 
     sam_key = os.environ.get("SAM_API_KEY") or os.environ.get("SAM_GOV_API_KEY") or ""
-    headers = {"User-Agent": "mactech-captureos/attachment-fetcher"}
-    fetched = 0
-    pieces: list[str] = []
-
-    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, headers=headers) as client:
-        for url in links:
-            signed = url
-            # SAM resource links are typically pre-signed S3 URLs; some routes
-            # require api_key. Append only when the URL is a SAM API host.
-            if "api.sam.gov" in url and sam_key and "api_key=" not in url:
-                signed = url + ("&" if "?" in url else "?") + f"api_key={sam_key}"
-            blob = await _download_one(client, signed)
-            if blob is None:
-                continue
-            text = _pdf_to_text(blob)
-            if text:
-                pieces.append(text)
-                fetched += 1
-            if sum(len(p) for p in pieces) >= MAX_TEXT_CHARS:
-                break
-
-    combined = "\n\n---\n\n".join(pieces)[:MAX_TEXT_CHARS] if pieces else ""
-    completed = datetime.now(UTC)
+    files, attempted = await _gather_files(links, sam_key=sam_key)
 
     async with session_factory() as session, session.begin():
+        per_doc, combined, written, reused, failed = await persist_documents(
+            session, opportunity_id, files
+        )
+        completeness = _completeness(
+            links=len(links), description=has_description, parsed=written + reused, failed=failed
+        )
+        values = {
+            "attachments_fetched_at": datetime.now(UTC),
+            "documents_status": {
+                "completeness": completeness,
+                "discovered": len(files),
+                "written": written,
+                "reused": reused,
+                "failed": failed,
+            },
+        }
+        # Preserve the legacy blob for downstream detection during transition.
+        # Only overwrite when we actually extracted fresh text this run.
+        if combined:
+            values["attachment_text"] = combined
         await session.execute(
             update(OpportunityRaw)
             .where(OpportunityRaw.id == opportunity_id)
-            .values(
-                attachment_text=combined or None,
-                attachments_fetched_at=completed,
-            )
+            .values(**values)
         )
 
-    # Trigger a re-score with the new text in scope. Fire-and-forget — if
-    # the scoring worker isn't running we still persisted the text.
     if combined:
-        try:
-            celery_app.send_task(
-                "mactech.score.one", args=[str(opportunity_id)]
-            )
-        except Exception as exc:
-            log.warning(
-                "attachment_fetcher: couldn't enqueue re-score for %s: %s",
-                opportunity_id,
-                exc,
-            )
-        try:
-            celery_app.send_task(
-                "mactech.cyber_scope.scan_one",
-                args=[str(opportunity_id)],
-                kwargs={"scan_pass": "with_attachments"},
-            )
-        except Exception as exc:
-            log.warning(
-                "attachment_fetcher: couldn't enqueue cyber_scope scan for %s: %s",
-                opportunity_id,
-                exc,
-            )
+        for task, kwargs in (
+            ("mactech.score.one", {}),
+            ("mactech.cyber_scope.scan_one", {"scan_pass": "with_attachments"}),
+        ):
+            try:
+                celery_app.send_task(task, args=[str(opportunity_id)], kwargs=kwargs)
+            except Exception as exc:
+                log.warning("attachment_fetcher: enqueue %s failed for %s: %s", task, opportunity_id, exc)
 
     status = "ok" if combined else "no_text"
     return AttachmentFetchResult(
         opportunity_id=str(opportunity_id),
-        attachments_attempted=len(links),
-        attachments_fetched=fetched,
+        attachments_attempted=attempted,
+        documents_written=written,
+        documents_reused=reused,
+        documents_failed=failed,
         text_chars=len(combined),
+        completeness=completeness,
         status=status,
+        per_document=per_doc,
     )
 
 
 @celery_app.task(name="mactech.attachments.fetch_one")
-def fetch_one_task(opportunity_id: str) -> dict[str, Any]:
+def fetch_one_task(opportunity_id: str) -> dict:
     return asdict(asyncio.run(_fetch_for_opportunity(UUID(opportunity_id))))

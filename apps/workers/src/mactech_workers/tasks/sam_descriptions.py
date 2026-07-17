@@ -23,6 +23,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import httpx
+from mactech_db import async_session_factory
 from sqlalchemy import text
 from tenacity import (
     AsyncRetrying,
@@ -31,12 +32,18 @@ from tenacity import (
     wait_random_exponential,
 )
 
-from mactech_db import async_session_factory
 from mactech_workers.celery_app import celery_app
 
 log = logging.getLogger(__name__)
 
 DEFAULT_BATCH_SIZE = 50
+# SAM's noticedesc endpoint has a low burst limit; fire requests back-to-back
+# and every one throttles at once. A per-request spacing keeps us under the
+# limit. Overridable via env for tuning without a redeploy.
+DEFAULT_THROTTLE_SECONDS = float(os.environ.get("SAM_DESC_THROTTLE_SECONDS", "0.8"))
+# Longer, dedicated backoff when SAM explicitly says "rate limited" (429), so a
+# throttle event doesn't just exhaust the retry budget in a few hundred ms.
+_RATE_LIMIT_WAIT = wait_random_exponential(multiplier=2, max=60)
 
 
 @dataclass
@@ -57,8 +64,8 @@ async def _fetch_noticedesc(
     full = f"{url}{sep}api_key={api_key}"
 
     async for attempt in AsyncRetrying(
-        stop=stop_after_attempt(4),
-        wait=wait_random_exponential(multiplier=1, max=30),
+        stop=stop_after_attempt(5),
+        wait=_RATE_LIMIT_WAIT,
         retry=retry_if_exception_type(httpx.TransportError),
         reraise=True,
     ):
@@ -93,8 +100,18 @@ async def _fetch_noticedesc(
 
 
 async def fetch_descriptions_batch(
-    *, batch_size: int = DEFAULT_BATCH_SIZE
+    *,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+    throttle_seconds: float = DEFAULT_THROTTLE_SECONDS,
+    opportunity_ids: list[str] | None = None,
 ) -> DescStats:
+    """Fill description_text for rows missing it.
+
+    ``throttle_seconds`` spaces requests so SAM's low burst limit doesn't
+    throttle the whole batch at once. ``opportunity_ids`` targets a specific set
+    (e.g., only the actionable candidates) and re-fetches them even if a prior
+    run stamped the empty-body sentinel.
+    """
     started = datetime.now(UTC)
     api_key = os.environ.get("SAM_API_KEY", "")
     if not api_key:
@@ -105,53 +122,68 @@ async def fetch_descriptions_batch(
     skipped = 0
     errors = 0
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
-        async with session_factory() as session:
-            async with session.begin():
-                rows = (
-                    await session.execute(
-                        text(
-                            """
-                            select id::text, description_url
-                            from opportunities_raw
-                            where description_url is not null
-                              and description_text is null
-                            order by posted_at desc nulls last
-                            limit :n
-                            """
-                        ),
-                        {"n": batch_size},
-                    )
-                ).all()
+    if opportunity_ids:
+        query = text(
+            """
+            select id::text, description_url
+            from opportunities_raw
+            where description_url is not null
+              and id = any(cast(:ids as uuid[]))
+            order by posted_at desc nulls last
+            limit :n
+            """
+        )
+        params: dict[str, Any] = {"ids": opportunity_ids, "n": batch_size}
+    else:
+        query = text(
+            """
+            select id::text, description_url
+            from opportunities_raw
+            where description_url is not null
+              and description_text is null
+            order by posted_at desc nulls last
+            limit :n
+            """
+        )
+        params = {"n": batch_size}
 
-                for row_id, url in rows:
-                    try:
-                        body = await _fetch_noticedesc(client, url, api_key)
-                    except Exception as exc:
-                        log.warning("noticedesc fetch failed for %s: %s", row_id, exc)
-                        errors += 1
-                        continue
-                    if body is None or not body.strip():
-                        # Mark as fetched-but-empty so we don't keep retrying.
-                        # Use a sentinel that's unambiguously empty: a single
-                        # space. UI treats whitespace-only as "no body".
-                        await session.execute(
-                            text(
-                                "update opportunities_raw set description_text = ' '"
-                                " where id = CAST(:id AS uuid)"
-                            ),
-                            {"id": row_id},
-                        )
-                        skipped += 1
-                        continue
-                    await session.execute(
-                        text(
-                            "update opportunities_raw set description_text = :t"
-                            " where id = CAST(:id AS uuid)"
-                        ),
-                        {"id": row_id, "t": body[:200000]},  # 200kb cap
-                    )
-                    fetched += 1
+    async with (
+        httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client,
+        session_factory() as session,
+        session.begin(),
+    ):
+        rows = (await session.execute(query, params)).all()
+
+        for i, (row_id, url) in enumerate(rows):
+            if i > 0 and throttle_seconds > 0:
+                await asyncio.sleep(throttle_seconds)
+            try:
+                body = await _fetch_noticedesc(client, url, api_key)
+            except Exception as exc:
+                log.warning("noticedesc fetch failed for %s: %s", row_id, exc)
+                errors += 1
+                continue
+            if body is None or not body.strip():
+                # Mark as fetched-but-empty so we don't keep retrying.
+                # Use a sentinel that's unambiguously empty: a single
+                # space. UI treats whitespace-only as "no body".
+                await session.execute(
+                    text(
+                        "update opportunities_raw set description_text = ' '"
+                        " where id = CAST(:id AS uuid)"
+                    ),
+                    {"id": row_id},
+                )
+                skipped += 1
+                continue
+            await session.execute(
+                text(
+                    "update opportunities_raw set description_text = :t"
+                    " where id = CAST(:id AS uuid)"
+                ),
+                {"id": row_id, "t": body[:200000]},  # 200kb cap
+            )
+            fetched += 1
 
     duration_ms = int((datetime.now(UTC) - started).total_seconds() * 1000)
     return DescStats(

@@ -23,6 +23,7 @@ from mactech_api.routes.founders import router as founders_router
 from mactech_api.routes.integrations import router as integrations_router
 from mactech_api.routes.library import router as library_router
 from mactech_api.routes.library_import import router as library_import_router
+from mactech_api.routes.capture import router as capture_router
 from mactech_api.routes.me import router as me_router
 from mactech_api.routes.onboarding import router as onboarding_router
 from mactech_api.routes.opportunities import router as opportunities_router
@@ -86,6 +87,7 @@ app.include_router(cyber_scope_router)
 app.include_router(cyber_scope_downstream_router)
 app.include_router(cyber_scope_intelligence_router)
 app.include_router(capture_package_router)
+app.include_router(capture_router)
 app.include_router(sbir_router)
 
 

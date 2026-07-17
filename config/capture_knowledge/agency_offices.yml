@@ -1,0 +1,57 @@
+# Agency & office intelligence.
+#
+# Priority agencies for FRCS/OT and direct-cyber work, plus the contact roles
+# the pursuit engine recommends reaching (never fabricates individual names).
+# Consumed by the decision engine (winability/strategic_value inputs) and, in
+# Slice 7, by prime-target intelligence.
+
+family: agency_offices
+version: "2026.07.0"
+effective_date: 2026-07-01
+
+priority_agencies:
+  - name: "U.S. Army Corps of Engineers"
+    aliases: ["USACE", "Army Corps of Engineers"]
+    tier: 1
+    why: "Largest source of FRCS/UMCS design-build with embedded Division 25 cyber."
+  - name: "Naval Facilities Engineering Command"
+    aliases: ["NAVFAC"]
+    tier: 1
+    why: "FRCS/control-system RMF across shore installations."
+  - name: "Air Force Civil Engineer Center"
+    aliases: ["AFCEC"]
+    tier: 1
+    why: "Facility control-system cyber and CRN work."
+  - name: "Defense Health Agency"
+    aliases: ["DHA"]
+    tier: 2
+    why: "Hospital BAS / medical facility control systems."
+  - name: "Missile Defense Agency"
+    aliases: ["MDA"]
+    tier: 2
+  - name: "Defense Information Systems Agency"
+    aliases: ["DISA"]
+    tier: 2
+    why: "Direct RMF/ATO/ConMon (Pipeline A)."
+  - name: "Department of Veterans Affairs"
+    aliases: ["VA"]
+    tier: 3
+    why: "SDVOSB-friendly; facility and IT modernization."
+
+# Contact roles the pursuit engine may recommend reaching. Individual names and
+# contact details are NEVER fabricated — only the role is suggested.
+contact_roles:
+  prime_sub:
+    - capture manager
+    - federal business-development director
+    - proposal manager
+    - small-business liaison officer
+    - project executive
+    - preconstruction manager
+    - controls division manager
+    - cybersecurity lead
+    - design manager
+  government:
+    - contracting officer
+    - contract specialist
+    - contracting officer's representative

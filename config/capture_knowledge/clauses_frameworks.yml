@@ -1,0 +1,58 @@
+# FAR / DFARS / CMMC clause + framework signal family.
+#
+# Slice 1: faithful relocation of the far_dfars_cmmc terms from
+# data/cyber_scope_dictionary.yml (LEGACY evidence category). The remaining
+# DFARS 252.204-7019/-7020/-7021 assessment clauses are added in Slice 3.
+
+family: clauses_frameworks
+version: "2026.07.0"
+effective_date: 2026-07-01
+
+concepts:
+  - id: dfars_252_204_7012
+    canonical_name: DFARS 252.204-7012
+    normalized_term: DFARS 252.204-7012
+    evidence_category: far_dfars_cmmc
+    regex: '/DFARS\s*252\.204[-\s]?7012/i'
+    related_concepts: [nist_800_171, cmmc]
+    positive_weight: 16
+    source_ref: "DFARS 252.204-7012"
+    enabled: true
+  - id: cmmc
+    canonical_name: CMMC
+    normalized_term: CMMC
+    evidence_category: far_dfars_cmmc
+    regex: '/\bCMMC\b/i'
+    related_concepts: [nist_800_171, dfars_252_204_7012]
+    positive_weight: 14
+    source_ref: "32 CFR Part 170 (CMMC 2.0)"
+    enabled: true
+
+  # --- DFARS assessment clauses (Slice 3 multi-family; direct_cyber) ---
+  - id: dfars_252_204_7019
+    canonical_name: DFARS 252.204-7019
+    normalized_term: DFARS 252.204-7019
+    evidence_category: direct_cyber
+    regex: '/DFARS\s*252\.204[-\s]?7019/i'
+    related_concepts: [sprs, nist_800_171]
+    positive_weight: 16
+    source_ref: "DFARS 252.204-7019"
+    enabled: true
+  - id: dfars_252_204_7020
+    canonical_name: DFARS 252.204-7020
+    normalized_term: DFARS 252.204-7020
+    evidence_category: direct_cyber
+    regex: '/DFARS\s*252\.204[-\s]?7020/i'
+    related_concepts: [sprs, nist_800_171]
+    positive_weight: 16
+    source_ref: "DFARS 252.204-7020"
+    enabled: true
+  - id: dfars_252_204_7021
+    canonical_name: DFARS 252.204-7021
+    normalized_term: DFARS 252.204-7021
+    evidence_category: direct_cyber
+    regex: '/DFARS\s*252\.204[-\s]?7021/i'
+    related_concepts: [cmmc]
+    positive_weight: 18
+    source_ref: "DFARS 252.204-7021 (CMMC)"
+    enabled: true

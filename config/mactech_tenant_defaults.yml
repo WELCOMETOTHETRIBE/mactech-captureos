@@ -252,6 +252,104 @@ saved_searches:
     alert_cadence: daily
     alert_channels: [email]
 
+  # --- Slice 1 capture-engine query families (recall-first retrieval) ---
+  # These drive the five SAM.gov query families defined in
+  # config/capture_knowledge/acquisition_signals.yml. Each is a cyber-scope SAM
+  # search spec (cyber_scope_search: true) whose sam_query_group resolves to the
+  # family's title_queries via cyber_scope.sam_search.all_query_groups(). NAICS
+  # here are the family's broad pull codes. Owner is patrick-caruso (security
+  # pillar owns cyber retrieval); Pipeline B families (C, D) lead.
+  - name: Capture — Family C Facility & Construction
+    owner_slug: patrick-caruso
+    filters:
+      cyber_scope_search: true
+      sam_query_group: family_c_facility_construction
+      naics: [236220, 237130, 237310, 237990, 238210, 541330, 541512, 541513, 541519]
+      keywords:
+        - "25 05 11"
+        - FRCS
+        - UMCS
+        - building automation
+        - HVAC controls
+        - microgrid
+        - electronic security
+      score_field: cyber_scope_score
+    alert_threshold: 65
+    alert_cadence: daily
+    alert_channels: [email]
+
+  - name: Capture — Family D Prime & Teaming
+    owner_slug: patrick-caruso
+    filters:
+      cyber_scope_search: true
+      sam_query_group: family_d_prime_teaming
+      naics: [236220, 237130, 237310, 238210, 541330]
+      keywords:
+        - design-build
+        - MATOC
+        - IDIQ
+        - subcontracting plan
+        - central utility plant
+      score_field: cyber_scope_score
+    alert_threshold: 65
+    alert_cadence: daily
+    alert_channels: [email]
+
+  - name: Capture — Family A Direct Cyber
+    owner_slug: patrick-caruso
+    filters:
+      cyber_scope_search: true
+      sam_query_group: family_a_direct_cyber
+      naics: [541512, 541519, 541513, 518210, 541611, 541690]
+      keywords:
+        - RMF
+        - ATO
+        - cybersecurity
+        - NIST 800-171
+        - CMMC
+        - vulnerability assessment
+        - continuous monitoring
+        - STIG
+      score_field: cyber_scope_score
+    alert_threshold: 65
+    alert_cadence: daily
+    alert_channels: [email]
+
+  - name: Capture — Family B Training & Exercise
+    owner_slug: patrick-caruso
+    filters:
+      cyber_scope_search: true
+      sam_query_group: family_b_training_exercise
+      naics: [611420, 611430, 541519, 541611]
+      keywords:
+        - cybersecurity training
+        - tabletop exercise
+        - incident response exercise
+        - after action report
+        - security awareness
+        - CMMC training
+      score_field: cyber_scope_score
+    alert_threshold: 60
+    alert_cadence: daily
+    alert_channels: [email]
+
+  - name: Capture — Family E Early-Stage Pipeline
+    owner_slug: patrick-caruso
+    filters:
+      cyber_scope_search: true
+      sam_query_group: family_e_early_stage
+      naics: [541519, 541330, 236220, 238210]
+      keywords:
+        - sources sought
+        - request for information
+        - industry day
+        - draft RFP
+        - presolicitation
+      score_field: cyber_scope_score
+    alert_threshold: 60
+    alert_cadence: daily
+    alert_channels: [email]
+
 capability_statements_seed:
   - title: CMMC 2.0 Level 2 Implementation & Assessment Readiness
     summary: |
@@ -464,6 +562,30 @@ high_moat_scoring:
     - "238210"
     - "562910"
   sweet_spot_min_score: 80
+
+# --- Slice 4 decision-engine capacity + constraints ---
+# Drives the decision vector's prime/sub value gates and deliverability.
+delivery_capacity:
+  core_people: 4
+  prime_initial_value_min: 25000
+  prime_initial_value_max: 2000000
+  subcontract_target_value_min: 50000
+  subcontract_target_value_max: 3000000
+  max_concurrent_prime_pursuits: 3
+  max_expected_full_time_staff_without_partner: 5
+  travel_preference: limited
+  remote_preference: high
+
+# Hard constraints the gates enforce. Unknown facts are `null` and raise a
+# config warning rather than being assumed. IMPORTANT: never infer a company
+# facility clearance from an individual founder's clearance.
+hard_constraints:
+  electrical_license: false
+  general_contractor_license: false
+  bonding_capacity: null            # TODO: confirm bonding capacity (or lack of)
+  prime_contract_vehicles: []       # vehicles MacTech can prime on (none yet)
+  facility_clearance: null          # TODO: company FCL status — do NOT assume
+  do_not_assume_individual_clearance_satisfies_company_clearance: true
 
 compliance_gates:
   pursue_stage_requires:
