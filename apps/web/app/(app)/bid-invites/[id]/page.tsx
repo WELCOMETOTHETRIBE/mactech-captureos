@@ -1,8 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AddToDirectoryButton } from "@/components/add-to-directory";
 import { BidInviteAction } from "@/components/bid-invite-actions";
 import { apiFetch, type BidInviteDetail } from "@/lib/api";
-import { pursueBidInvite, setBidInviteStatus } from "@/lib/bid-invites";
+import {
+  addBidInviteContactToDirectory,
+  pursueBidInvite,
+  setBidInviteStatus
+} from "@/lib/bid-invites";
 import {
   KIND_LABEL,
   KIND_TONE,
@@ -127,6 +132,11 @@ export default async function BidInviteDetailPage({
                     {invite.lead_phone}
                   </a>
                 )}
+                <span className="mt-1">
+                  <AddToDirectoryButton
+                    action={addBidInviteContactToDirectory.bind(null, invite.id)}
+                  />
+                </span>
               </span>
             )
           }

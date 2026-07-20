@@ -1789,3 +1789,8 @@ export type DirectoryOrganizationList = {
   total: number;
   items: DirectoryOrganizationOut[];
 };
+
+export type AddInviteContactResult = {
+  outcome: "added" | "exists";
+  contact: DirectoryContactOut;
+};

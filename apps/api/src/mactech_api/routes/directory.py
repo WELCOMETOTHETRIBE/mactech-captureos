@@ -16,9 +16,12 @@ Endpoints:
 from __future__ import annotations
 
 from typing import Annotated, NoReturn
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from mactech_db.models import BidInvite
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 
 from mactech_api.auth import CAPTURE_APP_KEY, RequestContext, get_request_context
 from mactech_api.directory_client import (
@@ -314,3 +317,101 @@ async def add_directory_organization(
     except DirectoryError as exc:
         _raise_from_directory_error(exc)
     return _organization_out(created)
+
+
+# ── Rip contacts out of ingested bid-invite mail ─────────────────────────
+#
+# The Gmail/Postmark ingest parses a GC company + lead (name/email/phone)
+# onto every bid invite. Not every GC belongs in the shared address book,
+# so nothing syncs automatically — this endpoint backs the explicit
+# "Add to Directory" button on the invite. Idempotent by contact email:
+# clicking twice reports "exists" instead of duplicating.
+
+
+class AddInviteContactResult(_Out):
+    outcome: str  # "added" | "exists"
+    contact: DirectoryContactOut
+
+
+@router.post("/bid-invites/{invite_id}/directory", response_model=AddInviteContactResult)
+async def add_bid_invite_lead_to_directory(
+    invite_id: UUID,
+    ctx: Annotated[RequestContext, Depends(get_request_context)],
+) -> AddInviteContactResult:
+    invite = (
+        await ctx.session.execute(
+            select(BidInvite).where(BidInvite.id == invite_id, BidInvite.tenant_id == ctx.tenant.id)
+        )
+    ).scalar_one_or_none()
+    if invite is None:
+        raise HTTPException(status_code=404, detail="bid invite not found")
+
+    name = (invite.lead_name or invite.from_name or "").strip()
+    email = (invite.lead_email or invite.from_email or "").strip() or None
+    if not name:
+        raise HTTPException(
+            status_code=400,
+            detail="no contact was parsed from this invite — add them manually in /directory/new",
+        )
+
+    hub_org_id = await _resolve_hub_org_id(ctx)
+
+    # Idempotency: an email address identifies a person across invites.
+    if email:
+        existing = await fetch_directory_contacts(hub_org_id, q=email)
+        if existing is None:
+            raise HTTPException(status_code=502, detail="shared directory is unavailable")
+        for candidate in existing:
+            if candidate.email and candidate.email.lower() == email.lower():
+                return AddInviteContactResult(outcome="exists", contact=_contact_out(candidate))
+
+    directory_org_id = await _ensure_gc_organization(hub_org_id, invite.gc_company)
+
+    fields: dict[str, object] = {"name": name, "kind": "EXTERNAL", "tags": ["bid-invite", "gc"]}
+    if email:
+        fields["email"] = email
+    if invite.lead_phone:
+        fields["phone"] = invite.lead_phone
+    if directory_org_id:
+        fields["organizationId"] = directory_org_id
+    elif invite.gc_company:
+        fields["organizationName"] = invite.gc_company
+    if invite.project_name:
+        fields["notes"] = f"Added from bid invite: {invite.project_name}"
+
+    try:
+        created = await create_directory_contact(hub_org_id, fields)
+    except DirectoryError as exc:
+        _raise_from_directory_error(exc)
+    return AddInviteContactResult(outcome="added", contact=_contact_out(created))
+
+
+async def _ensure_gc_organization(hub_org_id: str, gc_company: str | None) -> str | None:
+    """Find-or-create the GC's directory organization (orgType PRIME — the
+    GCs mailing us are primes we sub under). Best-effort: any failure falls
+    back to None and the contact carries the name as free text instead."""
+
+    company = (gc_company or "").strip()
+    if not company:
+        return None
+
+    matches = await fetch_directory_organizations(hub_org_id, q=company)
+    if matches is None:
+        return None
+    for org in matches:
+        if org.name.lower() == company.lower():
+            return org.id
+
+    try:
+        created = await create_directory_organization(
+            hub_org_id, {"name": company, "orgType": "PRIME", "tags": ["gc"]}
+        )
+    except DirectoryError:
+        # Likely a duplicate-name race or validation quirk; one refetch, then
+        # give up and let the contact fall back to free text.
+        refetched = await fetch_directory_organizations(hub_org_id, q=company)
+        for org in refetched or []:
+            if org.name.lower() == company.lower():
+                return org.id
+        return None
+    return created.id

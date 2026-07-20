@@ -9,6 +9,7 @@ here first.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 
 import httpx
 import pytest
@@ -44,7 +45,7 @@ CONTACT_PAYLOAD = {
 }
 
 
-def _client(handler) -> httpx.AsyncClient:
+def _client(handler: Callable[[httpx.Request], httpx.Response]) -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=httpx.MockTransport(handler))
 
 

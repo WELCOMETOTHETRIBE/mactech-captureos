@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import {
   apiFetch,
+  type AddInviteContactResult,
   type BidInviteSeenResult,
   type BidInvitePursueResult,
   type BidInviteStatus
@@ -71,4 +72,26 @@ export async function setBidInviteGroupStatus(
     });
   }
   revalidateInviteSurfaces();
+}
+
+/** Rip the invite's parsed lead (or sender) into the shared company
+ * directory. Explicit and idempotent: the API dedupes by email and
+ * reports "exists" instead of duplicating. Returns a UI state object
+ * for the pending-aware button rather than throwing — a directory
+ * outage should read as a soft failure next to the button. */
+export async function addBidInviteContactToDirectory(
+  inviteId: string,
+  _prev: { outcome: string | null; message?: string }
+): Promise<{ outcome: "added" | "exists" | "error"; message?: string }> {
+  try {
+    const result = await apiFetch<AddInviteContactResult>(
+      `/bid-invites/${inviteId}/directory`,
+      { method: "POST", body: JSON.stringify({}) }
+    );
+    revalidatePath("/directory");
+    return { outcome: result.outcome };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to reach the directory.";
+    return { outcome: "error", message: message.slice(0, 160) };
+  }
 }

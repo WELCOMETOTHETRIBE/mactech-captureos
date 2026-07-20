@@ -43,9 +43,15 @@ Format per entry:
 - Nothing. `MACTECH_DIRECTORY_SERVICE_TOKEN` set on the Railway api service (same value as
   bizops holds). Contact edit/archive stays in BizOps by design.
 
+- Follow-up shipped same day: "Add to Directory" on bid invites — the Gmail/Postmark ingest
+  already parses GC + lead contacts, and the invite detail page now has a one-click button
+  (POST /bid-invites/{id}/directory) that rips the lead into the shared directory. Explicitly
+  opt-in (no auto-sync), idempotent by email ("already in directory"), find-or-creates the GC
+  as a PRIME organization, tags contacts bid-invite/gc.
+
 ### Next up
-- Optional: surface directory contacts as a picker on pursuits/bid invites (point-of-contact
-  fields), and backfill teaming-partner contacts into the shared directory.
+- Optional: surface directory contacts as a picker on pursuits (point-of-contact fields), and
+  backfill teaming-partner contacts into the shared directory.
 
 
 ## 2026-07-16 — Capture Engine v2: design artifacts + Slice 1 (knowledge pack + query families)
