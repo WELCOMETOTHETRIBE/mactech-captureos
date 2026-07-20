@@ -134,10 +134,35 @@ def test_contact_payload_maps_snake_to_camel_and_drops_empty() -> None:
     assert payload == {
         "name": "Jane Doe",
         "kind": "EXTERNAL",
-        "organizationId": "o1",
+        # The org LINK must never be named "organizationId" — that key means
+        # the Hub tenant on the M2M surface (regression: a linked contact was
+        # once mis-scoped to a "tenant" that was actually the org's row id).
+        "directoryOrganizationId": "o1",
         "linkedinUrl": "https://linkedin.com/in/jane",
         "tags": ["ko"],
     }
+
+
+async def test_create_contact_tenant_id_survives_link_field() -> None:
+    """Regression: fields carrying a directoryOrganizationId link (or even a
+    stray organizationId) must not clobber the tenant id in the POST body."""
+
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        seen["tenant"] = body["organizationId"]
+        seen["link"] = body.get("directoryOrganizationId", "")
+        return httpx.Response(201, json={"contact": CONTACT_PAYLOAD})
+
+    async with _client(handler) as http:
+        await create_directory_contact(
+            ORG,
+            {"name": "Linked", "directoryOrganizationId": "dir_org_1", "organizationId": "evil"},
+            token=TOKEN,
+            client=http,
+        )
+    assert seen == {"tenant": ORG, "link": "dir_org_1"}
 
 
 def test_organization_payload_maps_cage_and_org_type() -> None:

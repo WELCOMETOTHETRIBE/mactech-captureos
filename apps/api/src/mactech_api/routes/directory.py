@@ -204,7 +204,9 @@ def contact_create_payload(body: CreateDirectoryContactRequest) -> dict[str, obj
     if body.department:
         payload["department"] = body.department
     if body.organization_id:
-        payload["organizationId"] = body.organization_id
+        # The M2M surface reserves "organizationId" for the Hub tenant; the
+        # DirectoryOrganization link is "directoryOrganizationId".
+        payload["directoryOrganizationId"] = body.organization_id
     if body.organization_name:
         payload["organizationName"] = body.organization_name
     if body.email:
@@ -373,7 +375,7 @@ async def add_bid_invite_lead_to_directory(
     if invite.lead_phone:
         fields["phone"] = invite.lead_phone
     if directory_org_id:
-        fields["organizationId"] = directory_org_id
+        fields["directoryOrganizationId"] = directory_org_id
     elif invite.gc_company:
         fields["organizationName"] = invite.gc_company
     if invite.project_name:

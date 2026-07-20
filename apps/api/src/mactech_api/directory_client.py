@@ -285,7 +285,10 @@ async def create_directory_contact(
 
     body = await _post(
         "/api/directory/contacts",
-        {"organizationId": hub_org_id, **fields},
+        # Merge order matters: the tenant id must never be clobbered by a
+        # caller-supplied key. The DirectoryOrganization link travels as
+        # "directoryOrganizationId" on this surface, never "organizationId".
+        {**fields, "organizationId": hub_org_id},
         base_url=base_url,
         token=token,
         timeout=timeout,
@@ -305,7 +308,7 @@ async def create_directory_organization(
 ) -> DirectoryOrganization:
     body = await _post(
         "/api/directory/organizations",
-        {"organizationId": hub_org_id, **fields},
+        {**fields, "organizationId": hub_org_id},
         base_url=base_url,
         token=token,
         timeout=timeout,
