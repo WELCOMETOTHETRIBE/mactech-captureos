@@ -22,6 +22,32 @@ Format per entry:
 
 ---
 
+## 2026-07-20 — Shared company directory (bizops-backed)
+
+### Shipped
+- Capture is now a consumer of the MacTech shared directory (company address book,
+  system of record = bizops). New `directory_client.py` (httpx, bearer
+  `MACTECH_DIRECTORY_SERVICE_TOKEN` + `x-mactech-service-app: capture`, reads fail-degraded,
+  writes raise with bizops's validation payload), `/directory/*` FastAPI routes, and a
+  `/directory` web page (search/filter people, org cards, add contact/organization forms).
+- Tenant mapping: the Directory keys on the Hub CustomerOrganization id; Capture resolves it
+  from the ICC access endpoint on first use and caches it on new column `tenants.hub_org_id`
+  (migration 0044).
+- Tests: hermetic MockTransport client tests + payload-mapping pins (5 new; suite 223 pass).
+  Gates green: ruff, mypy, tsc, next lint (no new warnings).
+
+### Half-done
+- Nothing in this slice.
+
+### Blocked / Needs decision
+- Nothing. `MACTECH_DIRECTORY_SERVICE_TOKEN` set on the Railway api service (same value as
+  bizops holds). Contact edit/archive stays in BizOps by design.
+
+### Next up
+- Optional: surface directory contacts as a picker on pursuits/bid invites (point-of-contact
+  fields), and backfill teaming-partner contacts into the shared directory.
+
+
 ## 2026-07-16 — Capture Engine v2: design artifacts + Slice 1 (knowledge pack + query families)
 
 Kickoff of the "actionable capture engine" overhaul (design docs + Slices 1–4). Turns the

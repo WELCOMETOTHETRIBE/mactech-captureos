@@ -21,6 +21,10 @@ class Tenant(Base):
     uei: Mapped[str | None] = mapped_column(String, nullable=True)
     cage_code: Mapped[str | None] = mapped_column(String, nullable=True)
     clerk_org_id: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
+    # The Hub's CustomerOrganization id for this tenant, resolved lazily from
+    # the ICC access endpoint and cached. The bizops Directory (shared company
+    # address book) is keyed by this id, not clerk_org_id.
+    hub_org_id: Mapped[str | None] = mapped_column(String, nullable=True)
     # Set-aside certifications the tenant claims (SDVOSB, 8(a), HUBZone,
     # WOSB, EDWOSB, VOSB, SDB, SB). Drives the proposal drafter's set-aside
     # qualification section + the opportunity scoring engine's set-aside fit

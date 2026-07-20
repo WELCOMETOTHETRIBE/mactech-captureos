@@ -15,6 +15,7 @@ from mactech_api.routes.cyber import router as cyber_router
 from mactech_api.routes.cyber_scope import router as cyber_scope_router
 from mactech_api.routes.cyber_scope_downstream import router as cyber_scope_downstream_router
 from mactech_api.routes.cyber_scope_intelligence import router as cyber_scope_intelligence_router
+from mactech_api.routes.directory import router as directory_router
 from mactech_api.routes.drafts import router as drafts_router
 from mactech_api.routes.eligibility import router as eligibility_router
 from mactech_api.routes.events import router as events_router
@@ -62,6 +63,7 @@ app.include_router(pursuits_router)
 app.include_router(pursuit_links_router)
 app.include_router(past_performance_router)
 app.include_router(teaming_partners_router)
+app.include_router(directory_router)
 app.include_router(drafts_router)
 app.include_router(explain_router)
 app.include_router(ask_router)

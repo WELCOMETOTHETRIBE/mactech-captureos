@@ -1745,3 +1745,47 @@ export type BidInviteSeenResult = {
   seen_at: string;
   cleared: number;
 };
+
+/* ── /directory (shared company address book, proxied from bizops) ── */
+
+export type DirectoryContactOut = {
+  id: string;
+  name: string;
+  kind: "INTERNAL" | "EXTERNAL";
+  title: string | null;
+  organization_id: string | null;
+  organization_name: string | null;
+  email: string | null;
+  phone: string | null;
+  mobile: string | null;
+  tags: string[];
+  notes: string | null;
+  status: string;
+  source_app: string | null;
+  updated_at: string | null;
+};
+
+export type DirectoryContactList = {
+  total: number;
+  items: DirectoryContactOut[];
+};
+
+export type DirectoryOrganizationOut = {
+  id: string;
+  name: string;
+  org_type: string;
+  abbreviation: string | null;
+  website: string | null;
+  email: string | null;
+  phone: string | null;
+  uei: string | null;
+  cage_code: string | null;
+  tags: string[];
+  status: string;
+  contact_count: number | null;
+};
+
+export type DirectoryOrganizationList = {
+  total: number;
+  items: DirectoryOrganizationOut[];
+};
